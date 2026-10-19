@@ -1,5 +1,5 @@
 # ==============================================================================
-#  Como usar o Makefile
+#  MEDIFLOW-AGENT · Makefile
 # ==============================================================================
 #
 #  Uso rápido:
@@ -11,40 +11,58 @@
 #
 # ==============================================================================
 
-ENGINE ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
-IMAGE_NAME := mediflow-agent
-IMAGE_TAG := dev
+# ------------------------------------------------------------------------------
+#  Configuração
+# ------------------------------------------------------------------------------
+ENGINE         ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
+IMAGE_NAME     := mediflow-agent
+IMAGE_TAG      := dev
 PYTHON_VERSION := 3.13
 
-.PHONY: lock lint test build scan ci-local
+.DEFAULT_GOAL := help
+.PHONY: help lock lint test build scan ci-local
 
-## 1. Gera requirements.txt hasheado especificamente para o Linux do Container
-lock:
+# ------------------------------------------------------------------------------
+#  Ajuda
+# ------------------------------------------------------------------------------
+help: ## Mostra esta lista de comandos
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+
+# ------------------------------------------------------------------------------
+#  1. Dependências
+# ------------------------------------------------------------------------------
+lock: ## Gera requirements.txt com hashes para o Linux do container
 	uv pip compile requirements.in \
 		--generate-hashes \
 		--python-version $(PYTHON_VERSION) \
 		--python-platform x86_64-unknown-linux-gnu \
 		-o requirements.txt
 
-## 2. Lint e checagem de formatação (ruff)
-lint:
+# ------------------------------------------------------------------------------
+#  2. Qualidade de código
+# ------------------------------------------------------------------------------
+lint: ## Lint e checagem de formatação (ruff)
 	uv run ruff check .
 	uv run ruff format --check .
 
-## 3. Testes unitários (contratos JSON e nós do LangGraph)
-test:
+test: ## Testes unitários (contratos JSON e nós do LangGraph)
 	uv run pytest -v
 
-## 4. Build da imagem com Podman/Docker
-build:
+# ------------------------------------------------------------------------------
+#  3. Container
+# ------------------------------------------------------------------------------
+build: ## Build da imagem com Podman/Docker
 	$(ENGINE) build \
 		--build-arg PYTHON_VERSION=$(PYTHON_VERSION) \
 		-t $(IMAGE_NAME):$(IMAGE_TAG) .
 
-## 5. Auditoria completa com Trivy (Config + Imagem + Segredos)
-scan:
+scan: ## Auditoria Trivy (config + vulnerabilidades + segredos)
 	trivy config --exit-code 1 --severity MEDIUM,HIGH,CRITICAL .
-	trivy image --exit-code 1 --scanners vuln,secret --severity LOW,MEDIUM,HIGH,CRITICAL $(IMAGE_NAME):$(IMAGE_TAG)
+	trivy image --exit-code 1 --scanners vuln,secret \
+		--severity LOW,MEDIUM,HIGH,CRITICAL $(IMAGE_NAME):$(IMAGE_TAG)
 
-## Pipeline completo na máquina do Dev
+# ------------------------------------------------------------------------------
+#  4. Pipeline local
+# ------------------------------------------------------------------------------
 ci-local: lint test build scan
