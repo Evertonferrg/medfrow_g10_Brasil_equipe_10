@@ -1,5 +1,5 @@
 # ==============================================================================
-#  MEDIFLOW-AGENT · Makefile
+#  Como usar o Makefile
 # ==============================================================================
 #
 #  Uso rápido:
@@ -57,7 +57,7 @@ build: ## Build da imagem com Podman/Docker
 		--build-arg PYTHON_VERSION=$(PYTHON_VERSION) \
 		-t $(IMAGE_NAME):$(IMAGE_TAG) .
 
-scan: ## Auditoria Trivy (config + vulnerabilidades + segredos)
+scan: ## Trivy (config + vulnerabilidades + segredos)
 	trivy config --exit-code 1 --severity MEDIUM,HIGH,CRITICAL .
 	trivy image --exit-code 1 --scanners vuln,secret \
 		--severity LOW,MEDIUM,HIGH,CRITICAL $(IMAGE_NAME):$(IMAGE_TAG)
