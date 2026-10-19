@@ -1,0 +1,26 @@
+# Para o Docker não enviar tudo pro container
+# Ambientes virtuais e caches Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Git e CI
+.git/
+.github/
+
+# Segredos e configurações locais (Crítico para o Trivy Secret Scanner!)
+.env
+.env.*
+*.pem
+*.key
+.oci/
+
+# Documentação e artefatos de teste
+*.pdf
+*.md
+Dockerfile*
+Makefile
+requirements.in
