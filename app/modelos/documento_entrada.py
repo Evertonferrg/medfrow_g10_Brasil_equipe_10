@@ -1,5 +1,4 @@
-﻿from pydantic import BaseModel, field_validator
-
+from pydantic import BaseModel, field_validator
 
 class DocumentoEntrada(BaseModel):
     documento_id: str
