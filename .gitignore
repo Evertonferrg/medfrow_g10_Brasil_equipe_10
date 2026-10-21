@@ -5,3 +5,11 @@ testes/
 # Caches do Python
 __pycache__/
 *.pyc
+
+.env
+storage_local/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+

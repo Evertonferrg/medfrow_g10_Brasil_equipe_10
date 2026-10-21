@@ -4,3 +4,8 @@ pydantic
 httpx
 oci
 pytest
+langgraph
+python-dotenv
+google-genai
+pypdf
+reportlab
