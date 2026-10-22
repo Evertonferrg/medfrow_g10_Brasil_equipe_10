@@ -1,4 +1,6 @@
 import json
+import logging
+
 from fastapi import FastAPI, BackgroundTasks, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -6,6 +8,9 @@ from fastapi.responses import JSONResponse
 from app import config, storage
 from app.schemas import DocumentoEntrada, validar_id
 from app.servico import processar
+from app.storage import ObjetoJaExisteError
+
+logger = logging.getLogger(__name__)
 
 PASTAS_RESULTADO = ('processados/urgentes', 'processados/rotina', 'auditoria_humana')
 MAX_PDF = 10 * 1024 * 1024
@@ -25,10 +30,20 @@ def criar_app(extrator=None) -> FastAPI:
         return JSONResponse(status_code=422, content={"detail": msg})
 
     def _aceitar(documento_id: str, conteudo: bytes, extensao: str):
-        if storage.existe(f"recebidos/{documento_id}.txt") or storage.existe(f"recebidos/{documento_id}.pdf"):
-            return JSONResponse(status_code=409,
-                                 content={"detail": f"documento_id já recebido: {documento_id}"})
-        storage.salvar(f"recebidos/{documento_id}{extensao}", conteudo)
+        """Recusa ID repetido (409) e grava o original ANTES de qualquer processamento.
+
+        A gravação usa sobrescrever=False: é atômica, então dois envios simultâneos
+        com o mesmo ID não passam os dois e o original nunca é trocado.
+        """
+        recusa = JSONResponse(status_code=409,
+                              content={"detail": f"documento_id já recebido: {documento_id}"})
+        outra = ".pdf" if extensao == ".txt" else ".txt"
+        if storage.existe(f"recebidos/{documento_id}{outra}"):
+            return recusa
+        try:
+            storage.salvar(f"recebidos/{documento_id}{extensao}", conteudo, sobrescrever=False)
+        except ObjetoJaExisteError:
+            return recusa
         return None
 
     @app.post("/triagem", status_code=202)
@@ -87,4 +102,6 @@ def criar_app(extrator=None) -> FastAPI:
 try:
     app = criar_app()
 except Exception:
+    # Mostra o erro real no terminal em vez de subir uma aplicação vazia sem explicação.
+    logger.exception("Falha ao criar a aplicação")
     app = None
