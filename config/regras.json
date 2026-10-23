@@ -1,0 +1,12 @@
+{
+  "limite_confianca": 0.80,
+  "canais_origem": ["Pronto_Socorro", "Ambulatorio", "Laboratorio", "Operadora"],
+  "destinos": [
+    "Farmacia_Hospitalar",
+    "Auditoria_Autorizacoes",
+    "Prontuario_Eletronico",
+    "Fila_Emergencia_Medica",
+    "Fila_Revisao_Humana"
+  ],
+  "formatos_aceitos": ["PDF", "JPG", "PNG"]
+}
