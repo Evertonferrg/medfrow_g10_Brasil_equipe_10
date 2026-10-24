@@ -10,6 +10,7 @@ from app import config, storage
 from app.schemas import DocumentoEntrada, validar_id
 from app.servico import processar
 from app.storage import ObjetoJaExisteError
+from app.api.tempo import MedirTempoMiddleware, configurar_log
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,8 @@ def criar_app(extrator=None) -> FastAPI:
     if extrator is None:
         from app.llm import extrair as extrator
     app = FastAPI(title='MediFlow', version='0.1')
+    configurar_log()
+    app.add_middleware(MedirTempoMiddleware)   # T8: log da duração de cada requisição
 
     @app.exception_handler(RequestValidationError)
     async def _422(request: Request, exc: RequestValidationError):
