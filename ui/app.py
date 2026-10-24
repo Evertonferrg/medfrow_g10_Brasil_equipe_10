@@ -35,7 +35,7 @@ if enviar:
         st.stop()
 
     res = r.json()
-    d = res["decisao-roteamento"]
+    d = res["decisao_roteamento"]
     (st.error if d["destino_principal"] == "Fila_Emergencia_Medica" else
      st.warning if d["requer_auditoria_humana"] else st.success)(
          f"**Destino: {d['destino_principal']}** - {d['justificativa_roteamento']}")
@@ -44,10 +44,11 @@ if enviar:
 
     cl = res.get("classificacao")
     if cl:
-        a, b, c = st.columns(3)
+        a, b, c, e = st.columns(4)
         a.metric("Tipo", cl["tipo_documento"])
-        b.metric("Prioridade", cl["nivel_prioridade"])
-        c.metric("Confiança", cl["score_confianca_classificacao"])
+        b.metric("Especialidade", cl.get("especialidade") or "—")
+        c.metric("Prioridade", cl["nivel_prioridade"])
+        e.metric("Confiança", cl["score_confianca_classificacao"])
     dados = res.get("dados_extraidos") or {}
     if dados:
         a, b = st.columns(2)

@@ -1,7 +1,16 @@
 
 import re
-from typing import Literal, Optional, List
+from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator
+
+# enum + submodelo de classificação moram em app/modelos/ (fonte única
+# das categorias); são reexportados aqui para manter os imports antigos.
+from .modelos.classificacao import (  # noqa: F401
+    Classificacao,
+    Prioridade,
+    TipoDocumento,
+    TipoDocumentoLiteral,
+)
  
 # ---------- ENTRADA (H1.1.1 T1) ----------
 ID_REGEX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$")
@@ -36,14 +45,9 @@ class DocumentoEntrada(BaseModel):
  
  
 # ---------- EXTRAÇÃO (o que o LLM devolve) ----------
-# Literal força o Gemini a escolher só entre estes valores (acaba com o bug
-# "Receituario" x "Receituário" que mandava receitas para o destino errado).
-TipoDocumento = Literal[
-    "Receituário Médico", "Laudo de Exame de Imagem", "Laudo Laboratorial",
-    "Guia de Solicitação de Procedimento", "Relatório de Alta",
-    "Atestado Médico", "Desconhecido",
-]
-Prioridade = Literal["Urgente", "Rotina"]
+# O Literal abaixo é GERADO a partir do enum TipoDocumento (app/modelos/):
+# força o Gemini a escolher só entre os valores canônicos (acaba com o bug
+# "Receituario" x "Receituário") e nunca diverge do enum.
  
  
 class Paciente(BaseModel):
@@ -75,7 +79,7 @@ class Evidencia(BaseModel):                 # H1.3.6 T1
  
  
 class Extracao(BaseModel):
-    tipo_documento: TipoDocumento
+    tipo_documento: TipoDocumentoLiteral
     especialidade: Optional[str] = None
     nivel_prioridade: Prioridade
     score_confianca_classificacao: float = Field(ge=0, le=1)
@@ -91,11 +95,8 @@ class Extracao(BaseModel):
  
  
 # ---------- RESULTADO (H2.3.1 T1) — o contrato combinado com o edital ----------
-class Classificacao(BaseModel):
-    tipo_documento: str
-    especialidade: Optional[str] = None
-    nivel_prioridade: str
-    score_confianca_classificacao: float
+# Classificacao (tipada com o enum) é definida em app/modelos/classificacao.py
+# e reexportada no topo deste arquivo.
  
  
 class Notificacao(BaseModel):

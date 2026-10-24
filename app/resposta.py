@@ -11,13 +11,19 @@ CAMPOS_FORA = {"tipo_documento", "especialidade", "nivel_prioridade",
 
 def montar_resposta(documento_id: str, estado: dict) -> ResultadoTriagem:
     e = estado.get("extracao")
+    # a classificação vem do nó 'classificar'. Se o estado não tiver a
+    # chave (caminhos antigos), monta a partir da extração como antes.
+    if "classificacao" in estado:
+        classificacao = estado["classificacao"]
+    else:
+        classificacao = Classificacao(
+            tipo_documento=e.tipo_documento, especialidade=e.especialidade,
+            nivel_prioridade=e.nivel_prioridade,
+            score_confianca_classificacao=estado["score"]) if e else None
     return ResultadoTriagem(
         status="processado" if e else "erro_extracao",
         documento_id=documento_id,
-        classificacao=Classificacao(
-            tipo_documento=e.tipo_documento, especialidade=e.especialidade,
-            nivel_prioridade=e.nivel_prioridade,
-            score_confianca_classificacao=estado["score"]) if e else None,   # nosso score, não o do LLM
+        classificacao=classificacao,   # nosso score, não o do LLM
         dados_extraidos=e.model_dump(exclude=CAMPOS_FORA) if e else None,
         problemas=estado.get("problemas", []),
         decisao_roteamento=DecisaoRoteamento(
