@@ -2,6 +2,7 @@ from typing import TypedDict, Optional
 from langgraph.graph import StateGraph, END
 
 from .llm import extrair
+from .modelos import Classificacao
 from .pdf import extrair_texto_pdf
 from .validacao import validar, precisa_revisao
 from . import roteamento as rt
@@ -12,6 +13,7 @@ class Estado(TypedDict, total=False):
     texto: str
     pdf_bytes: Optional[bytes]
     extracao: Optional[object]   # objeto Extracao (None se falhou)
+    classificacao: Optional[object]  # objeto Classificacao montado pelo nó classificar
     erro: Optional[str]
     problemas: list
     score: float
@@ -21,8 +23,22 @@ class Estado(TypedDict, total=False):
     justificativa: str
     notificacao: Optional[dict]
 
-def construir_grafo(extrator=extrair):
-    """'extrator' pode ser trocado por uma versão falsa nos testes (sem LLM, sem rede)."""
+
+def montar_classificacao(extracao, score) -> Classificacao:
+    """T3: a classificação que o analista vê vem da extração JÁ validada.
+
+    O score é o RECALCULADO por app/validacao.py (não o que o LLM deu).
+    """
+    return Classificacao(
+        tipo_documento=extracao.tipo_documento,
+        especialidade=extracao.especialidade,
+        nivel_prioridade=extracao.nivel_prioridade,
+        score_confianca_classificacao=score,
+    )
+
+def construir_grafo(extrator=extrair, classificador=montar_classificacao):
+    """'extrator' e 'classificador' podem ser trocados por versões falsas nos
+    testes (sem LLM, sem rede)."""
 
     def n_ler_entrada(s: Estado):
         #estrair textos das paginas
@@ -46,6 +62,16 @@ def construir_grafo(extrator=extrair):
             return {"problemas": [], "score": 0.0}
         extracao, problemas, score = validar(s["extracao"], s["texto"])
         return {"extracao": extracao, "problemas": problemas, "score": score}
+
+    def n_classificar(s: Estado):
+        # T3: grava a classificação no estado; se falhar, segue sem ela
+        # (não derruba o fluxo — a resposta entrega classificacao=None).
+        if s.get("erro") or s.get("extracao") is None:
+            return {"classificacao": None}
+        try:
+            return {"classificacao": classificador(s["extracao"], s["score"])}
+        except Exception:
+            return {"classificacao": None}
 
     def n_urgencia(s: Estado):
         e = s["extracao"]
@@ -93,16 +119,20 @@ def construir_grafo(extrator=extrair):
 
     g = StateGraph(Estado)
     for nome, fn in [("ler_entrada", n_ler_entrada), ("extrair", n_extrair), ("validar", n_validar),
-                     ("urgencia", n_urgencia), ("revisao", n_revisao), ("padrao", n_padrao)]:
+                     ("classificar", n_classificar), ("urgencia", n_urgencia),
+                     ("revisao", n_revisao), ("padrao", n_padrao)]:
         g.add_node(nome, fn)
     g.set_entry_point("ler_entrada")
     g.add_edge("ler_entrada", "extrair")
     g.add_edge("extrair", "validar")
-    g.add_conditional_edges("validar", decidir,
+    g.add_edge("validar", "classificar")
+    g.add_conditional_edges("classificar", decidir,
                             {"urgencia": "urgencia", "revisao": "revisao", "padrao": "padrao"})
     for no in ("urgencia", "revisao", "padrao"):
         g.add_edge(no, END)
     return g.compile()
 
-def triar(texto: str, extrator=extrair, pdf_bytes: Optional[bytes] = None) -> dict:
-    return construir_grafo(extrator).invoke({"texto": texto, "pdf_bytes": pdf_bytes})
+def triar(texto: str, extrator=extrair, pdf_bytes: Optional[bytes] = None,
+          classificador=montar_classificacao) -> dict:
+    return construir_grafo(extrator, classificador).invoke(
+        {"texto": texto, "pdf_bytes": pdf_bytes})

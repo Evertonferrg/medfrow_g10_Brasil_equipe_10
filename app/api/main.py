@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from fastapi import FastAPI, BackgroundTasks, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -15,6 +16,19 @@ logger = logging.getLogger(__name__)
 
 PASTAS_RESULTADO = ('processados/urgentes', 'processados/rotina', 'auditoria_humana')
 MAX_PDF = 10 * 1024 * 1024
+# T4: charset limpo para o ID da rota /documentos — sem "/", "\" nem "." (e
+# portanto sem ".."). A checagem acontece ANTES de montar qualquer caminho.
+ID_LIMPO = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _validar_id_limpo(documento_id: str):
+    """Devolve None se o ID é limpo, ou 400 com o motivo (nunca monta caminho)."""
+    if not ID_LIMPO.fullmatch(documento_id or ""):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "documento_id inválido: use apenas letras, números, "
+                               "'-' e '_', sem '/', '\\', '..' ou espaços."})
+    return None
 
 def criar_app(extrator=None) -> FastAPI:
     if extrator is None:
@@ -96,6 +110,24 @@ def criar_app(extrator=None) -> FastAPI:
                                                  "caminho_objeto": f"{pasta}/{documento_id}.json",
                                                  "urgente": pasta.endswith("urgentes")}
                 return resultado
+        if storage.existe(f"recebidos/{documento_id}.txt") or storage.existe(f"recebidos/{documento_id}.pdf"):
+            return JSONResponse(status_code=202, content={"documento_id": documento_id, "status": "processando"})
+        return JSONResponse(status_code=404, content={"detail": "documento não encontrado"})
+
+    @app.get("/documentos/{documento_id}")
+    def consultar_bruto(documento_id: str):
+        """T4 — forma mínima: devolve o resultado COMO ESTÁ SALVO (bruto).
+
+        Diferente de GET /triagem/{id}, aqui não se remonta nada: é a tela de
+        resultado que lê este caminho.
+        """
+        recusa = _validar_id_limpo(documento_id)
+        if recusa:
+            return recusa
+        for pasta in PASTAS_RESULTADO:
+            bruto = storage.ler(f"{pasta}/{documento_id}.json")
+            if bruto is not None:
+                return JSONResponse(status_code=200, content=json.loads(bruto))
         if storage.existe(f"recebidos/{documento_id}.txt") or storage.existe(f"recebidos/{documento_id}.pdf"):
             return JSONResponse(status_code=202, content={"documento_id": documento_id, "status": "processando"})
         return JSONResponse(status_code=404, content={"detail": "documento não encontrado"})
