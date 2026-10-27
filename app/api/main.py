@@ -132,6 +132,10 @@ def criar_app(extrator=None) -> FastAPI:
             return JSONResponse(status_code=202, content={"documento_id": documento_id, "status": "processando"})
         return JSONResponse(status_code=404, content={"detail": "documento não encontrado"})
 
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
     return app
 
 try:

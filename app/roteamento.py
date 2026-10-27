@@ -23,11 +23,24 @@ def decidir_destino(tipo: str, prioridade: str, requer_revisao: bool):
     return PADRAO, REGRA_PRONTUARIO[0]
  
  
-def justificativa(tipo, prioridade, score, destino, regra, achado=None, problemas=None, erro=None):
+def justificativa(
+    tipo,
+    prioridade,
+    score,
+    destino,
+    regra,
+    achado=None,
+    problemas=None,
+    erro=None,
+    motivo=None,
+):
     if regra == "R-REVISAO":
-        motivo = (f"falha na extração automática ({erro[:80]})" if erro
-                  else "; ".join(problemas or []) or f"score baixo ({score})")
-        return f"Enviado à revisão humana (regra R-REVISAO): {motivo}."
+        detalhe = motivo or (
+            f"falha na extração automática ({erro[:80]})"
+            if erro
+            else "; ".join(problemas or []) or f"baixa confiança na classificação ({score})"
+        )
+        return f"Enviado à revisão humana (regra R-REVISAO): {detalhe}."
     if regra == "R-URGENCIA":
         return (f"{tipo} com prioridade Urgente (achado crítico: {achado}); regra R-URGENCIA: "
                 f"urgência tem precedência sobre a rota de rotina → {destino}.")

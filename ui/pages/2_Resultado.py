@@ -1,9 +1,23 @@
 """T4 — tela de resultado: consulta GET /documentos/{documento_id} e mostra
-o tipo identificado e a especialidade provável ao analista."""
+o tipo identificado, o score de confiança ao lado do tipo e a especialidade provável ao analista."""
 import os
+import sys
+from pathlib import Path
 
 import requests
 import streamlit as st
+
+PASTA_UI = str(Path(__file__).resolve().parents[1])
+if PASTA_UI not in sys.path:
+    sys.path.insert(0, PASTA_UI)
+
+from componentes.classificacao import (  # noqa: E402, F401
+    carregar_limite_confianca,
+    exibir_classificacao,
+    formatar_confianca,
+)
+from componentes.diagnostico import bloco_diagnostico  # noqa: E402, F401
+from componentes.medico import bloco_medico  # noqa: E402, F401
 
 API = os.getenv("API_URL", "http://localhost:8000")
 
@@ -32,16 +46,10 @@ if buscar and doc_id.strip():
     else:
         res = r.json()
         st.caption(f"**Status:** {res.get('status', '-')}")
-        cl = res.get("classificacao")
-        if cl:
-            a, b = st.columns(2)
-            a.metric("Tipo do documento", cl.get("tipo_documento") or "—")
-            b.metric("Especialidade provável", cl.get("especialidade") or "—")
-            c, d = st.columns(2)
-            c.metric("Prioridade", cl.get("nivel_prioridade") or "—")
-            d.metric("Confiança", cl.get("score_confianca_classificacao", "—"))
-        else:
-            st.warning("Sem classificação: o documento foi para revisão humana.")
+        exibir_classificacao(res.get("classificacao"))
+        if res.get("dados_extraidos") is not None:
+            bloco_medico(res.get("dados_extraidos"))
+            bloco_diagnostico(res.get("dados_extraidos"))
 
         d = res.get("decisao_roteamento") or {}
         if d:

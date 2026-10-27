@@ -23,7 +23,7 @@ Regras:
 - score_confianca_classificacao: de 0 a 1. Diminua se o texto for ambíguo ou ilegível.
 - paciente: nome, idade e data_nascimento (copie a data como está escrita).
 - medico_solicitante: nome e crm exatamente como escritos.
-- diagnostico_principal e cid_sugerido (código CID-10). Se o CID não estiver escrito, sugira o mais provável.
+- diagnostico_principal, cid_sugerido (código CID-10) e origem_cid: quando o CID estiver escrito no documento, copie-o e marque origem_cid = "escrito"; quando não estiver escrito, sugira o mais provável e marque origem_cid = "sugerido".
 - medicamentos: um item por medicamento, com nome, dose, frequencia e duracao (null se ausente).
 - exames: um item por exame/procedimento, com codigo_tuss somente se estiver escrito no texto.
 - evidencias: para os campos principais preenchidos, copie o trecho EXATO do documento de onde veio.
