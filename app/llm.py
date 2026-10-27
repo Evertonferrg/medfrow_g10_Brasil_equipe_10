@@ -24,7 +24,9 @@ Regras:
 - paciente: nome, idade e data_nascimento (copie a data como está escrita).
 - medico_solicitante: nome e crm exatamente como escritos.
 - diagnostico_principal e cid_sugerido (código CID-10). Se o CID não estiver escrito, sugira o mais provável.
-- medicamentos: um item por medicamento, com nome, dose, frequencia e duracao (null se ausente).
+- medicamentos: um item para CADA medicamento; nunca agrupe dois medicamentos no mesmo item (uma associação escrita como um produto só, como 'amoxicilina + clavulanato',
+  é um item único). Para cada um: nome (copiado literalmente; não troque nome comercial por genérico), dose (com a unidade, como escrita), via, frequencia e duracao, 
+  todos COPIADOS como estão escritos. Campo que não estiver escrito = null. Nunca deduza dose nem via (ex.: 'comprimido' não indica via oral).
 - exames: um item por exame/procedimento, com codigo_tuss somente se estiver escrito no texto.
 - evidencias: para os campos principais preenchidos, copie o trecho EXATO do documento de onde veio.
 - inconsistencias: liste qualquer trecho ilegível ou contraditório.

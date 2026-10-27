@@ -7,6 +7,24 @@ import streamlit as st
 
 API = os.getenv("API_URL", "http://localhost:8000")
 
+
+def mostrar_medicamentos(dados, tipo_documento=None):
+    """H1.3.4 T4: tabela de medicamentos e posologia."""
+    itens = (dados or {}).get("medicamentos") or []
+    if not itens:
+        if tipo_documento == "Receituário Médico":
+            st.subheader("Medicamentos")
+            st.caption("Nenhum medicamento identificado nesta receita.")
+        return
+    st.subheader("Medicamentos")
+    st.dataframe(
+        [{"Medicamento": m.get("nome") or "—", "Dose": m.get("dose") or "—", "Via": m.get("via") or "—",
+          "Frequência": m.get("frequencia") or "—", "Duração": m.get("duracao") or "—"} for m in itens],
+        hide_index=True)
+    if any(not m.get("dose") for m in itens):
+        st.caption("⚠ Há medicamento sem dose informada no documento (veja os pontos de atenção).")
+
+
 st.set_page_config(page_title="MediFlow — Resultado", page_icon="🔎", layout="wide")
 st.title("🔎 Resultado da triagem")
 
@@ -54,3 +72,6 @@ if buscar and doc_id.strip():
             st.subheader("Pontos de atenção")
             for p in problemas:
                 st.write(f"- {p}")
+        
+        # Chamada adicionada para exibir a tabela e avisos de medicamentos
+        mostrar_medicamentos(res.get("dados_extraidos"), cl.get("tipo_documento") if cl else None)

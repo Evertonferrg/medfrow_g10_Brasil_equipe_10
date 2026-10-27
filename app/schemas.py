@@ -73,6 +73,7 @@ class Medico(BaseModel):
 class Medicamento(BaseModel):               # H1.3.4 T1
     nome: str
     dose: Optional[str] = None
+    via: Optional[str] = None
     frequencia: Optional[str] = None
     duracao: Optional[str] = None
 

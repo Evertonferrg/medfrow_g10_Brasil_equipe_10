@@ -13,6 +13,7 @@ PENALIDADES = {
     "inconsistencia": 0.20, "nome_nao_encontrado": 0.30,
     "medicamento_inventado": 0.30, "posologia_incompleta": 0.15,
     "tuss_nao_encontrado": 0.20, "cid_invalido": 0.10,
+    "posologia_nao_confirmada": 0.15, #h1.3.4
 }
 CID_REGEX = re.compile(r"^[A-Z]\d{2}(\.\d{1,2})?$")
  
@@ -43,6 +44,91 @@ def _nome_aparece_no_texto(nome: str, texto: str) -> bool:
     palavras = [p for p in re.findall(r"\w+", _simplificar(nome)) if p not in ("dr", "dra")]
     return all(p in palavras_texto for p in palavras)
  
+#H1.3.4 medicamentos e posologia
+CAMPO_FALTANT = "campo faltante: "
+CAMPO_NAO_CONFIRMADO = "campo não confirmado no texto: "
+JANELA_MEDICAMENTO = 400 
+
+def _achar_frase(frase_s: str, texto_s: str):
+    """(inicio, fim) da 1º ocorrência da frase como palavras interias, ou Nome.
+    Os dois textos já devem estar simplificados (sem acento, minusculas, espaços simples)."""
+    if not frase_s:
+        return None
+    m = re.search(rf"(?<!\w){re.escape(frase_s)}(?!\w)", texto_s)
+    return (m.start(), m.end()) if m else None
+
+def _dose_normalizada(dose: str) -> str:
+    return re.sub(r"\s+", "", _simplificar(dose).replace(",", "."))
+
+def _dose_na_janela(dose: str, janela_s: str) -> bool:
+    """'500mg' = '500 mg' , mas  '5mg' NÃO casa como '25mg' nem '1.5mg', e não há conversão de unidade."""
+    alvo = _dose_normalizada(dose)
+    if not alvo:
+        return False
+    junto = re.sub(r"\s+", "", janela_s.replace(",", "."))
+    return bool(re.search(rf"(?<![\d.]){re.escape(alvo)}(?!\d)", junto))
+
+
+def _numeros(s: str) -> set:
+    return set(re.findall(r"\d+(?:\.\d+)?", s.replace(",", ".")))
+
+
+def _valor_na_janela(valor: str, janela_s: str) -> bool:
+    """Via, frequência e duração: a frase escrita aparece na janela ou, se houver números,
+    todos os números do valor aparecem nela (aceita '8/8h' para 'de 8 em 8 horas';
+    nunca aceita um número que não esteja no documento)."""
+    v = _simplificar(valor)
+    if not v:
+        return False
+    if _achar_frase(v, janela_s):
+        return True
+    nums = _numeros(v)
+    return bool(nums) and nums <= _numeros(janela_s)
+
+
+def _validar_medicamentos(extracao: Extracao, texto_s: str):
+    """Um item por medicamento, todos presentes no texto. Dose, via, frequência e duração só ficam
+    se confirmadas NA REGIÃO do texto desse medicamento; o resto vira null e é sinalizado.
+    Receita sem dose: 'campo faltante: dose'. Devolve (problemas, penalidade)."""
+    problemas, pen = [], 0.0
+    e_receita = extracao.tipo_documento == "Receituário Médico"
+
+    candidatos, vistos = [], set()
+    for m in extracao.medicamentos:
+        nome_s = _simplificar(m.nome)
+        pos = _achar_frase(nome_s, texto_s)
+        if pos is None and nome_s:
+            pos = _achar_frase(nome_s.split()[0], texto_s)      # 'Dipirona sódica' -> 'Dipirona'
+        if pos is None:
+            problemas.append(f"Medicamento '{m.nome}' não encontrado no texto original")
+            pen += PENALIDADES["medicamento_inventado"]
+            continue
+        chave = (nome_s.split()[0], _dose_normalizada(m.dose or ""))
+        if chave in vistos:                                        # mesmo medicamento repetido
+            continue
+        vistos.add(chave)
+        candidatos.append((m, pos[0]))
+
+    inicios = sorted({ini for _, ini in candidatos})
+    mantidos = []
+    for m, ini in candidatos:
+        seguintes = [i for i in inicios if i > ini]
+        fim = min(seguintes[0] if seguintes else ini + JANELA_MEDICAMENTO, ini + JANELA_MEDICAMENTO)
+        janela = texto_s[ini:fim]
+        tinha_dose = bool(m.dose)
+        for campo, confere in (("dose", _dose_na_janela), ("via", _valor_na_janela),
+                               ("frequencia", _valor_na_janela), ("duracao", _valor_na_janela)):
+            valor = getattr(m, campo)
+            if valor and not confere(valor, janela):
+                problemas.append(f"{CAMPO_NAO_CONFIRMADO}{campo} (medicamento '{m.nome}')")
+                pen += PENALIDADES["posologia_nao_confirmada"]
+                setattr(m, campo, None)
+        if e_receita and not tinha_dose:
+            problemas.append(f"{CAMPO_FALTANTE}dose | Medicamento '{m.nome}' sem dose informada")
+            pen += PENALIDADES["posologia_incompleta"]
+        mantidos.append(m)
+    extracao.medicamentos = mantidos
+    return problemas, pen
  
 def validar(extracao: Extracao, texto: str):
     """Devolve (extracao_corrigida, lista_de_problemas, score_final)."""
