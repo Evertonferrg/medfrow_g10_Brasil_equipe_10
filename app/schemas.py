@@ -2,14 +2,19 @@ import re
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator
 
-# enum + submodelo de classificação moram em app/modelos/ (fonte única
+# enum + submodelo de classificação e destino moram em app/modelos/ (fonte única
 # das categorias); são reexportados aqui para manter os imports antigos.
-from .modelos.classificacao import (  # noqa: F401
+from .modelos import (  # noqa: F401
     Classificacao,
     Prioridade,
     TipoDocumento,
     TipoDocumentoLiteral,
+    Destino,
+    DestinoLiteral,
+    DecisaoRoteamento,
+    Notificacao,
 )
+
  
 # ---------- ENTRADA (H1.1.1 T1) ----------
 ID_REGEX = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{2,63}")
@@ -103,22 +108,7 @@ class Extracao(BaseModel):
     inconsistencias: List[str] = Field(default_factory=list)
  
  
-# ---------- RESULTADO (H2.3.1 T1) — o contrato combinado com o edital ----------
-# Classificacao (tipada com o enum) é definida em app/modelos/classificacao.py
-# e reexportada no topo deste arquivo.
- 
- 
-class Notificacao(BaseModel):
-    canal: str
-    mensagem: str
 
-
-class DecisaoRoteamento(BaseModel):
-    destino_principal: str
-    requer_auditoria_humana: bool
-    justificativa_roteamento: str
-    regra_aplicada: str
-    notificacao_gerada: Optional[Notificacao] = None
 
 
 class ArmazenamentoOCI(BaseModel):          # H5.1.2 T1
