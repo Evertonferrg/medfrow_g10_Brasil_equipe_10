@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+pydantic
+httpx
+oci
+pytest
+langgraph
+python-dotenv
+google-genai
+pypdf
+reportlab
+streamlit
+python-multipart
