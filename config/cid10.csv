@@ -1,0 +1,83 @@
+codigo,descricao
+A09,Diarreia e gastroenterite de origem infecciosa presumivel
+A41.9,Septicemia nao especificada
+B34.9,Infeccao viral nao especificada
+C34.9,Neoplasia maligna dos bronquios ou pulmoes nao especificado
+C50.9,Neoplasia maligna da mama nao especificada
+D50.9,Anemia por deficiencia de ferro nao especificada
+D64.9,Anemia nao especificada
+E03.9,Hipotireoidismo nao especificado
+E10.9,Diabetes mellitus insulino-dependente sem complicacoes
+E11,Diabetes mellitus nao-insulino-dependente
+E11.9,Diabetes mellitus nao-insulino-dependente sem complicacoes
+E66.9,Obesidade nao especificada
+E78.5,Hiperlipidemia nao especificada
+F32.9,Episodio depressivo nao especificado
+F41.1,Ansiedade generalizada
+G40.9,Epilepsia nao especificada
+G43.9,Enxaqueca nao especificada
+G45.9,Isquemia cerebral transitoria nao especificada
+H10.9,Conjuntivite nao especificada
+H66.9,Otite media nao especificada
+I10,Hipertensao essencial (primaria)
+I20.0,Angina instavel
+I20.9,Angina pectoris nao especificada
+I21,Infarto agudo do miocardio
+I21.0,Infarto agudo transmural da parede anterior do miocardio
+I21.9,Infarto agudo do miocardio nao especificado
+I26,Embolia pulmonar
+I26.0,Embolia pulmonar com mencao de cor pulmonale agudo
+I26.9,Embolia pulmonar sem mencao de cor pulmonale agudo
+I48,Flutter e fibrilacao atrial
+I50.0,Insuficiencia cardiaca congestiva
+I50.9,Insuficiencia cardiaca nao especificada
+I63.9,Infarto cerebral nao especificado
+I64,Acidente vascular cerebral nao especificado como hemorragico ou isquemico
+J00,Nasofaringite aguda (resfriado comum)
+J01.9,Sinusite aguda nao especificada
+J02.9,Faringite aguda nao especificada
+J03.9,Amigdalite aguda nao especificada
+J06.9,Infeccao aguda das vias aereas superiores nao especificada
+J11.1,Influenza com outras manifestacoes respiratorias devida a virus nao identificado
+J15.9,Pneumonia bacteriana nao especificada
+J18,Pneumonia por microorganismo nao especificado
+J18.9,Pneumonia nao especificada
+J20.9,Bronquite aguda nao especificada
+J44.1,Doenca pulmonar obstrutiva cronica com exacerbacao aguda
+J45.9,Asma nao especificada
+J96.0,Insuficiencia respiratoria aguda
+K21.9,Doenca de refluxo gastroesofagico sem esofagite
+K29.7,Gastrite nao especificada
+K35.8,Apendicite aguda outros e os nao especificados
+K80.2,Calculo da vesicula biliar sem colecistite
+L03.9,Celulite nao especificada
+M25.5,Dor articular
+M51.1,Transtornos de discos lombares e de outros discos intervertebrais com radiculopatia
+M54.2,Cervicalgia
+M54.4,Lumbago com ciatica
+M54.5,Dor lombar baixa
+M79.1,Mialgia
+N17.9,Insuficiencia renal aguda nao especificada
+N18.9,Doenca renal cronica nao especificada
+N20.0,Calculo do rim
+N30.0,Cistite aguda
+N39.0,Infeccao do trato urinario de localizacao nao especificada
+O80.0,Parto unico espontaneo cefalico
+R05,Tosse
+R06.0,Dispneia
+R07.4,Dor toracica nao especificada
+R10.4,Outras dores abdominais e as nao especificadas
+R42,Tontura e instabilidade
+R50.9,Febre nao especificada
+R51,Cefaleia
+R55,Sincope e colapso
+S06.0,Concussao cerebral
+S52.5,Fratura da extremidade distal do radio
+S82.6,Fratura do maleolo lateral
+S93.4,Entorse e distensao do tornozelo
+T78.4,Alergia nao especificada
+U07.1,COVID-19 virus identificado
+Z00.0,Exame medico geral
+Z01.7,Exame de laboratorio
+Z02.7,Emissao de atestado medico
+Z76.0,Emissao de prescricao de repeticao

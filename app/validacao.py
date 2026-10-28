@@ -1,3 +1,7 @@
+
+import csv
+from functools import lru_cache
+from pathlib import Path
 import re
 import unicodedata
 from . import config
@@ -16,6 +20,20 @@ PENALIDADES = {
     "exame_inventado": 0.30,# h1.3.5
 }
 CID_REGEX = re.compile(r"^[A-Z]\d{2}(\.\d{1,2})?$")
+ARQUIVO_CID10 = Path(__file__).resolve().parents[1] / "config" / "cid10.csv"
+
+
+@lru_cache(maxsize=1)
+def carregar_cids_validos(caminho: Path | None = None) -> frozenset[str]:
+    """H1.3.3 T2: carrega a tabela CID-10 do CSV uma única vez num conjunto imutável."""
+    alvo = caminho or ARQUIVO_CID10
+    codigos: set[str] = set()
+    with alvo.open(encoding="utf-8", newline="") as f:
+        for linha in csv.DictReader(f):
+            codigo = (linha.get("codigo") or "").strip().upper()
+            if codigo:
+                codigos.add(codigo)
+    return frozenset(codigos)
  
  
 def _simplificar(texto: str) -> str:
@@ -27,13 +45,14 @@ def _simplificar(texto: str) -> str:
  
 def normalizar_crm(crm):
     """'CRM-SP 145892' (e variações) -> '145892-SP'. None se faltar número ou UF válida."""
-    if not crm:
+    if not crm or not isinstance(crm, str):
         return None
-    numero = re.search(r"\d{3,7}", crm)
-    candidatas = re.findall(r"\b([A-Za-z]{2})\b", crm.upper().replace("CRM", ""))
+    limpo = re.sub(r"(?<=\d)\.(?=\d)", "", crm.strip())
+    numeros = re.findall(r"\d+", limpo)
+    candidatas = re.findall(r"\b([A-Za-z]{2})\b", limpo.upper().replace("CRM", " "))
     ufs = [c for c in candidatas if c in UFS_VALIDAS]
-    if numero and ufs:
-        return f"{numero.group()}-{ufs[0]}"
+    if len(numeros) == 1 and 3 <= len(numeros[0]) <= 7 and len(ufs) == 1 and len(candidatas) == 1:
+        return f"{numeros[0]}-{ufs[0]}"
     return None
  
  
@@ -196,12 +215,16 @@ def validar(extracao: Extracao, texto: str):
     # 1) CRM: normaliza e confere o número no texto (nunca um valor "plausível")
     bruto = extracao.medico_solicitante.crm
     crm = normalizar_crm(bruto)
+    erro_crm = None
     if not bruto:
-        problemas.append("CRM do solicitante não encontrado"); pen += PENALIDADES["crm_ausente"]
+        erro_crm = "CRM do solicitante não encontrado"
+        problemas.append(erro_crm); pen += PENALIDADES["crm_ausente"]
     elif not crm:
-        problemas.append(f"CRM em formato inválido: '{bruto}'"); pen += PENALIDADES["crm_ausente"]
+        erro_crm = f"CRM em formato inválido: '{bruto}'"
+        problemas.append(erro_crm); pen += PENALIDADES["crm_ausente"]
     elif crm.split("-")[0] not in re.sub(r"[.\s]", "", texto):
-        problemas.append(f"CRM {crm} não consta no texto original"); pen += PENALIDADES["crm_ausente"]
+        erro_crm = f"CRM {crm} não consta no texto original"
+        problemas.append(erro_crm); pen += PENALIDADES["crm_ausente"]
         crm = None
     extracao.medico_solicitante.crm = crm
  
@@ -222,17 +245,31 @@ def validar(extracao: Extracao, texto: str):
         problemas.append("Tipo de documento não identificado"); pen += PENALIDADES["tipo_desconhecido"]
     for item in extracao.inconsistencias:
         problemas.append(f"Inconsistência: {item}"); pen += PENALIDADES["inconsistencia"]
+    if erro_crm and erro_crm not in extracao.inconsistencias:
+        extracao.inconsistencias.append(erro_crm)
  
-    # 4) CID: formato válido? está escrito no documento ou é só "sugerido"?
+    # 4) CID: formato válido e presente na tabela CID-10? Está escrito ou sugerido?
     if extracao.cid_sugerido:
-        cid = extracao.cid_sugerido.strip().upper()
-        if CID_REGEX.match(cid):
+        cid_bruto = extracao.cid_sugerido.strip().upper()
+        cid = (
+            f"{cid_bruto[:3]}.{cid_bruto[3:]}"
+            if re.match(r"^[A-Z]\d{3,4}$", cid_bruto)
+            else cid_bruto
+        )
+        cids_validos = carregar_cids_validos()
+        if CID_REGEX.match(cid) and cid in cids_validos:
             extracao.cid_sugerido = cid
-            extracao.cid_origem = "documento" if cid.lower() in texto.lower() else "sugerido"
+            texto_lower = texto.lower()
+            escrito = cid.lower() in texto_lower or cid.replace(".", "").lower() in texto_lower
+            origem = "escrito" if escrito else "sugerido"
+            extracao.origem_cid = origem
+            extracao.cid_origem = origem
         else:
             problemas.append(f"CID inválido: '{extracao.cid_sugerido}'")
             pen += PENALIDADES["cid_invalido"]
-            extracao.cid_sugerido, extracao.cid_origem = None, None
+            extracao.cid_sugerido = None
+            extracao.origem_cid = None
+            extracao.cid_origem = None
  
     # 5) Medicamentos: descarta inventados, confere posologia na região do medicamento
     p, d = _validar_medicamentos(extracao, texto_s)
@@ -251,6 +288,53 @@ def validar(extracao: Extracao, texto: str):
     return extracao, problemas, max(0.0, round(base - pen, 2))
  
  
-def precisa_revisao(score: float, problemas: list) -> bool:
+def motivo_revisao(score: float, problemas: list, limite: float, erro: str | None = None) -> str:
+    """Motivo registrado no estado quando o documento não é roteado sozinho.
+
+    A ordem espelha a decisão do grafo: falha de extração, baixa confiança,
+    depois os problemas de validação.
+    """
+    if erro:
+        return f"falha na extração automática ({erro[:80]})"
+    if score < limite:
+        motivo = "baixa confiança na classificação"
+        if problemas:
+            motivo += f"; {'; '.join(problemas)}"
+        return motivo
+    return "; ".join(problemas) or "revisão necessária"
+
+
+def precisa_revisao(score: float, problemas: list, limite: float | None = None) -> bool:
     """Score baixo OU qualquer problema encontrado."""
-    return score < config.limiar_confianca() or len(problemas) > 0
+    if limite is None:
+        limite = config.limite_confianca()
+    return score < limite or len(problemas) > 0
+
+
+def taxa_acerto_por_faixa(avaliacoes: list[dict], limite: float | None = None) -> dict:
+    """H1.2.2 T1: calcula a taxa de acerto abaixo e acima do limite de confiança.
+
+    Cada item de 'avaliacoes' deve ter:
+      - 'esperado': tipo de documento correto
+      - 'obtido': tipo de documento classificado
+      - 'score': score de confiança (0 a 1)
+    """
+    if limite is None:
+        limite = config.limite_confianca()
+    abaixo = [a for a in avaliacoes if a["score"] < limite]
+    acima = [a for a in avaliacoes if a["score"] >= limite]
+
+    def _resumo(itens: list[dict]) -> dict:
+        total = len(itens)
+        acertos = sum(1 for i in itens if i["esperado"] == i["obtido"])
+        return {
+            "total": total,
+            "acertos": acertos,
+            "taxa_acerto": round(acertos / total, 2) if total else 0.0,
+        }
+
+    return {
+        "limite": limite,
+        "abaixo_do_limite": _resumo(abaixo),
+        "acima_ou_igual_ao_limite": _resumo(acima),
+    }

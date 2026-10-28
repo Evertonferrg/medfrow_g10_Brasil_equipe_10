@@ -1,6 +1,6 @@
 import re
-from typing import Optional, List
-from pydantic import BaseModel, Field, field_validator
+from typing import Literal, Optional, List
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # enum + submodelo de classificação moram em app/modelos/ (fonte única
 # das categorias); são reexportados aqui para manter os imports antigos.
@@ -65,9 +65,13 @@ class Paciente(BaseModel):
     data_nascimento: Optional[str] = None   # preservada como está (H1.3.1)
 
 
-class Medico(BaseModel):
+class MedicoSolicitante(BaseModel):         # H1.3.2 T1
     nome: Optional[str] = None
     crm: Optional[str] = None
+
+
+# Alias mantido para compatibilidade com imports existentes
+Medico = MedicoSolicitante
 
 
 class Medicamento(BaseModel):               # H1.3.4 T1
@@ -94,14 +98,25 @@ class Extracao(BaseModel):
     nivel_prioridade: Prioridade
     score_confianca_classificacao: float = Field(ge=0, le=1)
     paciente: Paciente = Field(default_factory=Paciente)
-    medico_solicitante: Medico = Field(default_factory=Medico)
+    medico_solicitante: MedicoSolicitante = Field(default_factory=MedicoSolicitante)
     diagnostico_principal: Optional[str] = None
     cid_sugerido: Optional[str] = None
-    cid_origem: Optional[str] = None        # "documento" ou "sugerido" (preenchido na validação)
+    origem_cid: Optional[Literal["escrito", "sugerido"]] = None   # H1.3.3 T1
+    cid_origem: Optional[str] = None        # alias mantido para compatibilidade
     medicamentos: List[Medicamento] = Field(default_factory=list)
     exames: List[Exame] = Field(default_factory=list)
     evidencias: List[Evidencia] = Field(default_factory=list)
     inconsistencias: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _sincronizar_origem_cid(self):
+        if self.origem_cid is None and self.cid_origem in ("escrito", "sugerido"):
+            self.origem_cid = self.cid_origem
+        elif self.origem_cid is None and self.cid_origem == "documento":
+            self.origem_cid = "escrito"
+        if self.cid_origem is None and self.origem_cid is not None:
+            self.cid_origem = self.origem_cid
+        return self
  
  
 # ---------- RESULTADO (H2.3.1 T1) — o contrato combinado com o edital ----------

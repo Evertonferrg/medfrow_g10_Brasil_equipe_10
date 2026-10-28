@@ -1,10 +1,11 @@
 from typing import TypedDict, Optional
 from langgraph.graph import StateGraph, END
 
+from . import config
 from .llm import extrair
 from .modelos import Classificacao
 from .pdf import extrair_texto_pdf
-from .validacao import validar, precisa_revisao
+from .validacao import validar, precisa_revisao, motivo_revisao
 from . import roteamento as rt
 
 
@@ -12,6 +13,7 @@ from . import roteamento as rt
 class Estado(TypedDict, total=False):
     texto: str
     pdf_bytes: Optional[bytes]
+    limite_confianca: float      # H1.2.2 T2: carregado uma vez por execução do grafo
     extracao: Optional[object]   # objeto Extracao (None se falhou)
     classificacao: Optional[object]  # objeto Classificacao montado pelo nó classificar
     erro: Optional[str]
@@ -20,6 +22,7 @@ class Estado(TypedDict, total=False):
     destino: str
     regra: str                   # id da regra aplicada (R-URGENCIA, R-RECEITA...)
     requer_revisao: bool
+    motivo_revisao: Optional[str]
     justificativa: str
     notificacao: Optional[dict]
 
@@ -41,13 +44,16 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
     testes (sem LLM, sem rede)."""
 
     def n_ler_entrada(s: Estado):
-        #estrair textos das paginas
+        # H1.2.2 T2: carrega o limite de confiança uma única vez por execução do grafo
+        saida: dict = {"limite_confianca": config.limite_confianca()}
+        # estrair textos das paginas
         if s.get("pdf_bytes"):
             try:
-                return {"texto": extrair_texto_pdf(s["pdf_bytes"])}
+                saida["texto"] = extrair_texto_pdf(s["pdf_bytes"])
             except Exception as e:
-                return {"texto": "", "erro": str(e)}
-        return {}
+                saida["texto"] = ""
+                saida["erro"] = str(e)
+        return saida
 
     def n_extrair(s: Estado):
         if s.get("erro"):
@@ -78,9 +84,10 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
         achado = e.diagnostico_principal or e.tipo_documento
         destino, regra = rt.decidir_destino(e.tipo_documento, e.nivel_prioridade, False)
         return {
-            "destino": destino, 
-            "regra": regra, 
+            "destino": destino,
+            "regra": regra,
             "requer_revisao": False,
+            "motivo_revisao": None,
             "justificativa": rt.justificativa(
                 e.tipo_documento, e.nivel_prioridade, s["score"], destino, regra, achado=achado
             ),
@@ -92,28 +99,46 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
 
     def n_revisao(s: Estado):
         e = s.get("extracao")
+        limite = s["limite_confianca"] if "limite_confianca" in s else config.limite_confianca()
+        motivo = motivo_revisao(
+            s.get("score", 0.0), s.get("problemas", []), limite, s.get("erro")
+        )
         destino, regra = rt.decidir_destino("", "", True)
         notificacao = None
         # se parece urgente mas a duvida avisa mesmo assim
         if e is not None and e.nivel_prioridade == "Urgente":
             notificacao = {"canal": "Alerta_Plantao_Medico",
                            "mensagem": "Possivel urgência com dados ambiguos: revisar com prioridade."}
-        return {"destino": destino, "regra": regra, "requer_revisao": True, "notificacao": notificacao,
-                "justificativa": rt.justificativa("", "", s["score"], destino, regra,
-                                                  problemas=s.get("problemas"), erro=s.get("erro"))}
-
-    
+        return {
+            "destino": destino,
+            "regra": regra,
+            "requer_revisao": True,
+            "motivo_revisao": motivo,
+            "notificacao": notificacao,
+            "justificativa": rt.justificativa(
+                "", "", s["score"], destino, regra,
+                problemas=s.get("problemas"), erro=s.get("erro"), motivo=motivo,
+            ),
+        }
 
     def n_padrao(s: Estado):
         e = s["extracao"]
         destino, regra = rt.decidir_destino(e.tipo_documento, e.nivel_prioridade, False)
-        return {"destino": destino, "regra": regra, "requer_revisao": False, "notificacao": None,
-                "justificativa": rt.justificativa(e.tipo_documento, e.nivel_prioridade,
-                                                  s["score"], destino, regra)}
+        return {
+            "destino": destino,
+            "regra": regra,
+            "requer_revisao": False,
+            "motivo_revisao": None,
+            "notificacao": None,
+            "justificativa": rt.justificativa(
+                e.tipo_documento, e.nivel_prioridade, s["score"], destino, regra
+            ),
+        }
 
     # condicional = segurança 1º , depois urgencia , por fim rotina
     def decidir(s: Estado) -> str:
-        if s.get("erro") or precisa_revisao(s["score"], s["problemas"]):
+        limite = s["limite_confianca"] if "limite_confianca" in s else config.limite_confianca()
+        if s.get("erro") or precisa_revisao(s["score"], s["problemas"], limite):
             return "revisao"
         return "urgencia" if s["extracao"].nivel_prioridade == "Urgente" else "padrao"
 

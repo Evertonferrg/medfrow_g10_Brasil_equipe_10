@@ -44,11 +44,18 @@ if enviar:
 
     cl = res.get("classificacao")
     if cl:
+        score = cl.get("score_confianca_classificacao")
+        limite = float(os.getenv("LIMIAR_CONFIANCA", "0.80"))
+        score_txt = (
+            f"⚠️ {score:.2f} (abaixo do limite)"
+            if isinstance(score, (int, float)) and score < limite
+            else f"{score:.2f}" if isinstance(score, (int, float)) else "—"
+        )
         a, b, c, e = st.columns(4)
         a.metric("Tipo", cl["tipo_documento"])
-        b.metric("Especialidade", cl.get("especialidade") or "—")
-        c.metric("Prioridade", cl["nivel_prioridade"])
-        e.metric("Confiança", cl["score_confianca_classificacao"])
+        b.metric("Confiança", score_txt)
+        c.metric("Especialidade", cl.get("especialidade") or "—")
+        e.metric("Prioridade", cl["nivel_prioridade"])
     dados = res.get("dados_extraidos") or {}
     if dados:
         a, b = st.columns(2)
