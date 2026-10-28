@@ -24,6 +24,17 @@ def mostrar_medicamentos(dados, tipo_documento=None):
     if any(not m.get("dose") for m in itens):
         st.caption("⚠ Há medicamento sem dose informada no documento (veja os pontos de atenção).")
 
+def mostrar_exames(dados):
+    """H1.3.5 T5: exames e procedimentos, com o código TUSS ao lado."""
+    itens = (dados or {}).get("exames") or []
+    if not itens:
+        return
+    st.subheader("Exames e procedimentos")
+    st.dataframe(
+       [{"Exame": e.get("nome") or "—", "Código TUSS": e.get("codigo_tuss") or "—"} for e in itens],
+        hide_index=True
+    )
+
 
 st.set_page_config(page_title="MediFlow — Resultado", page_icon="🔎", layout="wide")
 st.title("🔎 Resultado da triagem")
@@ -75,3 +86,6 @@ if buscar and doc_id.strip():
         
         # Chamada adicionada para exibir a tabela e avisos de medicamentos
         mostrar_medicamentos(res.get("dados_extraidos"), cl.get("tipo_documento") if cl else None)
+
+        # Exames e procedimentos, com o código TUSS ao lado
+        mostrar_exames(res.get("dados_extraidos"))
