@@ -1,7 +1,12 @@
 import json
 
 """T4 — tela de resultado: consulta GET /documentos/{documento_id} e mostra
-o tipo identificado, o score de confiança ao lado do tipo e a especialidade provável ao analista."""
+o tipo identificado, o score de confiança ao lado do tipo e a especialidade provável ao analista.
+"""
+
+"""H2.1.1 T5 — Tela de resultado: consulta GET /documentos/{documento_id} e exibe
+o destino de roteamento em destaque, acima dos dados extraídos clínicos.
+"""
 import os
 import sys
 from pathlib import Path
@@ -13,6 +18,7 @@ PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
     sys.path.insert(0, PASTA_UI)
 
+
 from componentes.classificacao import (  # noqa: F401
     carregar_limite_confianca,
     exibir_classificacao,
@@ -20,6 +26,11 @@ from componentes.classificacao import (  # noqa: F401
 )
 from componentes.diagnostico import bloco_diagnostico
 from componentes.medico import bloco_medico
+
+try:
+    from componentes.paciente import bloco_paciente
+except ImportError:
+    bloco_paciente = None
 
 API = os.getenv("API_URL", "http://localhost:8000")
 
@@ -121,23 +132,65 @@ if buscar and doc_id.strip():
     else:
         res = r.json()
         st.caption(f"**Status:** {res.get('status', '-')}")
-        exibir_classificacao(res.get("classificacao"))
-        if res.get("dados_extraidos") is not None:
-            bloco_medico(res.get("dados_extraidos"))
-            bloco_diagnostico(res.get("dados_extraidos"))
+        cl = res.get("classificacao")
+        if cl:
+            a, b = st.columns(2)
+            a.metric("Tipo do documento", cl.get("tipo_documento") or "—")
+            b.metric("Especialidade provável", cl.get("especialidade") or "—")
+            c, d = st.columns(2)
+            c.metric("Prioridade", cl.get("nivel_prioridade") or "—")
+            d.metric("Confiança", cl.get("score_confianca_classificacao", "—"))
+        else:
+            st.warning("Sem classificação: o documento foi para revisão humana.")
 
-        d = res.get("decisao_roteamento") or {}
-        if d:
-            mostrar_destino(d)
+        # Dados Extraídos (H1.3.1, H1.3.4, H1.3.5)
+        dados = res.get("dados_extraidos") or {}
+        if dados:
+            st.markdown("---")
+            st.markdown("### 📋 Dados Clínicos Extraídos")
+
+            col_paciente, col_medico = st.columns(2)
+            with col_paciente:
+                if bloco_paciente:
+                    bloco_paciente(dados)
+                else:
+                    st.subheader("Paciente")
+                    st.json(dados.get("paciente", {}))
+
+            with col_medico:
+                st.subheader("Médico solicitante")
+                med = dados.get("medico_solicitante") or {}
+                st.text_input("Nome", value=med.get("nome") or "—", disabled=True, key="medico_nome")
+                st.text_input("CRM", value=med.get("crm") or "—", disabled=True, key="medico_crm")
+
+            diag = dados.get("diagnostico_principal")
+            cid = dados.get("cid_sugerido")
+            cid_origem = dados.get("cid_origem")
+            if diag or cid:
+                st.markdown(f"**Diagnóstico:** {diag or '—'}  |  **CID:** {cid or '—'} ({cid_origem or 'não especificado'})")
+
+            # Medicamentos estruturados (H1.3.4 / H2.1.1)
+            medicamentos = dados.get("medicamentos")
+            if medicamentos:
+                st.subheader("💊 Medicamentos para Dispensação")
+                st.table(medicamentos)
+
+            # Exames estruturados (H1.3.5)
+            exames = dados.get("exames")
+            if exames:
+                st.subheader("🧪 Exames / Procedimentos")
+                st.table(exames)
+
+        # Problemas identificados / pontos de atenção
         problemas = res.get("problemas") or []
         if problemas:
-            st.subheader("Pontos de atenção")
+            st.subheader("⚠️ Pontos de atenção")
+            for p in problemas:
+                st.write(f"- {p}")
 
-        # Chamada adicionada para exibir a tabela e avisos de medicamentos
-        cl = res.get("classificacao") or {}
-        mostrar_medicamentos(res.get("dados_extraidos"), cl.get("tipo_documento"))
-
-        # Exames e procedimentos, com o código TUSS ao lado
-        mostrar_exames(res.get("dados_extraidos"))
-
-        botao_download(res)
+        st.download_button(
+            "Baixar resultado (JSON)",
+            json.dumps(res, ensure_ascii=False, indent=2),
+            file_name=f"{res.get('documento_id', doc_id)}.json",
+            mime="application/json",
+        )

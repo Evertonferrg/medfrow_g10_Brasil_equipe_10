@@ -7,15 +7,15 @@ from . import config
 from . import roteamento as rt
 from .arquivos import extensao_por_assinatura
 from .llm import extrair, ler_imagem
-from .modelos import Classificacao
+from .modelos import Classificacao, Destino
 from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
 from .resposta import falha_de_processamento, montar_resposta
 from .validacao import motivo_revisao, precisa_revisao, validar
+from .roteamento import decidir_destino, criar_decisao_roteamento  # exportado em app/grafo (H2.1.1 T2)
 
 logger = logging.getLogger(__name__)
 
-
-# dicionario compartilhado entre os nos
+# Dicionário compartilhado entre os nós do LangGraph
 class Estado(TypedDict, total=False):
     documento_id: str
     texto: str
@@ -35,6 +35,7 @@ class Estado(TypedDict, total=False):
     tipo_arquivo: str  # "TEXTO", "PDF" ou "Imagem"
     ilegivel: bool
     resultado: dict
+    decisao_roteamento: object | None  # submodelo DecisaoRoteamento (H2.1.1 T1/T4)
 
 
 def montar_classificacao(extracao, score) -> Classificacao:
@@ -110,8 +111,6 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         return {"extracao": extracao, "problemas": problemas, "score": score}
 
     def n_classificar(s: Estado):
-        # T3: grava a classificação no estado; se falhar, segue sem ela
-        # (não derruba o fluxo — a resposta entrega classificacao=None).
         if s.get("erro") or s.get("extracao") is None:
             return {"classificacao": None}
         try:
@@ -120,15 +119,30 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             logger.exception("Falha na classificação automática")
             return {"classificacao": None}
 
-    def n_urgencia(s: Estado):
-        e = s["extracao"]
-        achado = e.diagnostico_principal or e.tipo_documento
-        destino, regra = rt.decidir_destino(e.tipo_documento, e.nivel_prioridade, False)
+    def n_decidir(s: Estado):
+        """H2.1.1 T3: nó decidir que chama a função pura de roteamento
+        aplicando precedência urgência → revisão → tipo.
+        """
+        decisao = rt.criar_decisao_roteamento(s)
         return {
-            "destino": destino,
-            "regra": regra,
+            "destino": str(decisao.destino_principal),
+            "regra": decisao.regra_aplicada,
+            "requer_revisao": decisao.requer_auditoria_humana,
+            "justificativa": decisao.justificativa_roteamento,
+            "notificacao": decisao.notificacao_gerada.model_dump() if decisao.notificacao_gerada else None,
+            "decisao_roteamento": decisao,
+        }
+
+    def n_rotear(s: Estado):
+        """H2.1.1 T4: grava a decisão no estado e no resultado.
+        No MVP, a fila de um setor é a consulta aos resultados com aquele destino.
+        """
+        decisao = s.get("decisao_roteamento") or rt.criar_decisao_roteamento(s)
+        return {
+            "destino": str(decisao.destino_principal),
             "requer_revisao": False,
             "motivo_revisao": None,
+            "decisao_roteamento": decisao,
             "justificativa": rt.justificativa(
                 e.tipo_documento,
                 e.nivel_prioridade,
@@ -241,12 +255,14 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         ("extrair", n_extrair),
         ("validar", n_validar),
         ("classificar", n_classificar),
-        ("urgencia", n_urgencia),
+        ("decidir", n_decidir),
+        ("rotear", n_rotear),
         ("revisao", n_revisao),
         ("padrao", n_padrao),
         ("montar_resultado", n_montar_resultado),
     ]:
         g.add_node(nome, fn)
+
     g.set_entry_point("ler_entrada")
     # T5: ilegível vai direto para a revisão, sem passar por extrair/validar/classificar
     g.add_conditional_edges(

@@ -6,6 +6,7 @@ from .schemas import (
     ArmazenamentoOCI,
     Classificacao,
     DecisaoRoteamento,
+    Destino,
     Notificacao,
     ResultadoTriagem,
 )
@@ -14,8 +15,8 @@ PASTA_URGENTES = "processados/urgentes"
 PASTA_ROTINA = "processados/rotina"
 PASTA_REVISAO = "auditoria_humana"
 PASTAS = {
-    "Fila_Emergencia_Medica": PASTA_URGENTES,
-    "Fila_Revisao_Humana": PASTA_REVISAO,
+    Destino.FILA_EMERGENCIA_MEDICA.value: PASTA_URGENTES,
+    Destino.FILA_REVISAO_HUMANA.value: PASTA_REVISAO,
 }
 PASTAS_RESULTADO = (PASTA_URGENTES, PASTA_ROTINA, PASTA_REVISAO)
 CAMPOS_FORA = {
@@ -31,8 +32,6 @@ logger = logging.getLogger(__name__)
 
 def montar_resposta(documento_id: str, estado: dict) -> ResultadoTriagem:
     e = estado.get("extracao")
-    # a classificação vem do nó 'classificar'. Se o estado não tiver a
-    # chave (caminhos antigos), monta a partir da extração como antes.
     if "classificacao" in estado:
         classificacao = estado["classificacao"]
     else:
@@ -41,24 +40,29 @@ def montar_resposta(documento_id: str, estado: dict) -> ResultadoTriagem:
                 tipo_documento=e.tipo_documento,
                 especialidade=e.especialidade,
                 nivel_prioridade=e.nivel_prioridade,
-                score_confianca_classificacao=estado["score"],
+                score_confianca_classificacao=estado.get("score", 0.0),
             )
             if e
             else None
         )
+
+    decisao = estado.get("decisao_roteamento")
+    if not isinstance(decisao, DecisaoRoteamento):
+        decisao = DecisaoRoteamento(
+            destino_principal=estado["destino"],
+            requer_auditoria_humana=estado.get("requer_revisao", False),
+            justificativa_roteamento=estado.get("justificativa", ""),
+            regra_aplicada=estado.get("regra", "R-ROTEAMENTO"),
+            notificacao_gerada=estado.get("notificacao"),
+        )
+
     return ResultadoTriagem(
         status="processado" if e else "erro_extracao",
         documento_id=documento_id,
         classificacao=classificacao,  # nosso score, não o do LLM
         dados_extraidos=e.model_dump(exclude=CAMPOS_FORA) if e else None,
         problemas=estado.get("problemas", []),
-        decisao_roteamento=DecisaoRoteamento(
-            destino_principal=estado["destino"],
-            requer_auditoria_humana=estado["requer_revisao"],
-            justificativa_roteamento=estado["justificativa"],
-            regra_aplicada=estado["regra"],
-            notificacao_gerada=estado.get("notificacao"),
-        ),
+        decisao_roteamento=decisao,
     )
 
 
@@ -79,7 +83,7 @@ def falha_de_processamento(
             requer_auditoria_humana=True,
             justificativa_roteamento=(
                 justificativa
-                or "Enviado à revisão humana (regra R-REVISAO): falha de processamento."
+                or "Enviado à revisão humana (regra R-REVISAO): Falha de processamento: o resultado não pôde ser montado."
             ),
             regra_aplicada="R-REVISAO",
             notificacao_gerada=notificacao,

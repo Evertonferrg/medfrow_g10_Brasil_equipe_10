@@ -3,13 +3,17 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-# enum + submodelo de classificação moram em app/modelos/ (fonte única
+# enum + submodelo de classificação e destino moram em app/modelos/ (fonte única
 # das categorias); são reexportados aqui para manter os imports antigos.
-from .modelos.classificacao import (  # noqa: F401
+from .modelos import (  # noqa: F401
     Classificacao,
     Prioridade,
     TipoDocumento,
     TipoDocumentoLiteral,
+    Destino,
+    DestinoLiteral,
+    DecisaoRoteamento,
+    Notificacao,
 )
 
 # ---------- ENTRADA (H1.1.1 T1) ----------
