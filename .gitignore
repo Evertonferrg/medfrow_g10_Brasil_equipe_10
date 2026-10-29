@@ -10,3 +10,4 @@ venv/
 # Segredos e dados locais
 .env
 storage_local/
+debug.log

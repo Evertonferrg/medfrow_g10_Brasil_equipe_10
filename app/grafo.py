@@ -1,18 +1,22 @@
+import logging
 from typing import TypedDict, Optional
 from langgraph.graph import StateGraph, END
 
 from . import config
-from .llm import extrair
+from .llm import extrair, ler_imagem
 from .modelos import Classificacao
-from .pdf import extrair_texto_pdf
+from .pdf import extrair_texto_pdf, renderizar_paginas, PDFSemTexto
+from .arquivos import extensao_por_assinatura
 from .validacao import validar, precisa_revisao, motivo_revisao
 from . import roteamento as rt
 
+logger = logging.getLogger(__name__)
 
-#dicionario comparilhado entre os nos
+
+# dicionario compartilhado entre os nos
 class Estado(TypedDict, total=False):
     texto: str
-    pdf_bytes: Optional[bytes]
+    pdf_bytes: Optional[bytes]   # na prática: bytes do arquivo (PDF, PNG ou JPG)
     limite_confianca: float      # H1.2.2 T2: carregado uma vez por execução do grafo
     extracao: Optional[object]   # objeto Extracao (None se falhou)
     classificacao: Optional[object]  # objeto Classificacao montado pelo nó classificar
@@ -25,6 +29,8 @@ class Estado(TypedDict, total=False):
     motivo_revisao: Optional[str]
     justificativa: str
     notificacao: Optional[dict]
+    tipo_arquivo: str            # "TEXTO", "PDF" ou "Imagem"
+    ilegivel: bool
 
 
 def montar_classificacao(extracao, score) -> Classificacao:
@@ -39,21 +45,42 @@ def montar_classificacao(extracao, score) -> Classificacao:
         score_confianca_classificacao=score,
     )
 
-def construir_grafo(extrator=extrair, classificador=montar_classificacao):
-    """'extrator' e 'classificador' podem ser trocados por versões falsas nos
+
+def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor=None):
+    """'extrator', 'classificador' e 'leitor' podem ser trocados por versões falsas nos
     testes (sem LLM, sem rede)."""
+    # Resolvido na chamada (e não na assinatura) para que os testes possam trocar
+    # app.grafo.ler_imagem com monkeypatch.
+    leitor = leitor or ler_imagem
 
     def n_ler_entrada(s: Estado):
         # H1.2.2 T2: carrega o limite de confiança uma única vez por execução do grafo
-        saida: dict = {"limite_confianca": config.limite_confianca()}
-        # estrair textos das paginas
-        if s.get("pdf_bytes"):
-            try:
-                saida["texto"] = extrair_texto_pdf(s["pdf_bytes"])
-            except Exception as e:
-                saida["texto"] = ""
-                saida["erro"] = str(e)
-        return saida
+        limite = config.limite_confianca()
+        dados = s.get("pdf_bytes")
+        if not dados:
+            return {"tipo_arquivo": "TEXTO", "limite_confianca": limite}
+        try:
+            if extensao_por_assinatura(dados) == ".pdf":
+                try:
+                    return {"texto": extrair_texto_pdf(dados), "tipo_arquivo": "PDF",
+                            "limite_confianca": limite}
+                except PDFSemTexto:
+                    imagens, tipo = renderizar_paginas(dados), "PDF"      # T2: escaneado
+            else:
+                imagens, tipo = [dados], "Imagem"
+            texto, leg = leitor(imagens)                                  # T4
+        except Exception as e:
+            logger.exception("Falha ao ler a entrada")
+            return {"texto": "", "erro": str(e), "limite_confianca": limite}
+
+        if not leg.legivel or not texto.strip():                          # T5
+            motivo = leg.motivo or "sem texto reconhecível"
+            return {"texto": "", "tipo_arquivo": tipo, "ilegivel": True,
+                    "extracao": None, "score": 0.0,
+                    "motivo_revisao": "ilegível",
+                    "problemas": [f"ilegível: {motivo}"],
+                    "limite_confianca": limite}
+        return {"texto": texto, "tipo_arquivo": tipo, "limite_confianca": limite}
 
     def n_extrair(s: Estado):
         if s.get("erro"):
@@ -100,7 +127,8 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
     def n_revisao(s: Estado):
         e = s.get("extracao")
         limite = s["limite_confianca"] if "limite_confianca" in s else config.limite_confianca()
-        motivo = motivo_revisao(
+        # T5: se a leitura já definiu o motivo (ex.: "ilegível"), respeita; senão calcula
+        motivo = s.get("motivo_revisao") or motivo_revisao(
             s.get("score", 0.0), s.get("problemas", []), limite, s.get("erro")
         )
         destino, regra = rt.decidir_destino("", "", True)
@@ -148,7 +176,10 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
                      ("revisao", n_revisao), ("padrao", n_padrao)]:
         g.add_node(nome, fn)
     g.set_entry_point("ler_entrada")
-    g.add_edge("ler_entrada", "extrair")
+    # T5: ilegível vai direto para a revisão, sem passar por extrair/validar/classificar
+    g.add_conditional_edges("ler_entrada",
+                            lambda s: "revisao" if s.get("ilegivel") else "extrair",
+                            {"revisao": "revisao", "extrair": "extrair"})
     g.add_edge("extrair", "validar")
     g.add_edge("validar", "classificar")
     g.add_conditional_edges("classificar", decidir,
@@ -157,7 +188,8 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
         g.add_edge(no, END)
     return g.compile()
 
+
 def triar(texto: str, extrator=extrair, pdf_bytes: Optional[bytes] = None,
-          classificador=montar_classificacao) -> dict:
-    return construir_grafo(extrator, classificador).invoke(
+          classificador=montar_classificacao, leitor=None) -> dict:
+    return construir_grafo(extrator, classificador, leitor).invoke(
         {"texto": texto, "pdf_bytes": pdf_bytes})

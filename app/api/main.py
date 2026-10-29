@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app import config, storage
+from app.arquivos import extensao_por_assinatura
 from app.schemas import DocumentoEntrada, validar_id
 from app.servico import processar
 from app.storage import ObjetoJaExisteError
@@ -16,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 PASTAS_RESULTADO = ('processados/urgentes', 'processados/rotina', 'auditoria_humana')
 MAX_PDF = 10 * 1024 * 1024
+MAX_ARQUIVO = 10 * 1024 * 1024
+EXTENSOES = (".txt", ".pdf", ".jpg", ".png")   # H1.1.3 T1: formatos aceitos em recebidos/
 # T4: charset limpo para o ID da rota /documentos — sem "/", "\" nem "." (e
 # portanto sem ".."). A checagem acontece ANTES de montar qualquer caminho.
 ID_LIMPO = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -29,6 +32,12 @@ def _validar_id_limpo(documento_id: str):
             content={"detail": "documento_id inválido: use apenas letras, números, "
                                "'-' e '_', sem '/', '\\', '..' ou espaços."})
     return None
+
+
+def _recebido(documento_id: str) -> bool:
+    """True se o original já está em recebidos/ (em qualquer formato aceito)."""
+    return any(storage.existe(f"recebidos/{documento_id}{e}") for e in EXTENSOES)
+
 
 def criar_app(extrator=None) -> FastAPI:
     if extrator is None:
@@ -54,9 +63,9 @@ def criar_app(extrator=None) -> FastAPI:
         """
         recusa = JSONResponse(status_code=409,
                               content={"detail": f"documento_id já recebido: {documento_id}"})
-        outra = ".pdf" if extensao == ".txt" else ".txt"
-        if storage.existe(f"recebidos/{documento_id}{outra}"):
-            return recusa
+        for outra in EXTENSOES:
+            if outra != extensao and storage.existe(f"recebidos/{documento_id}{outra}"):
+                return recusa
         try:
             storage.salvar(f"recebidos/{documento_id}{extensao}", conteudo, sobrescrever=False)
         except ObjetoJaExisteError:
@@ -96,6 +105,33 @@ def criar_app(extrator=None) -> FastAPI:
         background.add_task(processar, documento_id, "", conteudo, extrator)
         return {"documento_id": documento_id, "status": "recebido"}
 
+    @app.post("/triagem/arquivo", status_code=202)
+    async def enviar_arquivo(background: BackgroundTasks, documento_id: str = Form(...),
+                             canal_origem: str = Form(...), arquivo: UploadFile = File(...),
+                             aguardar: bool = False):
+        """H1.1.3 T1: PDF (digital ou escaneado), JPG ou PNG.
+
+        O tipo vem dos bytes iniciais do arquivo, não do nome nem do MIME enviado.
+        """
+        try:
+            documento_id = validar_id(documento_id)
+        except ValueError as e:
+            return JSONResponse(status_code=422, content={"detail": str(e)})
+        conteudo = await arquivo.read(MAX_ARQUIVO + 1)
+        if len(conteudo) > MAX_ARQUIVO:
+            return JSONResponse(status_code=413, content={"detail": "arquivo acima de 10 MB"})
+        extensao = extensao_por_assinatura(conteudo)
+        if extensao is None:
+            return JSONResponse(status_code=422,
+                                content={"detail": "formato não suportado: envie PDF, JPG ou PNG"})
+        recusa = _aceitar(documento_id, conteudo, extensao)
+        if recusa:
+            return recusa
+        if aguardar:
+            return JSONResponse(status_code=200, content=processar(documento_id, "", conteudo, extrator))
+        background.add_task(processar, documento_id, "", conteudo, extrator)
+        return {"documento_id": documento_id, "status": "recebido"}
+
     @app.get("/triagem/{documento_id}")
     def consultar(documento_id: str):
         try:
@@ -110,7 +146,7 @@ def criar_app(extrator=None) -> FastAPI:
                                                  "caminho_objeto": f"{pasta}/{documento_id}.json",
                                                  "urgente": pasta.endswith("urgentes")}
                 return resultado
-        if storage.existe(f"recebidos/{documento_id}.txt") or storage.existe(f"recebidos/{documento_id}.pdf"):
+        if _recebido(documento_id):
             return JSONResponse(status_code=202, content={"documento_id": documento_id, "status": "processando"})
         return JSONResponse(status_code=404, content={"detail": "documento não encontrado"})
 
@@ -128,7 +164,7 @@ def criar_app(extrator=None) -> FastAPI:
             bruto = storage.ler(f"{pasta}/{documento_id}.json")
             if bruto is not None:
                 return JSONResponse(status_code=200, content=json.loads(bruto))
-        if storage.existe(f"recebidos/{documento_id}.txt") or storage.existe(f"recebidos/{documento_id}.pdf"):
+        if _recebido(documento_id):
             return JSONResponse(status_code=202, content={"documento_id": documento_id, "status": "processando"})
         return JSONResponse(status_code=404, content={"detail": "documento não encontrado"})
 

@@ -17,3 +17,13 @@ def extrair_texto_pdf(conteudo: bytes) -> str:
         # (A leitura por visão/OCR é a história H1.1.3.)
         raise PDFSemTexto("PDF sem texto selecionável (provavelmente digitalizado)")
     return texto
+
+MAX_PAGINAS = 10
+
+def renderizar_paginas(conteudo: bytes, dpi: int = 150, max_paginas: int = MAX_PAGINAS) -> list[bytes]:
+    """T2: PDF escaneado -> uma imagem PNG por página, tudo em memória (nada vai ao bucket)."""
+    import pymupdf  # PyMuPDF (o nome "fitz" está obsoleto)
+
+    with pymupdf.open(stream=conteudo, filetype="pdf") as doc:
+        return [doc[i].get_pixmap(dpi=dpi).tobytes("png")
+                for i in range(min(len(doc), max_paginas))]

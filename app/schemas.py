@@ -153,3 +153,13 @@ class ResultadoTriagem(BaseModel):
     problemas: List[str] = Field(default_factory=list)
     decisao_roteamento: DecisaoRoteamento
     armazenamento_oci: Optional[ArmazenamentoOCI] = None
+
+class Legibilidade(BaseModel):              # H1.1.3 T3
+    legivel: bool
+    motivo: Optional[str] = None
+
+
+class LeituraImagem(BaseModel):
+    texto: str
+    legibilidade: Legibilidade
+

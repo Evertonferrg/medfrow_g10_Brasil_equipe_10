@@ -1,4 +1,9 @@
+import io
+
+from PIL import Image
+
 from app import storage
+from app.schemas import Legibilidade
 from testes.conftest import (LAUDO_TEP, cliente_com, extracao, extrator_fixo, extrator_que_quebra,
                             pdf_com_texto, pdf_sem_texto)
 
@@ -90,12 +95,15 @@ def test_pdf_de_varias_paginas_considera_todas_as_paginas():
     assert storage.existe("recebidos/PDF-001.pdf")
 
 
-def test_pdf_sem_texto_vai_para_revisao_humana(cliente):
+def test_pdf_sem_texto_vai_para_revisao_humana(cliente, monkeypatch):
+    # H1.1.3: o PDF escaneado agora é lido por visão. Leitor falso = sem rede.
+    monkeypatch.setattr("app.grafo.ler_imagem",
+                        lambda imagens: ("", Legibilidade(legivel=False, motivo="sem texto")))
     r = cliente.post("/triagem/pdf?aguardar=true", data={"documento_id": "PDF-002", "canal_origem": "X"},
                      files={"arquivo": ("scan.pdf", pdf_sem_texto(), "application/pdf")})
     j = r.json()
     assert j["decisao_roteamento"]["destino_principal"] == "Fila_Revisao_Humana"
-    assert "sem texto selecionável" in j["decisao_roteamento"]["justificativa_roteamento"]
+    assert "ilegível" in j["decisao_roteamento"]["justificativa_roteamento"]
 
 
 def test_arquivo_que_nao_e_pdf_422(cliente):
@@ -106,3 +114,67 @@ def test_arquivo_que_nao_e_pdf_422(cliente):
 
 def test_consulta_de_id_inexistente_404(cliente):
     assert cliente.get("/triagem/NAO-EXISTE").status_code == 404
+
+
+# ---- H1.1.3: imagem e PDF escaneado em /triagem/arquivo ----
+def _png() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (60, 30), "white").save(buf, "PNG")
+    return buf.getvalue()
+
+
+def _enviar_arquivo(c, doc_id, conteudo, nome="foto.png", tipo="image/png"):
+    return c.post("/triagem/arquivo?aguardar=true", data={"documento_id": doc_id, "canal_origem": "X"},
+                  files={"arquivo": (nome, conteudo, tipo)})
+
+
+def test_imagem_legivel_e_processada_como_documento_digital(cliente, monkeypatch):
+    monkeypatch.setattr("app.grafo.ler_imagem",
+                        lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True)))
+    r = _enviar_arquivo(cliente, "IMG-001", _png())
+    assert r.status_code == 200
+    assert r.json()["decisao_roteamento"]["destino_principal"] == "Fila_Emergencia_Medica"
+    assert storage.existe("recebidos/IMG-001.png")          # original com a extensão certa
+
+
+def test_imagem_ilegivel_vai_para_revisao_humana(cliente, monkeypatch):
+    monkeypatch.setattr("app.grafo.ler_imagem",
+                        lambda imagens: ("", Legibilidade(legivel=False, motivo="borrada")))
+    j = _enviar_arquivo(cliente, "IMG-002", _png()).json()
+    assert j["decisao_roteamento"]["destino_principal"] == "Fila_Revisao_Humana"
+    assert j["decisao_roteamento"]["requer_auditoria_humana"] is True
+    assert "ilegível" in j["decisao_roteamento"]["justificativa_roteamento"]
+
+
+def test_jpg_e_aceito_e_salvo_como_jpg(cliente, monkeypatch):
+    monkeypatch.setattr("app.grafo.ler_imagem",
+                        lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True)))
+    jpg = b"\xff\xd8\xff\xe0" + b"0" * 50
+    assert _enviar_arquivo(cliente, "IMG-003", jpg, "foto.jpg", "image/jpeg").status_code == 200
+    assert storage.existe("recebidos/IMG-003.jpg")
+
+
+def test_formato_nao_suportado_422(cliente):
+    r = _enviar_arquivo(cliente, "IMG-004", b"isto nao e imagem", "falso.png", "image/png")
+    assert r.status_code == 422 and "formato não suportado" in r.json()["detail"]
+    assert not storage.existe("recebidos/IMG-004.png")      # nada foi gravado
+
+
+def test_arquivo_acima_de_10mb_413(cliente):
+    grande = b"\x89PNG\r\n\x1a\n" + b"0" * (10 * 1024 * 1024 + 1)
+    assert _enviar_arquivo(cliente, "IMG-005", grande).status_code == 413
+
+
+def test_imagem_com_id_repetido_409(cliente, monkeypatch):
+    monkeypatch.setattr("app.grafo.ler_imagem",
+                        lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True)))
+    assert _enviar_arquivo(cliente, "IMG-006", _png()).status_code == 200
+    assert _enviar_arquivo(cliente, "IMG-006", _png()).status_code == 409
+
+
+def test_id_usado_por_pdf_tambem_recusa_imagem_409(cliente, monkeypatch):
+    monkeypatch.setattr("app.grafo.ler_imagem",
+                        lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True)))
+    cliente.post("/triagem/pdf?aguardar=true", data={"documento_id": "MIX-001", "canal_origem": "X"},
+                 files={"arquivo": ("a.pdf", pdf_com_texto(["Carlos Eduardo Mendes"]), "application/pdf")})
+    assert _enviar_arquivo(cliente, "MIX-001", _png()).status_code == 409
