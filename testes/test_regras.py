@@ -108,9 +108,9 @@ def test_nome_inteiro_nao_casa_pedaco_de_palavra():
     assert any("não encontrado" in p for p in probs)
 
 
-def test_cid_escrito_no_documento_vira_origem_documento():
+def test_cid_escrito_no_documento_vira_origem_escrito():
     ext, _, _ = validar(extracao(), LAUDO_TEP + " CID I26.9")
-    assert ext.cid_origem == "documento"
+    assert ext.cid_origem == "escrito"
 
 
 def test_evidencia_inexistente_e_descartada():
