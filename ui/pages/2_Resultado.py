@@ -93,7 +93,8 @@ if buscar and doc_id.strip():
                 st.write(f"- {p}")
         
         # Chamada adicionada para exibir a tabela e avisos de medicamentos
-        mostrar_medicamentos(res.get("dados_extraidos"), cl.get("tipo_documento") if cl else None)
+        cl = res.get("classificacao") or {}
+        mostrar_medicamentos(res.get("dados_extraidos"), cl.get("tipo_documento"))
 
         # Exames e procedimentos, com o código TUSS ao lado
         mostrar_exames(res.get("dados_extraidos"))
