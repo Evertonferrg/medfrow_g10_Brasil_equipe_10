@@ -11,3 +11,4 @@ pypdf
 reportlab
 streamlit
 python-multipart
+pytest-cov
