@@ -8,7 +8,9 @@ langgraph
 python-dotenv
 google-genai
 pypdf
+pymupdf
 reportlab
 streamlit
 python-multipart
 pytest-cov
+# ruff
