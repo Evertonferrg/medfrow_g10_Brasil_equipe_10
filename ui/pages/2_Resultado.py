@@ -1,9 +1,9 @@
+import json
 """T4 — tela de resultado: consulta GET /documentos/{documento_id} e mostra
 o tipo identificado, o score de confiança ao lado do tipo e a especialidade provável ao analista."""
 import os
 import sys
 from pathlib import Path
-
 import requests
 import streamlit as st
 
@@ -49,6 +49,25 @@ def mostrar_exames(dados):
         hide_index=True
     )
 
+def mostrar_destino(decisao):
+    """H2.2.1 T4: o destino em destaque e, logo abaixo, a justificativa e a regra aplicada."""
+    destino = decisao.get("destino_principal", "-")
+    (st.error if destino == "Fila_Emergencia_Medica" else
+     st.warning if decisao.get("requer_auditoria_humana") else st.success)(f"**Destino: {destino}**")
+    if decisao.get("justificativa_roteamento"):
+        st.markdown(f"**Por quê?** {decisao['justificativa_roteamento']}")
+    if decisao.get("regra_aplicada"):
+        st.caption(f"Regra aplicada: {decisao['regra_aplicada']}")
+
+def botao_download(resultado):
+    """H2.3.1 T4: baixa o resultado exatamente como a API devolveu (formato combinado)."""
+    nome = f"{resultado.get('documento_id') or 'resultado'}.json"
+    st.download_button(
+        "⬇️ Baixar resultado (JSON)",
+        data=json.dumps(resultado, ensure_ascii=False, indent=2),
+        file_name=nome,
+        mime="application/json",
+    )
 
 st.set_page_config(page_title="MediFlow — Resultado", page_icon="🔎", layout="wide")
 st.title("🔎 Resultado da triagem")
@@ -82,19 +101,16 @@ if buscar and doc_id.strip():
 
         d = res.get("decisao_roteamento") or {}
         if d:
-            (st.error if d.get("destino_principal") == "Fila_Emergencia_Medica" else
-             st.warning if d.get("requer_auditoria_humana") else st.success)(
-                f"**Destino: {d.get('destino_principal', '-')}** - "
-                f"{d.get('justificativa_roteamento', '')}")
+            mostrar_destino(d)
         problemas = res.get("problemas") or []
         if problemas:
             st.subheader("Pontos de atenção")
-            for p in problemas:
-                st.write(f"- {p}")
-        
+                   
         # Chamada adicionada para exibir a tabela e avisos de medicamentos
         cl = res.get("classificacao") or {}
         mostrar_medicamentos(res.get("dados_extraidos"), cl.get("tipo_documento"))
 
         # Exames e procedimentos, com o código TUSS ao lado
         mostrar_exames(res.get("dados_extraidos"))
+
+        botao_download(res)

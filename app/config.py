@@ -37,16 +37,20 @@ def limite_confianca() -> float:
 def limiar_confianca() -> float:
     """Nome antigo mantido para compatibilidade; use limite_confianca()."""
     return limite_confianca()
- 
- 
+
+
 def bucket() -> str:
     return os.getenv("OCI_BUCKET", "mediflow-documentos-clinicos")
- 
- 
+
+
 def pasta_local() -> str:
     return os.getenv("STORAGE_LOCAL_DIR", "storage_local")
- 
- 
+
+
 def modelo_gemini() -> str:
     return os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
- 
+
+
+def modelo_gemini_fallback() -> str:
+    """Modelo usado quando o principal devolve 5xx (ex.: 503 por alta demanda)."""
+    return os.getenv("GEMINI_MODEL_FALLBACK", "gemini-3.5-flash")
