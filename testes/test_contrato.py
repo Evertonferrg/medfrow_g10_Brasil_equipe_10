@@ -52,6 +52,7 @@ EXEMPLO_EDITAL = {
 def test_json_de_exemplo_do_edital_e_lido_sem_erro():
     r = ResultadoTriagem.model_validate(EXEMPLO_EDITAL)
     assert r.decisao_roteamento.destino_principal == "Fila_Emergencia_Medica"
+    assert r.armazenamento_oci is not None 
     assert r.armazenamento_oci.urgente is True
     assert r.model_dump(mode="json")["classificacao"] == EXEMPLO_EDITAL["classificacao"]
 
