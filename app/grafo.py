@@ -7,6 +7,7 @@ from .llm import extrair, ler_imagem
 from .modelos import Classificacao
 from .pdf import extrair_texto_pdf, renderizar_paginas, PDFSemTexto
 from .arquivos import extensao_por_assinatura
+from .resposta import montar_resposta, falha_de_processamento
 from .validacao import validar, precisa_revisao, motivo_revisao
 from . import roteamento as rt
 
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 # dicionario compartilhado entre os nos
 class Estado(TypedDict, total=False):
+    documento_id: str
     texto: str
     pdf_bytes: Optional[bytes]   # na prática: bytes do arquivo (PDF, PNG ou JPG)
     limite_confianca: float      # H1.2.2 T2: carregado uma vez por execução do grafo
@@ -31,6 +33,7 @@ class Estado(TypedDict, total=False):
     notificacao: Optional[dict]
     tipo_arquivo: str            # "TEXTO", "PDF" ou "Imagem"
     ilegivel: bool
+    resultado: dict
 
 
 def montar_classificacao(extracao, score) -> Classificacao:
@@ -89,6 +92,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             return {"extracao": extrator(s["texto"])}
         except Exception as e:
             return {"extracao": None, "erro": f"Falha na extração automática: {e}"}
+       
 
     def n_validar(s: Estado):
         if s.get("erro"):
@@ -163,6 +167,24 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             ),
         }
 
+    def n_montar_resultado(s: Estado):
+        """H2.3.1 T2: último nó. Monta e valida o ResultadoTriagem.
+
+        Se o resultado sair fora do formato (ValidationError), NÃO entrega resposta parcial:
+        o documento vai para a revisão com o motivo "falha de processamento".
+        """
+        doc_id = s.get("documento_id", "")
+        try:
+            return {"resultado": montar_resposta(doc_id, s).model_dump(mode="json")}
+        except Exception as e:
+            logger.exception("Resultado fora do formato")
+            rev = n_revisao({**s, "erro": f"falha de processamento: {e}",
+                             "motivo_revisao": "falha de processamento"})
+            resultado = falha_de_processamento(
+                doc_id, str(e), justificativa=rev["justificativa"], notificacao=rev["notificacao"])
+            return {**rev, "classificacao": None,
+                    "resultado": resultado.model_dump(mode="json")}
+
     # condicional = segurança 1º , depois urgencia , por fim rotina
     def decidir(s: Estado) -> str:
         limite = s["limite_confianca"] if "limite_confianca" in s else config.limite_confianca()
@@ -173,7 +195,8 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
     g = StateGraph(Estado)
     for nome, fn in [("ler_entrada", n_ler_entrada), ("extrair", n_extrair), ("validar", n_validar),
                      ("classificar", n_classificar), ("urgencia", n_urgencia),
-                     ("revisao", n_revisao), ("padrao", n_padrao)]:
+                     ("revisao", n_revisao), ("padrao", n_padrao),
+                     ("montar_resultado", n_montar_resultado)]:
         g.add_node(nome, fn)
     g.set_entry_point("ler_entrada")
     # T5: ilegível vai direto para a revisão, sem passar por extrair/validar/classificar
@@ -185,11 +208,12 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
     g.add_conditional_edges("classificar", decidir,
                             {"urgencia": "urgencia", "revisao": "revisao", "padrao": "padrao"})
     for no in ("urgencia", "revisao", "padrao"):
-        g.add_edge(no, END)
+        g.add_edge(no, "montar_resultado")
+    g.add_edge("montar_resultado", END)
     return g.compile()
 
 
 def triar(texto: str, extrator=extrair, pdf_bytes: Optional[bytes] = None,
-          classificador=montar_classificacao, leitor=None) -> dict:
+          classificador=montar_classificacao, leitor=None, documento_id: str = "") -> dict:
     return construir_grafo(extrator, classificador, leitor).invoke(
-        {"texto": texto, "pdf_bytes": pdf_bytes})
+        {"texto": texto, "pdf_bytes": pdf_bytes, "documento_id": documento_id})

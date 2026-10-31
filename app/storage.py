@@ -7,6 +7,15 @@ from . import config
 
 _CAMINHO_OK = re.compile(r"[\w\-./]+")
 
+# H5.1.1 T2: formatos aceitos em recebidos/ e o content-type de cada um
+CONTENT_TYPES = {
+    ".txt": "text/plain; charset=utf-8",
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+}
+EXTENSOES = tuple(CONTENT_TYPES)
+
 
 class ObjetoJaExisteError(Exception):
     """Tentativa de gravar (sem sobrescrever) um objeto que já existe."""
@@ -47,8 +56,13 @@ def _cliente_oci():
     return oci.object_storage.ObjectStorageClient(cfg)
 
 
-def _salvar_oci(namespace: str, caminho: str, dados: bytes, sobrescrever: bool = True):
-    extra = {} if sobrescrever else {"if_none_match": "*"}   # só grava se ainda não existir
+def _salvar_oci(namespace: str, caminho: str, dados: bytes, sobrescrever: bool = True,
+                content_type: str | None = None):
+    extra = {}
+    if not sobrescrever:
+        extra["if_none_match"] = "*"            # só grava se ainda não existir (H5.1.1 T4)
+    if content_type:
+        extra["content_type"] = content_type    # H5.1.1 T2
     try:
         _cliente_oci().put_object(namespace, config.bucket(), caminho, dados, **extra)
     except Exception as e:
@@ -57,7 +71,7 @@ def _salvar_oci(namespace: str, caminho: str, dados: bytes, sobrescrever: bool =
         raise
 
 
-def salvar(caminho: str, conteudo, sobrescrever: bool = True) -> dict:
+def salvar(caminho: str, conteudo, sobrescrever: bool = True, content_type: str | None = None) -> dict:
     """Salva texto, bytes ou dicionário. Devolve onde e como foi salvo.
 
     Com sobrescrever=False, levanta ObjetoJaExisteError se o objeto já existir
@@ -70,13 +84,14 @@ def salvar(caminho: str, conteudo, sobrescrever: bool = True) -> dict:
         dados = conteudo.encode("utf-8")
     else:
         dados = json.dumps(conteudo, ensure_ascii=False, indent=2).encode("utf-8")
+        content_type = content_type or "application/json"
     if not sobrescrever and _local(caminho).exists():        # já está no disco (fallback antigo)
         raise ObjetoJaExisteError(caminho)
     ns = os.getenv("OCI_NAMESPACE")
     base = {"bucket": config.bucket(), "caminho_objeto": caminho}
     if ns:
         try:
-            _salvar_oci(ns, caminho, dados, sobrescrever)
+            _salvar_oci(ns, caminho, dados, sobrescrever, content_type)
             return {**base, "local": "oci", "status_backup": "sucesso"}
         except ObjetoJaExisteError:
             raise
@@ -86,6 +101,23 @@ def salvar(caminho: str, conteudo, sobrescrever: bool = True) -> dict:
                     "status_backup": f"oci_falhou_salvo_local: {str(e)[:80]}"}
     _salvar_local(caminho, dados, sobrescrever)
     return {**base, "local": "disco", "status_backup": "sucesso"}
+
+
+def salvar_original(documento_id: str, conteudo: bytes, extensao: str) -> dict:
+    """H5.1.1 T2: ÚNICO ponto que grava o original em recebidos/<documento_id><extensão>.
+
+    - content-type correto para cada formato;
+    - escrita condicional: um original nunca é sobrescrito (T4);
+    - recusa o ID se ele já foi recebido em OUTRO formato.
+    Levanta ObjetoJaExisteError quando o ID já existe.
+    """
+    if extensao not in CONTENT_TYPES:
+        raise ValueError(f"extensão não suportada: {extensao!r}")
+    for outra in EXTENSOES:
+        if outra != extensao and existe(f"recebidos/{documento_id}{outra}"):
+            raise ObjetoJaExisteError(documento_id)
+    return salvar(f"recebidos/{documento_id}{extensao}", conteudo,
+                  sobrescrever=False, content_type=CONTENT_TYPES[extensao])
 
 
 def ler(caminho: str):

@@ -1,10 +1,15 @@
+import os
+from typing import Optional
 
-from . import storage
+from . import config, storage
 from .schemas import (ResultadoTriagem, Classificacao, DecisaoRoteamento, ArmazenamentoOCI)
 
-PASTAS = {"Fila_Emergencia_Medica": "processados/urgentes",
-          "Fila_Revisao_Humana": "auditoria_humana"}
+PASTA_URGENTES = "processados/urgentes"
 PASTA_ROTINA = "processados/rotina"
+PASTA_REVISAO = "auditoria_humana"
+PASTAS = {"Fila_Emergencia_Medica": PASTA_URGENTES,
+          "Fila_Revisao_Humana": PASTA_REVISAO}
+PASTAS_RESULTADO = (PASTA_URGENTES, PASTA_ROTINA, PASTA_REVISAO)
 CAMPOS_FORA = {"tipo_documento", "especialidade", "nivel_prioridade",
                "score_confianca_classificacao", "inconsistencias"}
 
@@ -35,25 +40,67 @@ def montar_resposta(documento_id: str, estado: dict) -> ResultadoTriagem:
     )
 
 
-def _falha(documento_id: str, motivo: str) -> ResultadoTriagem:
-    """Resultado fora do formato nunca é entregue: vai para revisão com 'falha de processamento'."""
+def falha_de_processamento(documento_id: str, motivo: str, justificativa: Optional[str] = None,
+                           notificacao: Optional[dict] = None) -> ResultadoTriagem:
+    """Resultado fora do formato nunca é entregue (H2.3.1): vai para a revisão humana
+    com o motivo 'falha de processamento', sem dados parciais."""
     return ResultadoTriagem(
         status="erro_processamento", documento_id=documento_id, problemas=[motivo[:200]],
         decisao_roteamento=DecisaoRoteamento(
             destino_principal="Fila_Revisao_Humana", requer_auditoria_humana=True,
-            justificativa_roteamento="Falha de processamento: o resultado não pôde ser montado.",
-            regra_aplicada="R-REVISAO"))
+            justificativa_roteamento=(justificativa or
+                                      "Enviado à revisão humana (regra R-REVISAO): falha de processamento."),
+            regra_aplicada="R-REVISAO", notificacao_gerada=notificacao))
+
+
+_falha = falha_de_processamento   # nome antigo, mantido para imports existentes
+
+
+def _urgente(resultado: ResultadoTriagem) -> bool:
+    """H5.1.2 T3: 'urgente' vem de nivel_prioridade = "Urgente" (ou do destino de emergência)."""
+    c = resultado.classificacao
+    return bool((c is not None and c.nivel_prioridade == "Urgente")
+                or resultado.decisao_roteamento.destino_principal == "Fila_Emergencia_Medica")
+
+
+def salvar_resultado(documento_id: str, resultado: ResultadoTriagem) -> ArmazenamentoOCI:
+    """H5.1.2 T2: grava o ResultadoTriagem completo e SÓ DEPOIS devolve o armazenamento.
+
+    Se a gravação falhar, a exceção sobe e nenhuma resposta com caminho/status é montada.
+    """
+    pasta = PASTAS.get(resultado.decisao_roteamento.destino_principal, PASTA_ROTINA)
+    salvo = storage.salvar(f"{pasta}/{documento_id}.json", resultado.model_dump(mode="json"))
+    return ArmazenamentoOCI(**salvo, urgente=_urgente(resultado))
 
 
 def arquivar(documento_id: str, estado: dict) -> dict:
-    """Salva o resultado e só DEPOIS preenche o armazenamento na resposta (H5.1.2 T3)."""
-    try:
-        resultado = montar_resposta(documento_id, estado)
-    except Exception as ex:
-        resultado = _falha(documento_id, str(ex))
-    destino = resultado.decisao_roteamento.destino_principal
-    pasta = PASTAS.get(destino, PASTA_ROTINA)
-    salvo = storage.salvar(f"{pasta}/{documento_id}.json", resultado.model_dump(mode="json"))
-    resultado.armazenamento_oci = ArmazenamentoOCI(
-        **salvo, urgente=destino == "Fila_Emergencia_Medica")
+    """Pega o resultado montado pelo grafo (nó montar_resultado), salva e devolve a resposta."""
+    if estado.get("resultado"):
+        resultado = ResultadoTriagem.model_validate(estado["resultado"])
+    else:   # caminho da falha dentro de processar(): o grafo nem terminou
+        try:
+            resultado = montar_resposta(documento_id, estado)
+        except Exception as ex:
+            resultado = falha_de_processamento(documento_id, str(ex))
+    resultado.armazenamento_oci = salvar_resultado(documento_id, resultado)
     return resultado.model_dump(mode="json")
+
+
+def carregar_resultado(documento_id: str) -> Optional[dict]:
+    """Lê o resultado salvo, valida no formato combinado e preenche o armazenamento.
+
+    Devolve None se não houver resultado. Levanta pydantic.ValidationError se o que está
+    salvo estiver fora do formato (a rota responde 500 em vez de entregar dado quebrado).
+    """
+    for pasta in PASTAS_RESULTADO:
+        caminho = f"{pasta}/{documento_id}.json"
+        bruto = storage.ler(caminho)
+        if bruto is None:
+            continue
+        resultado = ResultadoTriagem.model_validate_json(bruto)
+        resultado.armazenamento_oci = ArmazenamentoOCI(
+            bucket=config.bucket(), caminho_objeto=caminho, status_backup="sucesso",
+            local="oci" if os.getenv("OCI_NAMESPACE") else "disco",
+            urgente=_urgente(resultado))
+        return resultado.model_dump(mode="json")
+    return None
