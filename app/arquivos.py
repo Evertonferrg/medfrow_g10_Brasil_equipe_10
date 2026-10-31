@@ -1,5 +1,3 @@
-from typing import Optional
-
 ASSINATURAS = (
     (b"%PDF", ".pdf"),
     (b"\x89PNG\r\n\x1a\n", ".png"),
@@ -7,7 +5,7 @@ ASSINATURAS = (
 )
 
 
-def extensao_por_assinatura(conteudo: bytes) -> Optional[str]:
+def extensao_por_assinatura(conteudo: bytes) -> str | None:
     """Descobre o tipo pelos primeiros bytes (não confia no nome nem no MIME do cliente)."""
     for assinatura, extensao in ASSINATURAS:
         if conteudo.startswith(assinatura):

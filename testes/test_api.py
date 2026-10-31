@@ -4,31 +4,47 @@ from PIL import Image
 
 from app import storage
 from app.schemas import Legibilidade
-from testes.conftest import (LAUDO_TEP, cliente_com, extracao, extrator_fixo, extrator_que_quebra,
-                            pdf_com_texto, pdf_sem_texto)
+from testes.conftest import (
+    LAUDO_TEP,
+    cliente_com,
+    extracao,
+    # extrator_fixo,
+    extrator_que_quebra,
+    pdf_com_texto,
+    pdf_sem_texto,
+)
 
-CORPO = {"documento_id": "DOC-CLIN-2026-8942", "tipo_arquivo": "PDF",
-         "documento_texto": LAUDO_TEP, "canal_origem": "Pronto_Socorro"}
+CORPO = {
+    "documento_id": "DOC-CLIN-2026-8942",
+    "tipo_arquivo": "PDF",
+    "documento_texto": LAUDO_TEP,
+    "canal_origem": "Pronto_Socorro",
+}
 
 
 # ---- H1.1.1 T4: responde 202 na hora e o grafo roda em segundo plano ----
 def test_202_com_documento_id_e_status_recebido(cliente):
     r = cliente.post("/triagem", json=CORPO)
     assert r.status_code == 202
-    assert r.json() == {"documento_id": "DOC-CLIN-2026-8942", "status": "recebido"}  # sem resultado ainda
+    assert r.json() == {
+        "documento_id": "DOC-CLIN-2026-8942",
+        "status": "recebido",
+    }  # sem resultado ainda
 
 
 def test_grafo_roda_em_segundo_plano_e_resultado_fica_disponivel(cliente):
     cliente.post("/triagem", json=CORPO)
     r = cliente.get("/triagem/DOC-CLIN-2026-8942")
     assert r.status_code == 200
-    assert r.json()["decisao_roteamento"]["destino_principal"] == "Fila_Emergencia_Medica"
+    assert (
+        r.json()["decisao_roteamento"]["destino_principal"] == "Fila_Emergencia_Medica"
+    )
 
 
 def test_202_mesmo_se_o_llm_quebrar_e_original_continua_salvo():
     c = cliente_com(extrator_que_quebra)
     assert c.post("/triagem", json=CORPO).status_code == 202
-    assert storage.existe("recebidos/DOC-CLIN-2026-8942.txt")          # H5.1.1
+    assert storage.existe("recebidos/DOC-CLIN-2026-8942.txt")  # H5.1.1
     res = c.get("/triagem/DOC-CLIN-2026-8942").json()
     assert res["decisao_roteamento"]["destino_principal"] == "Fila_Revisao_Humana"
     assert res["status"] == "erro_extracao"
@@ -57,7 +73,8 @@ def test_id_repetido_409(cliente):
 
 def test_original_salvo_com_o_id_no_nome(cliente):
     cliente.post("/triagem", json=CORPO)
-    assert storage.ler("recebidos/DOC-CLIN-2026-8942.txt").decode() == LAUDO_TEP
+    ler_doc = storage.ler("recebidos/DOC-CLIN-2026-8942.txt")
+    assert ler_doc is not None and ler_doc.decode() == LAUDO_TEP
 
 
 # ---- H2.3.1 / H5.1.2: contrato do edital ----
@@ -66,30 +83,52 @@ def test_resposta_no_formato_do_edital(cliente):
     assert r.status_code == 200
     j = r.json()
     assert j["status"] == "processado"
-    assert j["classificacao"] == {"tipo_documento": "Laudo de Exame de Imagem",
-                                  "especialidade": "Radiologia / Pneumologia",
-                                  "nivel_prioridade": "Urgente", "score_confianca_classificacao": 0.95}
+    assert j["classificacao"] == {
+        "tipo_documento": "Laudo de Exame de Imagem",
+        "especialidade": "Radiologia / Pneumologia",
+        "nivel_prioridade": "Urgente",
+        "score_confianca_classificacao": 0.95,
+    }
     assert j["dados_extraidos"]["medico_solicitante"]["crm"] == "145892-SP"
     assert j["dados_extraidos"]["cid_sugerido"] == "I26.9"
-    assert j["dados_extraidos"]["cid_origem"] == "sugerido"          # H1.3.3: não estava escrito
+    assert (
+        j["dados_extraidos"]["cid_origem"] == "sugerido"
+    )  # H1.3.3: não estava escrito
     d = j["decisao_roteamento"]
-    assert d["destino_principal"] == "Fila_Emergencia_Medica" and d["requer_auditoria_humana"] is False
+    assert (
+        d["destino_principal"] == "Fila_Emergencia_Medica"
+        and d["requer_auditoria_humana"] is False
+    )
     assert d["notificacao_gerada"]["canal"] == "Alerta_Plantao_Medico"
-    assert j["armazenamento_oci"] == {"bucket": "mediflow-documentos-clinicos",
-                                      "caminho_objeto": "processados/urgentes/DOC-CLIN-2026-8942.json",
-                                      "status_backup": "sucesso", "local": "disco", "urgente": True}
+    assert j["armazenamento_oci"] == {
+        "bucket": "mediflow-documentos-clinicos",
+        "caminho_objeto": "processados/urgentes/DOC-CLIN-2026-8942.json",
+        "status_backup": "sucesso",
+        "local": "disco",
+        "urgente": True,
+    }
 
 
 # ---- H1.1.2: PDF ----
 def test_pdf_de_varias_paginas_considera_todas_as_paginas():
     vistos = []
+
     def espiao(texto):
         vistos.append(texto)
         return extracao()
+
     c = cliente_com(espiao)
-    pdf = pdf_com_texto(["Pagina um Carlos Eduardo Mendes", "Pagina dois Dra. Renata Silveira CRM-SP 145892"])
-    r = c.post("/triagem/pdf?aguardar=true", data={"documento_id": "PDF-001", "canal_origem": "Ambulatorio"},
-               files={"arquivo": ("laudo.pdf", pdf, "application/pdf")})
+    pdf = pdf_com_texto(
+        [
+            "Pagina um Carlos Eduardo Mendes",
+            "Pagina dois Dra. Renata Silveira CRM-SP 145892",
+        ]
+    )
+    r = c.post(
+        "/triagem/pdf?aguardar=true",
+        data={"documento_id": "PDF-001", "canal_origem": "Ambulatorio"},
+        files={"arquivo": ("laudo.pdf", pdf, "application/pdf")},
+    )
     assert r.status_code == 200
     assert "Pagina um" in vistos[0] and "Pagina dois" in vistos[0]
     assert storage.existe("recebidos/PDF-001.pdf")
@@ -97,18 +136,26 @@ def test_pdf_de_varias_paginas_considera_todas_as_paginas():
 
 def test_pdf_sem_texto_vai_para_revisao_humana(cliente, monkeypatch):
     # H1.1.3: o PDF escaneado agora é lido por visão. Leitor falso = sem rede.
-    monkeypatch.setattr("app.grafo.ler_imagem",
-                        lambda imagens: ("", Legibilidade(legivel=False, motivo="sem texto")))
-    r = cliente.post("/triagem/pdf?aguardar=true", data={"documento_id": "PDF-002", "canal_origem": "X"},
-                     files={"arquivo": ("scan.pdf", pdf_sem_texto(), "application/pdf")})
+    monkeypatch.setattr(
+        "app.grafo.ler_imagem",
+        lambda imagens: ("", Legibilidade(legivel=False, motivo="sem texto")),
+    )
+    r = cliente.post(
+        "/triagem/pdf?aguardar=true",
+        data={"documento_id": "PDF-002", "canal_origem": "X"},
+        files={"arquivo": ("scan.pdf", pdf_sem_texto(), "application/pdf")},
+    )
     j = r.json()
     assert j["decisao_roteamento"]["destino_principal"] == "Fila_Revisao_Humana"
     assert "ilegível" in j["decisao_roteamento"]["justificativa_roteamento"]
 
 
 def test_arquivo_que_nao_e_pdf_422(cliente):
-    r = cliente.post("/triagem/pdf", data={"documento_id": "PDF-003", "canal_origem": "X"},
-                     files={"arquivo": ("a.pdf", b"nao sou pdf", "application/pdf")})
+    r = cliente.post(
+        "/triagem/pdf",
+        data={"documento_id": "PDF-003", "canal_origem": "X"},
+        files={"arquivo": ("a.pdf", b"nao sou pdf", "application/pdf")},
+    )
     assert r.status_code == 422
 
 
@@ -124,22 +171,30 @@ def _png() -> bytes:
 
 
 def _enviar_arquivo(c, doc_id, conteudo, nome="foto.png", tipo="image/png"):
-    return c.post("/triagem/arquivo?aguardar=true", data={"documento_id": doc_id, "canal_origem": "X"},
-                  files={"arquivo": (nome, conteudo, tipo)})
+    return c.post(
+        "/triagem/arquivo?aguardar=true",
+        data={"documento_id": doc_id, "canal_origem": "X"},
+        files={"arquivo": (nome, conteudo, tipo)},
+    )
 
 
 def test_imagem_legivel_e_processada_como_documento_digital(cliente, monkeypatch):
-    monkeypatch.setattr("app.grafo.ler_imagem",
-                        lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True)))
+    monkeypatch.setattr(
+        "app.grafo.ler_imagem", lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True))
+    )
     r = _enviar_arquivo(cliente, "IMG-001", _png())
     assert r.status_code == 200
-    assert r.json()["decisao_roteamento"]["destino_principal"] == "Fila_Emergencia_Medica"
-    assert storage.existe("recebidos/IMG-001.png")          # original com a extensão certa
+    assert (
+        r.json()["decisao_roteamento"]["destino_principal"] == "Fila_Emergencia_Medica"
+    )
+    assert storage.existe("recebidos/IMG-001.png")  # original com a extensão certa
 
 
 def test_imagem_ilegivel_vai_para_revisao_humana(cliente, monkeypatch):
-    monkeypatch.setattr("app.grafo.ler_imagem",
-                        lambda imagens: ("", Legibilidade(legivel=False, motivo="borrada")))
+    monkeypatch.setattr(
+        "app.grafo.ler_imagem",
+        lambda imagens: ("", Legibilidade(legivel=False, motivo="borrada")),
+    )
     j = _enviar_arquivo(cliente, "IMG-002", _png()).json()
     assert j["decisao_roteamento"]["destino_principal"] == "Fila_Revisao_Humana"
     assert j["decisao_roteamento"]["requer_auditoria_humana"] is True
@@ -147,17 +202,23 @@ def test_imagem_ilegivel_vai_para_revisao_humana(cliente, monkeypatch):
 
 
 def test_jpg_e_aceito_e_salvo_como_jpg(cliente, monkeypatch):
-    monkeypatch.setattr("app.grafo.ler_imagem",
-                        lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True)))
+    monkeypatch.setattr(
+        "app.grafo.ler_imagem", lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True))
+    )
     jpg = b"\xff\xd8\xff\xe0" + b"0" * 50
-    assert _enviar_arquivo(cliente, "IMG-003", jpg, "foto.jpg", "image/jpeg").status_code == 200
+    assert (
+        _enviar_arquivo(cliente, "IMG-003", jpg, "foto.jpg", "image/jpeg").status_code
+        == 200
+    )
     assert storage.existe("recebidos/IMG-003.jpg")
 
 
 def test_formato_nao_suportado_422(cliente):
-    r = _enviar_arquivo(cliente, "IMG-004", b"isto nao e imagem", "falso.png", "image/png")
+    r = _enviar_arquivo(
+        cliente, "IMG-004", b"isto nao e imagem", "falso.png", "image/png"
+    )
     assert r.status_code == 422 and "formato não suportado" in r.json()["detail"]
-    assert not storage.existe("recebidos/IMG-004.png")      # nada foi gravado
+    assert not storage.existe("recebidos/IMG-004.png")  # nada foi gravado
 
 
 def test_arquivo_acima_de_10mb_413(cliente):
@@ -166,15 +227,26 @@ def test_arquivo_acima_de_10mb_413(cliente):
 
 
 def test_imagem_com_id_repetido_409(cliente, monkeypatch):
-    monkeypatch.setattr("app.grafo.ler_imagem",
-                        lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True)))
+    monkeypatch.setattr(
+        "app.grafo.ler_imagem", lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True))
+    )
     assert _enviar_arquivo(cliente, "IMG-006", _png()).status_code == 200
     assert _enviar_arquivo(cliente, "IMG-006", _png()).status_code == 409
 
 
 def test_id_usado_por_pdf_tambem_recusa_imagem_409(cliente, monkeypatch):
-    monkeypatch.setattr("app.grafo.ler_imagem",
-                        lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True)))
-    cliente.post("/triagem/pdf?aguardar=true", data={"documento_id": "MIX-001", "canal_origem": "X"},
-                 files={"arquivo": ("a.pdf", pdf_com_texto(["Carlos Eduardo Mendes"]), "application/pdf")})
+    monkeypatch.setattr(
+        "app.grafo.ler_imagem", lambda imagens: (LAUDO_TEP, Legibilidade(legivel=True))
+    )
+    cliente.post(
+        "/triagem/pdf?aguardar=true",
+        data={"documento_id": "MIX-001", "canal_origem": "X"},
+        files={
+            "arquivo": (
+                "a.pdf",
+                pdf_com_texto(["Carlos Eduardo Mendes"]),
+                "application/pdf",
+            )
+        },
+    )
     assert _enviar_arquivo(cliente, "MIX-001", _png()).status_code == 409

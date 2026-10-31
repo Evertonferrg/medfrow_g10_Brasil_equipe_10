@@ -1,5 +1,6 @@
 import re
-from typing import Literal, Optional, List
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 # enum + submodelo de classificação moram em app/modelos/ (fonte única
@@ -10,11 +11,13 @@ from .modelos.classificacao import (  # noqa: F401
     TipoDocumento,
     TipoDocumentoLiteral,
 )
- 
+
 # ---------- ENTRADA (H1.1.1 T1) ----------
 ID_REGEX = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{2,63}")
 CANAL_REGEX = re.compile(r"[\w-]{1,50}")
-MAX_TEXTO = 200_000   # caracteres: limita o tamanho do que a API aceita (proteção contra abuso)
+MAX_TEXTO = (
+    200_000  # caracteres: limita o tamanho do que a API aceita (proteção contra abuso)
+)
 
 
 def validar_id(valor: str) -> str:
@@ -55,58 +58,54 @@ class DocumentoEntrada(BaseModel):
         return v
 
 
-
-
-
-
 class Paciente(BaseModel):
-    nome: Optional[str] = None
-    idade: Optional[int] = None
-    data_nascimento: Optional[str] = None   # preservada como está (H1.3.1)
+    nome: str | None = None
+    idade: int | None = None
+    data_nascimento: str | None = None  # preservada como está (H1.3.1)
 
 
-class MedicoSolicitante(BaseModel):         # H1.3.2 T1
-    nome: Optional[str] = None
-    crm: Optional[str] = None
+class MedicoSolicitante(BaseModel):  # H1.3.2 T1
+    nome: str | None = None
+    crm: str | None = None
 
 
 # Alias mantido para compatibilidade com imports existentes
 Medico = MedicoSolicitante
 
 
-class Medicamento(BaseModel):               # H1.3.4 T1
+class Medicamento(BaseModel):  # H1.3.4 T1
     nome: str
-    dose: Optional[str] = None
-    via: Optional[str] = None
-    frequencia: Optional[str] = None
-    duracao: Optional[str] = None
+    dose: str | None = None
+    via: str | None = None
+    frequencia: str | None = None
+    duracao: str | None = None
 
 
-class Exame(BaseModel):                     # H1.3.5 T1
+class Exame(BaseModel):  # H1.3.5 T1
     nome: str
-    codigo_tuss: Optional[str] = None
+    codigo_tuss: str | None = None
 
 
-class Evidencia(BaseModel):                 # H1.3.6 T1
+class Evidencia(BaseModel):  # H1.3.6 T1
     campo: str
     trecho: str
 
 
 class Extracao(BaseModel):
     tipo_documento: TipoDocumentoLiteral
-    especialidade: Optional[str] = None
+    especialidade: str | None = None
     nivel_prioridade: Prioridade
     score_confianca_classificacao: float = Field(ge=0, le=1)
     paciente: Paciente = Field(default_factory=Paciente)
     medico_solicitante: MedicoSolicitante = Field(default_factory=MedicoSolicitante)
-    diagnostico_principal: Optional[str] = None
-    cid_sugerido: Optional[str] = None
-    origem_cid: Optional[Literal["escrito", "sugerido"]] = None   # H1.3.3 T1
-    cid_origem: Optional[str] = None        # alias mantido para compatibilidade
-    medicamentos: List[Medicamento] = Field(default_factory=list)
-    exames: List[Exame] = Field(default_factory=list)
-    evidencias: List[Evidencia] = Field(default_factory=list)
-    inconsistencias: List[str] = Field(default_factory=list)
+    diagnostico_principal: str | None = None
+    cid_sugerido: str | None = None
+    origem_cid: Literal["escrito", "sugerido"] | None = None  # H1.3.3 T1
+    cid_origem: str | None = None  # alias mantido para compatibilidade
+    medicamentos: list[Medicamento] = Field(default_factory=list)
+    exames: list[Exame] = Field(default_factory=list)
+    evidencias: list[Evidencia] = Field(default_factory=list)
+    inconsistencias: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _sincronizar_origem_cid(self):
@@ -117,13 +116,13 @@ class Extracao(BaseModel):
         if self.cid_origem is None and self.origem_cid is not None:
             self.cid_origem = self.origem_cid
         return self
- 
- 
+
+
 # ---------- RESULTADO (H2.3.1 T1) — o contrato combinado com o edital ----------
 # Classificacao (tipada com o enum) é definida em app/modelos/classificacao.py
 # e reexportada no topo deste arquivo.
- 
- 
+
+
 class Notificacao(BaseModel):
     canal: str
     mensagem: str
@@ -134,10 +133,10 @@ class DecisaoRoteamento(BaseModel):
     requer_auditoria_humana: bool
     justificativa_roteamento: str
     regra_aplicada: str
-    notificacao_gerada: Optional[Notificacao] = None
+    notificacao_gerada: Notificacao | None = None
 
 
-class ArmazenamentoOCI(BaseModel):          # H5.1.2 T1
+class ArmazenamentoOCI(BaseModel):  # H5.1.2 T1
     bucket: str
     caminho_objeto: str
     status_backup: str
@@ -148,18 +147,18 @@ class ArmazenamentoOCI(BaseModel):          # H5.1.2 T1
 class ResultadoTriagem(BaseModel):
     status: str
     documento_id: str
-    classificacao: Optional[Classificacao] = None
-    dados_extraidos: Optional[dict] = None
-    problemas: List[str] = Field(default_factory=list)
+    classificacao: Classificacao | None = None
+    dados_extraidos: dict | None = None
+    problemas: list[str] = Field(default_factory=list)
     decisao_roteamento: DecisaoRoteamento
-    armazenamento_oci: Optional[ArmazenamentoOCI] = None
+    armazenamento_oci: ArmazenamentoOCI | None = None
 
-class Legibilidade(BaseModel):              # H1.1.3 T3
+
+class Legibilidade(BaseModel):  # H1.1.3 T3
     legivel: bool
-    motivo: Optional[str] = None
+    motivo: str | None = None
 
 
 class LeituraImagem(BaseModel):
     texto: str
     legibilidade: Legibilidade
-

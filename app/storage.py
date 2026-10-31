@@ -1,8 +1,10 @@
 import json
+import logging
 import os
 import pathlib
 import re
 from functools import lru_cache
+
 from . import config
 
 _CAMINHO_OK = re.compile(r"[\w\-./]+")
@@ -16,6 +18,8 @@ CONTENT_TYPES = {
 }
 EXTENSOES = tuple(CONTENT_TYPES)
 
+logger = logging.getLogger(__name__)
+
 
 class ObjetoJaExisteError(Exception):
     """Tentativa de gravar (sem sobrescrever) um objeto que já existe."""
@@ -23,7 +27,11 @@ class ObjetoJaExisteError(Exception):
 
 def _seguro(caminho: str) -> str:
     """Recusa caminhos absolutos, '..' e caracteres estranhos (path traversal)."""
-    if not _CAMINHO_OK.fullmatch(caminho) or caminho.startswith("/") or ".." in caminho.split("/"):
+    if (
+        not _CAMINHO_OK.fullmatch(caminho)
+        or caminho.startswith("/")
+        or ".." in caminho.split("/")
+    ):
         raise ValueError(f"caminho inválido: {caminho!r}")
     return caminho
 
@@ -43,7 +51,7 @@ def _salvar_local(caminho: str, dados: bytes, sobrescrever: bool = True):
         destino.write_bytes(dados)
         return
     try:
-        with open(destino, "xb") as f:      # "x": falha se já existir (atômico)
+        with open(destino, "xb") as f:  # "x": falha se já existir (atômico)
             f.write(dados)
     except FileExistsError:
         raise ObjetoJaExisteError(caminho) from None
@@ -51,27 +59,37 @@ def _salvar_local(caminho: str, dados: bytes, sobrescrever: bool = True):
 
 @lru_cache(maxsize=1)
 def _cliente_oci():
-    import oci   # só é exigido quando o OCI é usado
-    cfg = oci.config.from_file(os.path.expanduser(os.getenv("OCI_CONFIG_FILE", "~/.oci/config")))
+    import oci  # só é exigido quando o OCI é usado
+
+    cfg = oci.config.from_file(
+        os.path.expanduser(os.getenv("OCI_CONFIG_FILE", "~/.oci/config"))
+    )
     return oci.object_storage.ObjectStorageClient(cfg)
 
 
-def _salvar_oci(namespace: str, caminho: str, dados: bytes, sobrescrever: bool = True,
-                content_type: str | None = None):
+def _salvar_oci(
+    namespace: str,
+    caminho: str,
+    dados: bytes,
+    sobrescrever: bool = True,
+    content_type: str | None = None,
+):
     extra = {}
     if not sobrescrever:
-        extra["if_none_match"] = "*"            # só grava se ainda não existir (H5.1.1 T4)
+        extra["if_none_match"] = "*"  # só grava se ainda não existir (H5.1.1 T4)
     if content_type:
-        extra["content_type"] = content_type    # H5.1.1 T2
+        extra["content_type"] = content_type  # H5.1.1 T2
     try:
         _cliente_oci().put_object(namespace, config.bucket(), caminho, dados, **extra)
     except Exception as e:
-        if getattr(e, "status", None) == 412:                # objeto já existe
+        if getattr(e, "status", None) == 412:  # objeto já existe
             raise ObjetoJaExisteError(caminho) from e
         raise
 
 
-def salvar(caminho: str, conteudo, sobrescrever: bool = True, content_type: str | None = None) -> dict:
+def salvar(
+    caminho: str, conteudo, sobrescrever: bool = True, content_type: str | None = None
+) -> dict:
     """Salva texto, bytes ou dicionário. Devolve onde e como foi salvo.
 
     Com sobrescrever=False, levanta ObjetoJaExisteError se o objeto já existir
@@ -85,7 +103,9 @@ def salvar(caminho: str, conteudo, sobrescrever: bool = True, content_type: str 
     else:
         dados = json.dumps(conteudo, ensure_ascii=False, indent=2).encode("utf-8")
         content_type = content_type or "application/json"
-    if not sobrescrever and _local(caminho).exists():        # já está no disco (fallback antigo)
+    if (
+        not sobrescrever and _local(caminho).exists()
+    ):  # já está no disco (fallback antigo)
         raise ObjetoJaExisteError(caminho)
     ns = os.getenv("OCI_NAMESPACE")
     base = {"bucket": config.bucket(), "caminho_objeto": caminho}
@@ -95,10 +115,14 @@ def salvar(caminho: str, conteudo, sobrescrever: bool = True, content_type: str 
             return {**base, "local": "oci", "status_backup": "sucesso"}
         except ObjetoJaExisteError:
             raise
-        except Exception as e:           # falhou: não perde o documento
+        except Exception as e:  # falhou: não perde o documento
+            logger.exception("O objeto da requisição já existe.")
             _salvar_local(caminho, dados, sobrescrever)
-            return {**base, "local": "disco",
-                    "status_backup": f"oci_falhou_salvo_local: {str(e)[:80]}"}
+            return {
+                **base,
+                "local": "disco",
+                "status_backup": f"oci_falhou_salvo_local: {str(e)[:80]}",
+            }
     _salvar_local(caminho, dados, sobrescrever)
     return {**base, "local": "disco", "status_backup": "sucesso"}
 
@@ -116,8 +140,12 @@ def salvar_original(documento_id: str, conteudo: bytes, extensao: str) -> dict:
     for outra in EXTENSOES:
         if outra != extensao and existe(f"recebidos/{documento_id}{outra}"):
             raise ObjetoJaExisteError(documento_id)
-    return salvar(f"recebidos/{documento_id}{extensao}", conteudo,
-                  sobrescrever=False, content_type=CONTENT_TYPES[extensao])
+    return salvar(
+        f"recebidos/{documento_id}{extensao}",
+        conteudo,
+        sobrescrever=False,
+        content_type=CONTENT_TYPES[extensao],
+    )
 
 
 def ler(caminho: str):
@@ -125,9 +153,12 @@ def ler(caminho: str):
     ns = os.getenv("OCI_NAMESPACE")
     if ns:
         try:
-            return _cliente_oci().get_object(ns, config.bucket(), _seguro(caminho)).data.content
+            r = _cliente_oci().get_object(ns, config.bucket(), _seguro(caminho))
+            if r is not None:
+                return r.data.content
         except Exception:
-            pass                          # não achou na nuvem: tenta o disco
+            # não achou na nuvem: tenta o disco
+            logger.exception("Falha ao consultar OCI; usando armazenamento local")
     p = _local(caminho)
     return p.read_bytes() if p.exists() else None
 
@@ -142,11 +173,16 @@ def listar(prefixo: str) -> list:
     if ns:
         try:
             r = _cliente_oci().list_objects(ns, config.bucket(), prefix=prefixo)
-            nomes.update(o.name for o in r.data.objects)
+            if r is not None:
+                nomes.update(o.name for o in r.data.objects)
         except Exception:
-            pass
+            # não achou na nuvem: tenta o disco
+            logger.exception("Falha ao consultar OCI; usando armazenamento local")
     base = (pathlib.Path(config.pasta_local()) / config.bucket()).resolve()
     if base.exists():
-        nomes.update(str(p.relative_to(base)).replace(os.sep, "/")
-                     for p in base.rglob("*") if p.is_file())
+        nomes.update(
+            str(p.relative_to(base)).replace(os.sep, "/")
+            for p in base.rglob("*")
+            if p.is_file()
+        )
     return sorted(n for n in nomes if n.startswith(prefixo))

@@ -1,4 +1,5 @@
 """H5.1.2 T4 — o resultado é gravado conforme a prioridade e a resposta só traz o caminho depois."""
+
 import time
 
 import pytest
@@ -10,8 +11,12 @@ from testes.conftest import LAUDO_TEP, cliente_com, extracao, extrator_fixo
 
 
 def _corpo(doc_id):
-    return {"documento_id": doc_id, "tipo_arquivo": "TEXTO",
-            "documento_texto": LAUDO_TEP, "canal_origem": "Pronto_Socorro"}
+    return {
+        "documento_id": doc_id,
+        "tipo_arquivo": "TEXTO",
+        "documento_texto": LAUDO_TEP,
+        "canal_origem": "Pronto_Socorro",
+    }
 
 
 def test_urgente_grava_em_processados_urgentes(cliente):
@@ -19,13 +24,15 @@ def test_urgente_grava_em_processados_urgentes(cliente):
     arm = j["armazenamento_oci"]
     assert arm["caminho_objeto"] == "processados/urgentes/DOC-RES-001.json"
     assert arm["status_backup"] == "sucesso"
-    assert arm["urgente"] is True                       # booleano no JSON, não texto
+    assert arm["urgente"] is True  # booleano no JSON, não texto
     assert storage.existe(arm["caminho_objeto"])
 
 
 def test_rotina_grava_em_processados_rotina():
     c = cliente_com(extrator_fixo(extracao(nivel_prioridade="Rotina")))
-    arm = c.post("/triagem?aguardar=true", json=_corpo("DOC-RES-002")).json()["armazenamento_oci"]
+    arm = c.post("/triagem?aguardar=true", json=_corpo("DOC-RES-002")).json()[
+        "armazenamento_oci"
+    ]
     assert arm["caminho_objeto"] == "processados/rotina/DOC-RES-002.json"
     assert arm["status_backup"] == "sucesso"
     assert arm["urgente"] is False
@@ -34,7 +41,10 @@ def test_rotina_grava_em_processados_rotina():
 
 def test_o_que_foi_gravado_e_o_resultado_completo(cliente):
     cliente.post("/triagem?aguardar=true", json=_corpo("DOC-RES-003"))
-    salvo = ResultadoTriagem.model_validate_json(storage.ler("processados/urgentes/DOC-RES-003.json"))
+    ler_doc = storage.ler("processados/urgentes/DOC-RES-003.json")
+    assert ler_doc is not None
+
+    salvo = ResultadoTriagem.model_validate_json(ler_doc)
     assert salvo.documento_id == "DOC-RES-003"
     assert salvo.classificacao is not None and salvo.dados_extraidos is not None
     assert salvo.decisao_roteamento.destino_principal == "Fila_Emergencia_Medica"
@@ -63,4 +73,6 @@ def test_se_a_gravacao_falha_nao_ha_resposta_com_caminho(monkeypatch):
 
     monkeypatch.setattr(storage, "salvar", gravar_quebrado)
     with pytest.raises(OSError):
-        resposta.arquivar("DOC-RES-006", estado)       # nada de caminho_objeto/status_backup inventado
+        resposta.arquivar(
+            "DOC-RES-006", estado
+        )  # nada de caminho_objeto/status_backup inventado

@@ -23,7 +23,7 @@ def carregar_limite_confianca() -> float:
     return min(1.0, max(0.0, valor))
 
 
-def formatar_confianca(score: float | int | None, limite: float | None = None) -> str:
+def formatar_confianca(score: float | None, limite: float | None = None) -> str:
     if score is None or isinstance(score, bool) or not isinstance(score, (int, float)):
         return "—"
     lim = carregar_limite_confianca() if limite is None else limite

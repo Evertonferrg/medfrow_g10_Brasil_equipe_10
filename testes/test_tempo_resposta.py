@@ -1,4 +1,5 @@
 """T8: o POST /triagem (sem aguardar=true) responde em até 2 s e cada requisição é logada."""
+
 import logging
 import time
 
@@ -7,8 +8,12 @@ from testes.conftest import cliente_com, extracao, extrator_fixo
 
 LIMITE_S = 2.0
 LOG = "mediflow.requisicoes"
-CORPO = {"documento_id": "TEMPO-001", "tipo_arquivo": "TEXTO",
-         "documento_texto": "LAUDO sintetico de teste.", "canal_origem": "Ambulatorio"}
+CORPO = {
+    "documento_id": "TEMPO-001",
+    "tipo_arquivo": "TEXTO",
+    "documento_texto": "LAUDO sintetico de teste.",
+    "canal_origem": "Ambulatorio",
+}
 
 
 def _registros(caplog):
@@ -34,7 +39,7 @@ def test_resposta_nao_espera_o_llm(caplog):
     r = cliente_com(llm_lento).post("/triagem", json=CORPO)
     assert r.status_code == 202
     registro = _registros(caplog)[0]
-    assert registro.duracao_ms < 1000          # respondeu antes de o LLM terminar
+    assert registro.duracao_ms < 1000  # respondeu antes de o LLM terminar
     assert registro.duracao_ms < LIMITE_S * 1000
 
 
@@ -53,7 +58,7 @@ def test_cada_requisicao_gera_um_log_com_a_duracao(caplog):
 
 def test_requisicao_acima_do_limite_gera_warning(caplog, monkeypatch):
     caplog.set_level(logging.INFO, logger=LOG)
-    monkeypatch.setattr(tempo, "LIMITE_MS", -1)           # tudo passa a estar "acima do limite"
+    monkeypatch.setattr(tempo, "LIMITE_MS", -1)  # tudo passa a estar "acima do limite"
     cliente_com(extrator_fixo(extracao())).post("/triagem", json=CORPO)
     assert _registros(caplog)[0].levelno == logging.WARNING
 

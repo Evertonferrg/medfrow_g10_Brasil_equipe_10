@@ -1,4 +1,5 @@
 """H2.2.1 T5 — a justificativa cita tipo, prioridade e regra, tem no máximo 2 frases e bate com o destino."""
+
 import io
 import re
 
@@ -23,11 +24,11 @@ def _png() -> bytes:
 
 
 CASOS_ROTEADOS = [
-    ("Laudo de Exame de Imagem", "Urgente"),              # R-URGENCIA
-    ("Receituário Médico", "Rotina"),                     # R-RECEITA
-    ("Guia de Solicitação de Procedimento", "Rotina"),    # R-GUIA
-    ("Relatório de Alta", "Rotina"),                      # R-PRONTUARIO
-    ("Atestado Médico", "Rotina"),                        # R-PRONTUARIO
+    ("Laudo de Exame de Imagem", "Urgente"),  # R-URGENCIA
+    ("Receituário Médico", "Rotina"),  # R-RECEITA
+    ("Guia de Solicitação de Procedimento", "Rotina"),  # R-GUIA
+    ("Relatório de Alta", "Rotina"),  # R-PRONTUARIO
+    ("Atestado Médico", "Rotina"),  # R-PRONTUARIO
 ]
 
 
@@ -36,7 +37,7 @@ def test_cada_regra_cita_tipo_prioridade_regra_e_destino(tipo, prioridade):
     destino, regra = rt.decidir_destino(tipo, prioridade, False)
     texto = rt.gerar_justificativa(tipo, prioridade, 0.93, destino, regra, achado="TEP")
     assert tipo in texto and prioridade in texto
-    assert regra in texto and destino in texto             # o destino citado é o decidido
+    assert regra in texto and destino in texto  # o destino citado é o decidido
     assert len(frases(texto)) <= 2
 
 
@@ -49,10 +50,19 @@ def test_toda_regra_tem_id_e_descricao_curta():
 # ---- critério 2: revisão diz qual dúvida levou o documento até lá ----
 def test_revisao_lista_os_motivos_acumulados():
     texto = rt.gerar_justificativa(
-        "", "", 0.42, "Fila_Revisao_Humana", "R-REVISAO",
+        "",
+        "",
+        0.42,
+        "Fila_Revisao_Humana",
+        "R-REVISAO",
         problemas=["campo faltante: CRM", "inconsistência: idade x data de nascimento"],
-        motivo="baixa confiança")
-    for motivo in ("baixa confiança", "campo faltante: CRM", "inconsistência: idade x data de nascimento"):
+        motivo="baixa confiança",
+    )
+    for motivo in (
+        "baixa confiança",
+        "campo faltante: CRM",
+        "inconsistência: idade x data de nascimento",
+    ):
         assert motivo in texto
     assert "R-REVISAO" in texto and len(frases(texto)) <= 2
 
@@ -63,32 +73,58 @@ def test_revisao_sem_motivo_nem_problema_cita_a_baixa_confianca():
 
 
 def test_revisao_por_erro_cita_a_falha():
-    texto = rt.gerar_justificativa("", "", 0.0, "Fila_Revisao_Humana", "R-REVISAO", erro="Gemini fora do ar")
+    texto = rt.gerar_justificativa(
+        "", "", 0.0, "Fila_Revisao_Humana", "R-REVISAO", erro="Gemini fora do ar"
+    )
     assert "falha na extração automática" in texto and "Gemini fora do ar" in texto
 
 
 def test_motivo_ilegivel_nao_se_repete():
-    texto = rt.gerar_justificativa("", "", 0.0, "Fila_Revisao_Humana", "R-REVISAO",
-                                   problemas=["ilegível: imagem borrada"], motivo="ilegível")
+    texto = rt.gerar_justificativa(
+        "",
+        "",
+        0.0,
+        "Fila_Revisao_Humana",
+        "R-REVISAO",
+        problemas=["ilegível: imagem borrada"],
+        motivo="ilegível",
+    )
     assert "ilegível: imagem borrada" in texto and texto.count("ilegível") == 1
 
 
 def test_imagem_ilegivel_chega_a_justificativa_do_grafo():
     leitor = lambda imagens: ("", Legibilidade(legivel=False, motivo="imagem borrada"))
-    estado = triar("", extrator_fixo(extracao()), _png(), leitor=leitor, documento_id="DOC-JUS-001")
-    assert "ilegível" in estado["justificativa"] and "imagem borrada" in estado["justificativa"]
-    assert estado["resultado"]["decisao_roteamento"]["justificativa_roteamento"] == estado["justificativa"]
+    estado = triar(
+        "", extrator_fixo(extracao()), _png(), leitor=leitor, documento_id="DOC-JUS-001"
+    )
+    assert (
+        "ilegível" in estado["justificativa"]
+        and "imagem borrada" in estado["justificativa"]
+    )
+    assert (
+        estado["resultado"]["decisao_roteamento"]["justificativa_roteamento"]
+        == estado["justificativa"]
+    )
 
 
 # ---- pela API: o destino citado bate com destino_principal ----
-@pytest.mark.parametrize("doc_id,kw", [
-    ("DOC-JUS-002", dict(nivel_prioridade="Urgente")),
-    ("DOC-JUS-003", dict(nivel_prioridade="Rotina")),
-])
+@pytest.mark.parametrize(
+    "doc_id,kw",
+    [
+        # ("DOC-JUS-002", dict(nivel_prioridade="Urgente")),
+        # ("DOC-JUS-003", dict(nivel_prioridade="Rotina")),
+        ("DOC-JUS-002", {"nivel_prioridade": "Urgente"}),
+        ("DOC-JUS-003", {"nivel_prioridade": "Rotina"}),
+    ],
+)
 def test_destino_citado_bate_com_destino_principal(doc_id, kw):
     c = cliente_com(extrator_fixo(extracao(**kw)))
-    corpo = {"documento_id": doc_id, "tipo_arquivo": "TEXTO",
-             "documento_texto": LAUDO_TEP, "canal_origem": "Pronto_Socorro"}
+    corpo = {
+        "documento_id": doc_id,
+        "tipo_arquivo": "TEXTO",
+        "documento_texto": LAUDO_TEP,
+        "canal_origem": "Pronto_Socorro",
+    }
     d = c.post("/triagem?aguardar=true", json=corpo).json()["decisao_roteamento"]
     texto = d["justificativa_roteamento"]
     assert len(frases(texto)) <= 2

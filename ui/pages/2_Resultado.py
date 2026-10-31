@@ -1,9 +1,11 @@
 import json
+
 """T4 — tela de resultado: consulta GET /documentos/{documento_id} e mostra
 o tipo identificado, o score de confiança ao lado do tipo e a especialidade provável ao analista."""
 import os
 import sys
 from pathlib import Path
+
 import requests
 import streamlit as st
 
@@ -11,13 +13,13 @@ PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
     sys.path.insert(0, PASTA_UI)
 
-from componentes.classificacao import (  # noqa: E402, F401
+from componentes.classificacao import (  # noqa: F401
     carregar_limite_confianca,
     exibir_classificacao,
     formatar_confianca,
 )
-from componentes.diagnostico import bloco_diagnostico  # noqa: E402, F401
-from componentes.medico import bloco_medico  # noqa: E402, F401
+from componentes.diagnostico import bloco_diagnostico
+from componentes.medico import bloco_medico
 
 API = os.getenv("API_URL", "http://localhost:8000")
 
@@ -32,11 +34,23 @@ def mostrar_medicamentos(dados, tipo_documento=None):
         return
     st.subheader("Medicamentos")
     st.dataframe(
-        [{"Medicamento": m.get("nome") or "—", "Dose": m.get("dose") or "—", "Via": m.get("via") or "—",
-          "Frequência": m.get("frequencia") or "—", "Duração": m.get("duracao") or "—"} for m in itens],
-        hide_index=True)
+        [
+            {
+                "Medicamento": m.get("nome") or "—",
+                "Dose": m.get("dose") or "—",
+                "Via": m.get("via") or "—",
+                "Frequência": m.get("frequencia") or "—",
+                "Duração": m.get("duracao") or "—",
+            }
+            for m in itens
+        ],
+        hide_index=True,
+    )
     if any(not m.get("dose") for m in itens):
-        st.caption("⚠ Há medicamento sem dose informada no documento (veja os pontos de atenção).")
+        st.caption(
+            "⚠ Há medicamento sem dose informada no documento (veja os pontos de atenção)."
+        )
+
 
 def mostrar_exames(dados):
     """H1.3.5 T5: exames e procedimentos, com o código TUSS ao lado."""
@@ -45,19 +59,29 @@ def mostrar_exames(dados):
         return
     st.subheader("Exames e procedimentos")
     st.dataframe(
-       [{"Exame": e.get("nome") or "—", "Código TUSS": e.get("codigo_tuss") or "—"} for e in itens],
-        hide_index=True
+        [
+            {"Exame": e.get("nome") or "—", "Código TUSS": e.get("codigo_tuss") or "—"}
+            for e in itens
+        ],
+        hide_index=True,
     )
+
 
 def mostrar_destino(decisao):
     """H2.2.1 T4: o destino em destaque e, logo abaixo, a justificativa e a regra aplicada."""
     destino = decisao.get("destino_principal", "-")
-    (st.error if destino == "Fila_Emergencia_Medica" else
-     st.warning if decisao.get("requer_auditoria_humana") else st.success)(f"**Destino: {destino}**")
+    (
+        st.error
+        if destino == "Fila_Emergencia_Medica"
+        else st.warning
+        if decisao.get("requer_auditoria_humana")
+        else st.success
+    )(f"**Destino: {destino}**")
     if decisao.get("justificativa_roteamento"):
         st.markdown(f"**Por quê?** {decisao['justificativa_roteamento']}")
     if decisao.get("regra_aplicada"):
         st.caption(f"Regra aplicada: {decisao['regra_aplicada']}")
+
 
 def botao_download(resultado):
     """H2.3.1 T4: baixa o resultado exatamente como a API devolveu (formato combinado)."""
@@ -68,6 +92,7 @@ def botao_download(resultado):
         file_name=nome,
         mime="application/json",
     )
+
 
 st.set_page_config(page_title="MediFlow — Resultado", page_icon="🔎", layout="wide")
 st.title("🔎 Resultado da triagem")
@@ -88,7 +113,9 @@ if buscar and doc_id.strip():
     elif r.status_code == 404:
         st.warning("Documento não encontrado. Confere o ID.")
     elif r.status_code == 202:
-        st.info("Documento recebido e ainda processando. Tenta buscar de novo em instantes.")
+        st.info(
+            "Documento recebido e ainda processando. Tenta buscar de novo em instantes."
+        )
     elif r.status_code != 200:
         st.error(r.json().get("detail", r.text))
     else:
@@ -105,7 +132,7 @@ if buscar and doc_id.strip():
         problemas = res.get("problemas") or []
         if problemas:
             st.subheader("Pontos de atenção")
-                   
+
         # Chamada adicionada para exibir a tabela e avisos de medicamentos
         cl = res.get("classificacao") or {}
         mostrar_medicamentos(res.get("dados_extraidos"), cl.get("tipo_documento"))

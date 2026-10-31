@@ -1,9 +1,14 @@
 from google import genai
 from google.genai import errors, types
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from . import config
-from .schemas import Extracao, LeituraImagem, Legibilidade
+from .schemas import Extracao, Legibilidade, LeituraImagem
 
 # Regra de ouro em saúde: NÃO INVENTAR. O texto do documento vai entre tags e o
 # modelo é avisado de que ele é só DADO (defesa contra "ignore as instruções acima").
@@ -56,9 +61,9 @@ def _gerar_com_modelo(client, modelo, contents, config_gen):
 
 def _gerar(client, contents, config_gen):
     """Tenta o modelo principal; se der 5xx ou cota esgotada (429), troca para o fallback."""
-    modelos = list(dict.fromkeys(
-        [config.modelo_gemini(), config.modelo_gemini_fallback()]
-    ))
+    modelos = list(
+        dict.fromkeys([config.modelo_gemini(), config.modelo_gemini_fallback()])
+    )
     ultimo_erro = None
     for modelo in modelos:
         try:
@@ -68,7 +73,7 @@ def _gerar(client, contents, config_gen):
             if codigo != 429 and not (500 <= codigo < 600):
                 raise  # 400, 401, 403, 404...: erro real, trocar de modelo não resolve
             ultimo_erro = e
-    raise ultimo_erro
+        raise ultimo_erro
 
 
 def extrair(texto: str) -> Extracao:
@@ -78,10 +83,14 @@ def extrair(texto: str) -> Extracao:
         PROMPT.format(texto=texto),
         {
             "response_mime_type": "application/json",
-            "response_schema": Extracao,   # força JSON no formato do schema
+            "response_schema": Extracao,  # força JSON no formato do schema
             "temperature": 0,
         },
     )
+
+    if resposta is None:
+        raise ValueError("O Gemini retornou uma resposta vazia")
+
     # O Pydantic converte E valida de uma vez
     return Extracao.model_validate_json(resposta.text)
 

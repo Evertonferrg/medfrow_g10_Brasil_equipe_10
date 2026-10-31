@@ -1,14 +1,22 @@
-
 PADRAO = "Prontuario_Eletronico"
 
 # tipo de documento -> (destino, id da regra, descrição da regra)
 ROTINA = {
-    "Receituário Médico": ("Farmacia_Hospitalar", "R-RECEITA",
-                           "receitas de rotina seguem para a farmácia"),
-    "Guia de Solicitação de Procedimento": ("Auditoria_Autorizacoes", "R-GUIA",
-                           "guias de rotina seguem para a auditoria de autorizações"),
+    "Receituário Médico": (
+        "Farmacia_Hospitalar",
+        "R-RECEITA",
+        "receitas de rotina seguem para a farmácia",
+    ),
+    "Guia de Solicitação de Procedimento": (
+        "Auditoria_Autorizacoes",
+        "R-GUIA",
+        "guias de rotina seguem para a auditoria de autorizações",
+    ),
 }
-REGRA_PRONTUARIO = ("R-PRONTUARIO", "laudos, altas e atestados de rotina seguem para o prontuário")
+REGRA_PRONTUARIO = (
+    "R-PRONTUARIO",
+    "laudos, altas e atestados de rotina seguem para o prontuário",
+)
 
 # H2.2.1 T1: id -> descrição curta de CADA regra de decisão (fonte única dos textos)
 REGRAS = {
@@ -49,7 +57,7 @@ def _motivos(motivo, problemas, erro, score) -> list:
         if not p:
             continue
         if motivo and p.lower().startswith(partes[0].lower()):
-            partes[0] = p              # a versão com detalhe substitui o motivo curto
+            partes[0] = p  # a versão com detalhe substitui o motivo curto
         elif p not in partes:
             partes.append(p)
     if not partes and erro:
@@ -78,11 +86,15 @@ def justificativa(
         detalhe = "; ".join(_motivos(motivo, problemas, erro, score))
         return f"Enviado à revisão humana (regra R-REVISAO): {detalhe}."
     if regra == "R-URGENCIA":
-        return (f"{tipo} com prioridade Urgente (achado crítico: {achado}); regra R-URGENCIA: "
-                f"{descricao_regra(regra)} → {destino}.")
+        return (
+            f"{tipo} com prioridade Urgente (achado crítico: {achado}); regra R-URGENCIA: "
+            f"{descricao_regra(regra)} → {destino}."
+        )
     descricao = descricao_regra(regra) or REGRA_PRONTUARIO[1]
-    return (f"{tipo} com prioridade {prioridade} e confiança {score}; "
-            f"regra {regra}: {descricao} → {destino}.")
+    return (
+        f"{tipo} com prioridade {prioridade} e confiança {score}; "
+        f"regra {regra}: {descricao} → {destino}."
+    )
 
 
-gerar_justificativa = justificativa   # nome do card H2.2.1 T2
+gerar_justificativa = justificativa  # nome do card H2.2.1 T2
