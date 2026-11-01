@@ -2,6 +2,8 @@
 o destino de roteamento em destaque, acima dos dados extraídos clínicos.
 """
 import json
+"""T4 — tela de resultado: consulta GET /documentos/{documento_id} e mostra
+o tipo identificado, o score de confiança ao lado do tipo e a especialidade provável ao analista."""
 import os
 import sys
 from pathlib import Path
@@ -17,8 +19,48 @@ try:
     from componentes.paciente import bloco_paciente
 except ImportError:
     bloco_paciente = None
+PASTA_UI = str(Path(__file__).resolve().parents[1])
+if PASTA_UI not in sys.path:
+    sys.path.insert(0, PASTA_UI)
+
+from componentes.classificacao import (  # noqa: E402, F401
+    carregar_limite_confianca,
+    exibir_classificacao,
+    formatar_confianca,
+)
+from componentes.diagnostico import bloco_diagnostico  # noqa: E402, F401
+from componentes.medico import bloco_medico  # noqa: E402, F401
 
 API = os.getenv("API_URL", "http://localhost:8000")
+
+
+def mostrar_medicamentos(dados, tipo_documento=None):
+    """H1.3.4 T4: tabela de medicamentos e posologia."""
+    itens = (dados or {}).get("medicamentos") or []
+    if not itens:
+        if tipo_documento == "Receituário Médico":
+            st.subheader("Medicamentos")
+            st.caption("Nenhum medicamento identificado nesta receita.")
+        return
+    st.subheader("Medicamentos")
+    st.dataframe(
+        [{"Medicamento": m.get("nome") or "—", "Dose": m.get("dose") or "—", "Via": m.get("via") or "—",
+          "Frequência": m.get("frequencia") or "—", "Duração": m.get("duracao") or "—"} for m in itens],
+        hide_index=True)
+    if any(not m.get("dose") for m in itens):
+        st.caption("⚠ Há medicamento sem dose informada no documento (veja os pontos de atenção).")
+
+def mostrar_exames(dados):
+    """H1.3.5 T5: exames e procedimentos, com o código TUSS ao lado."""
+    itens = (dados or {}).get("exames") or []
+    if not itens:
+        return
+    st.subheader("Exames e procedimentos")
+    st.dataframe(
+       [{"Exame": e.get("nome") or "—", "Código TUSS": e.get("codigo_tuss") or "—"} for e in itens],
+        hide_index=True
+    )
+
 
 st.set_page_config(page_title="MediFlow — Resultado", page_icon="🔎", layout="wide")
 st.title("🔎 Resultado da triagem")
@@ -76,6 +118,11 @@ if buscar and doc_id.strip():
             e.metric("Confiança", cl.get("score_confianca_classificacao", "—"))
         else:
             st.warning("Sem classificação automática: o documento requer revisão humana.")
+        st.caption(f"**Status:** {res.get('status', '-')}")
+        exibir_classificacao(res.get("classificacao"))
+        if res.get("dados_extraidos") is not None:
+            bloco_medico(res.get("dados_extraidos"))
+            bloco_diagnostico(res.get("dados_extraidos"))
 
         # Dados Extraídos (H1.3.1, H1.3.4, H1.3.5)
         dados = res.get("dados_extraidos") or {}
@@ -128,3 +175,9 @@ if buscar and doc_id.strip():
             file_name=f"{res.get('documento_id', doc_id)}.json",
             mime="application/json",
         )
+        
+        # Chamada adicionada para exibir a tabela e avisos de medicamentos
+        mostrar_medicamentos(res.get("dados_extraidos"), cl.get("tipo_documento") if cl else None)
+
+        # Exames e procedimentos, com o código TUSS ao lado
+        mostrar_exames(res.get("dados_extraidos"))

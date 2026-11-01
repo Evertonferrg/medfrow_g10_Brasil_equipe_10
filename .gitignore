@@ -4,11 +4,12 @@
 # Caches do Python
 __pycache__/
 *.pyc
-
-.env
-storage_local/
-__pycache__/
-*.pyc
 .pytest_cache/
+
+# Ambiente virtual
+venv/
 .venv/
 
+# Segredos e dados locais
+.env
+storage_local/

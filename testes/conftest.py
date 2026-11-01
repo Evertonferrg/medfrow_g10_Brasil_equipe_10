@@ -4,30 +4,17 @@ from fastapi.testclient import TestClient
 from reportlab.pdfgen import canvas
 
 from app.api import criar_app
-from app.schemas import (
-    Extracao,
-    Paciente,
-    Medico,
-    Medicamento,
-    Exame,
-)
+from app.schemas import Extracao, Paciente, Medico, Medicamento, Exame
 
-LAUDO_TEP = (
-    "HOSPITAL SANTA LUCIA - LAUDO DE EXAME RADIOLOGICO. Paciente: Carlos Eduardo Mendes, 52 anos. "
-    "Solicitante: Dra. Renata Silveira CRM-SP 145892. Exame: Tomografia de Torax com contraste. "
-    "Indicacao: Suspeita de embolia pulmonar aguda, dispneia subita. Achados: Falha de enchimento em "
-    "arteria pulmonar principal direita compativel com TEP agudo. CONCLUSAO: Quadro compativel com "
-    "Tromboembolismo Pulmonar Agudo. Sugere-se correlacao clinica urgente."
-)
-RECEITA = (
-    "RECEITUARIO. Paciente: Maria Souza, 40 anos. Dr. Paulo Lima CRM 99887 SP. "
-    "Amoxicilina 500mg de 8 em 8 horas por 7 dias."
-)
-GUIA = (
-    "GUIA DE SOLICITACAO. Paciente: Joao Pereira, 61 anos. Dra. Ana Torres CRM-RJ 55443. "
-    "Procedimento: Ressonancia de joelho codigo TUSS 40801020."
-)
-
+LAUDO_TEP = ("HOSPITAL SANTA LUCIA - LAUDO DE EXAME RADIOLOFICO.Paciente: Carlos Eduardo Mendes, 52 anos. "
+             "Solicitante: Dra. Renata Silveira CRM-SP 145892. Exame: Tomografia de Torax com contraste. "
+             "Indicacao: Suspeita de embolia pulmonar aguda, dispneia subita. Achados: Falha de enchimento em "
+             "arteria pulmonar principal direita compativel com TEP agudo. CONCLUSAO: Quadro compativel com "
+             "Tromboembolismo Pulmonar Agudo. Sugere-se correlacao clinica urgente.")
+RECEITA = ("RECEITUARIO. Paciente: Maria Souza, 40 anos. Dr. Paulo Lima CRM 99887 SP. "
+           "Amoxicilina 500mg de 8 em 8 horas por 7 dias.")
+GUIA = ("GUIA DE SOLICITACAO. Paciente: Joao Pereira, 61 anos. Dra. Ana Torres CRM-RJ 55443. "
+        "Procedimento: Ressonancia de joelho codigo TUSS 40801020.")
 
 @pytest.fixture(autouse=True)
 def storage_isolado(tmp_path, monkeypatch):
