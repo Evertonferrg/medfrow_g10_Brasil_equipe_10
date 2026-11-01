@@ -89,7 +89,7 @@ def extrair(texto: str) -> Extracao:
     )
 
     if resposta is None:
-        raise ValueError("O Gemini retornou uma resposta vazia")
+        raise RuntimeError("Gemini não conseguiu recuperar o texto")
 
     # O Pydantic converte E valida de uma vez
     return Extracao.model_validate_json(resposta.text)
@@ -124,5 +124,8 @@ def ler_imagem(imagens: list[bytes]) -> tuple[str, Legibilidade]:
             "temperature": 0,
         },
     )
+    if resposta is None:
+        raise RuntimeError("Gemini não conseguiu ler a imagem")
+        
     leitura = LeituraImagem.model_validate_json(resposta.text)
     return leitura.texto, leitura.legibilidade

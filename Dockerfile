@@ -21,7 +21,7 @@ RUN python${PYTHON_VERSION} -m venv $VIRTUAL_ENV
 
 COPY requirements.txt .
 # Instala exigindo a verificação de hashes e sem depender de compiladores externos (only-binary)
-RUN pip install --require-hashes --only-binary=:all: -r requirements.txt && \
+RUN pip install --no-cache-dir --require-hashes --only-binary=:all: -r requirements.txt && \
     pip uninstall -y pip setuptools wheel
 
 # ==========================================

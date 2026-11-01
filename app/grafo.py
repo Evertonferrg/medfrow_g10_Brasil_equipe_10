@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 # dicionario compartilhado entre os nos
-# Dicionário compartilhado entre os nós do LangGraph
 class Estado(TypedDict, total=False):
     documento_id: str
     texto: str
@@ -36,8 +35,6 @@ class Estado(TypedDict, total=False):
     tipo_arquivo: str  # "TEXTO", "PDF" ou "Imagem"
     ilegivel: bool
     resultado: dict
-    notificacao: Optional[dict]
-    decisao_roteamento: Optional[object]  # submodelo DecisaoRoteamento (H2.1.1 T1/T4)
 
 
 def montar_classificacao(extracao, score) -> Classificacao:
@@ -113,6 +110,8 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         return {"extracao": extracao, "problemas": problemas, "score": score}
 
     def n_classificar(s: Estado):
+        # T3: grava a classificação no estado; se falhar, segue sem ela
+        # (não derruba o fluxo — a resposta entrega classificacao=None).
         if s.get("erro") or s.get("extracao") is None:
             return {"classificacao": None}
         try:
@@ -121,38 +120,78 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             logger.exception("Falha na classificação automática")
             return {"classificacao": None}
 
-    def n_decidir(s: Estado):
-        """H2.1.1 T3: nó decidir que chama a função pura de roteamento
-        aplicando precedência urgência → revisão → tipo.
-        """
-        decisao = rt.criar_decisao_roteamento(s)
+    def n_urgencia(s: Estado):
+        e = s["extracao"]
+        achado = e.diagnostico_principal or e.tipo_documento
+        destino, regra = rt.decidir_destino(e.tipo_documento, e.nivel_prioridade, False)
         return {
-            "destino": str(decisao.destino_principal),
-            "regra": decisao.regra_aplicada,
-            "requer_revisao": decisao.requer_auditoria_humana,
-            "justificativa": decisao.justificativa_roteamento,
-            "notificacao": decisao.notificacao_gerada.model_dump() if decisao.notificacao_gerada else None,
-            "decisao_roteamento": decisao,
-        }
-
-    def n_rotear(s: Estado):
-        """H2.1.1 T4: grava a decisão no estado e no resultado.
-        No MVP, a fila de um setor é a consulta aos resultados com aquele destino.
-        """
-        decisao = s.get("decisao_roteamento") or rt.criar_decisao_roteamento(s)
-        return {
-            "destino": str(decisao.destino_principal),
+            "destino": destino,
+            "regra": regra,
             "requer_revisao": False,
-            "decisao_roteamento": decisao,
+            "motivo_revisao": None,
+            "justificativa": rt.justificativa(
+                e.tipo_documento,
+                e.nivel_prioridade,
+                s["score"],
+                destino,
+                regra,
+                achado=achado,
+            ),
+            "notificacao": {
+                "canal": "Alerta_Plantao_Medico",
+                "mensagem": f"ALERTA URGENTE: {achado} paciente {e.paciente.nome}.",
+            },
         }
 
-    def n_enviar_revisao(s: Estado):
-        """H2.1.1 T3: nó de revisão humana quando auditoria é requerida."""
-        decisao = s.get("decisao_roteamento") or rt.criar_decisao_roteamento(s)
+    def n_revisao(s: Estado):
+        e = s.get("extracao")
+        limite = (
+            s["limite_confianca"]
+            if "limite_confianca" in s
+            else config.limite_confianca()
+        )
+        # T5: se a leitura já definiu o motivo (ex.: "ilegível"), respeita; senão calcula
+        motivo = s.get("motivo_revisao") or motivo_revisao(
+            s.get("score", 0.0), s.get("problemas", []), limite, s.get("erro")
+        )
+        destino, regra = rt.decidir_destino("", "", True)
+        notificacao = None
+        # se parece urgente mas a duvida avisa mesmo assim
+        if e is not None and e.nivel_prioridade == "Urgente":
+            notificacao = {
+                "canal": "Alerta_Plantao_Medico",
+                "mensagem": "Possivel urgência com dados ambiguos: revisar com prioridade.",
+            }
         return {
-            "destino": Destino.FILA_REVISAO_HUMANA.value,
+            "destino": destino,
+            "regra": regra,
             "requer_revisao": True,
-            "decisao_roteamento": decisao,
+            "motivo_revisao": motivo,
+            "notificacao": notificacao,
+            "justificativa": rt.justificativa(
+                "",
+                "",
+                s["score"],
+                destino,
+                regra,
+                problemas=s.get("problemas"),
+                erro=s.get("erro"),
+                motivo=motivo,
+            ),
+        }
+
+    def n_padrao(s: Estado):
+        e = s["extracao"]
+        destino, regra = rt.decidir_destino(e.tipo_documento, e.nivel_prioridade, False)
+        return {
+            "destino": destino,
+            "regra": regra,
+            "requer_revisao": False,
+            "motivo_revisao": None,
+            "notificacao": None,
+            "justificativa": rt.justificativa(
+                e.tipo_documento, e.nivel_prioridade, s["score"], destino, regra
+            ),
         }
 
     def n_montar_resultado(s: Estado):
@@ -195,11 +234,6 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         if s.get("erro") or precisa_revisao(s["score"], s["problemas"], limite):
             return "revisao"
         return "urgencia" if s["extracao"].nivel_prioridade == "Urgente" else "padrao"
-    def rota_condicional(s: Estado) -> str:
-        """Aresta condicional após decidir: leva a rotear ou a enviar_revisao."""
-        if s.get("requer_revisao") or s.get("destino") == Destino.FILA_REVISAO_HUMANA.value:
-            return "enviar_revisao"
-        return "rotear"
 
     g = StateGraph(Estado)
     for nome, fn in [
@@ -211,12 +245,8 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         ("revisao", n_revisao),
         ("padrao", n_padrao),
         ("montar_resultado", n_montar_resultado),
-        ("decidir", n_decidir),
-        ("rotear", n_rotear),
-        ("enviar_revisao", n_enviar_revisao),
     ]:
         g.add_node(nome, fn)
-
     g.set_entry_point("ler_entrada")
     # T5: ilegível vai direto para a revisão, sem passar por extrair/validar/classificar
     g.add_conditional_edges(
@@ -226,16 +256,14 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
     )
     g.add_edge("extrair", "validar")
     g.add_edge("validar", "classificar")
-    g.add_edge("classificar", "decidir")
-
     g.add_conditional_edges(
-        "decidir",
-        rota_condicional,
-        {"rotear": "rotear", "enviar_revisao": "enviar_revisao"},
+        "classificar",
+        decidir,
+        {"urgencia": "urgencia", "revisao": "revisao", "padrao": "padrao"},
     )
-    g.add_edge("rotear", END)
-    g.add_edge("enviar_revisao", END)
-
+    for no in ("urgencia", "revisao", "padrao"):
+        g.add_edge(no, "montar_resultado")
+    g.add_edge("montar_resultado", END)
     return g.compile()
 
 
