@@ -1,0 +1,178 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+    
+
+jobs:
+  # ----------------------------------------------------
+  # 1. BUILD & TEST (Execução paralela/inicial)
+  # ----------------------------------------------------
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@1e31de5234b9f8995739874a8ce0492dc87873e2
+
+      - name: Setup Environment
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python3 -m pip install --only-binary :all: --require-hashes -r requirements.txt
+
+      - name: Run Unit Tests with Coverage
+        run: |
+          pytest --cov=. --cov-report=xml:coverage.xml
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@c7d193f32edcb7bfad88892161225aeda64e9392
+        with:
+          name: build-assets
+          path: |
+            requirements.txt
+            coverage.xml
+
+  # ----------------------------------------------------
+  # 2. SONARQUBE ANALYSIS (Quality Gate)
+  # ----------------------------------------------------
+  sonarqube:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    services:
+      sonarqube:
+        image: sonarqube:community@sha256:65b38a9cde0664f8741aaff7c5b8a5f957b24e375369a69604cf42bc78cefde8
+        ports:
+          - 9000:9000
+        env:
+          SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@1e31de5234b9f8995739874a8ce0492dc87873e2
+        with:
+          fetch-depth: 0
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@7a1cd3216ca9260cd8022db641d960b1db4d1be4
+        with:
+          name: build-assets
+
+      - name: Wait for SonarQube
+        run: |
+          for i in $(seq 1 60); do
+            curl -s localhost:9000/api/system/status | grep -q '"status":"UP"' && exit 0
+            sleep 5
+          done
+          echo "SonarQube did not start" && exit 1
+
+      - name: Generate SonarQube Token
+        run: |
+          PASS="$(openssl rand -hex 16)Aa1!"
+          echo "::add-mask::$PASS"
+          curl -s -u admin:admin -X POST localhost:9000/api/users/change_password \
+            -d "login=admin&previousPassword=admin&password=$PASS"
+          TOKEN=$(curl -s -u "admin:$PASS" -X POST localhost:9000/api/user_tokens/generate \
+            -d "name=ci" | jq -r .token)
+          echo "::add-mask::$TOKEN"
+          echo "SONAR_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: SonarQube Scan and Quality Gate
+        run: |
+          # Ignora a regra S6596 (tag latest) nos Dockerfiles: a imagem Wolfi da Chainguard só tem tag latest no plano gratuito
+          docker run --rm --network host \
+            -v "${{ github.workspace }}:/usr/src" \
+            -e SONAR_HOST_URL=http://localhost:9000 \
+            -e SONAR_TOKEN="$SONAR_TOKEN" \
+            sonarsource/sonar-scanner-cli@sha256:47956b669bf486bdad919e1cbd0533223515aa0b6d1d31763e5a3754942df6d7 \
+            -Dsonar.projectKey=mediflow \
+            -Dsonar.python.coverage.reportPaths=coverage.xml \
+            -Dsonar.python.version=3.13 \
+            -Dsonar.projectBaseDir=. \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300 \
+            -Dsonar.issue.ignore.multicriteria=e1 \
+            -Dsonar.issue.ignore.multicriteria.e1.ruleKey=docker:S6596 \
+            -Dsonar.issue.ignore.multicriteria.e1.resourceKey=**/Dockerfile*
+
+      - name: Export SonarQube Issues
+        if: always()
+        run: |
+          curl -s -H "Authorization: Bearer $SONAR_TOKEN" \
+            "localhost:9000/api/issues/search?componentKeys=mediflow&ps=500" > sonar-issues.json
+
+      - name: Upload SonarQube Report
+        if: always()
+        uses: actions/upload-artifact@c7d193f32edcb7bfad88892161225aeda64e9392
+        with:
+          name: sonar-report
+          path: sonar-issues.json
+
+  # ----------------------------------------------------
+  # 3. TRIVY FS SCAN (Escaneamento de Dependências antes do Build)
+  # ----------------------------------------------------
+  trivy-fs:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@1e31de5234b9f8995739874a8ce0492dc87873e2
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          ignore-unfixed: 'true'
+
+  # ----------------------------------------------------
+  # 4. BUILD DOCKER IMAGE & TRIVY IMAGE SCAN
+  # ----------------------------------------------------
+  build-and-scan-image:
+    runs-on: ubuntu-latest
+    needs: [sonarqube, trivy-fs]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@1e31de5234b9f8995739874a8ce0492dc87873e2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226
+
+      - name: Build Local Image
+        uses: docker/build-push-action@c382f710d39a5bb4e430307530a720f50c2d3318
+        with:
+          context: .
+          load: true
+          tags: mediflow-app:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check Wolfi Base
+        run: |
+          docker run --rm --entrypoint python mediflow-app:latest \
+            -c "print(open('/etc/os-release').read())" | grep -q '^ID=wolfi'
+
+      - name: Smoke Test Container
+        run: |
+          docker run -d --name app mediflow-app:latest
+          sleep 15
+          if [ "$(docker inspect -f '{{.State.Running}}' app)" != "true" ]; then
+            docker logs app
+            exit 1
+          fi
+          docker logs app
+
+      - name: Run Trivy Vulnerability Scanner (Image)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: 'mediflow-app:latest'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          ignore-unfixed: 'true'
