@@ -8,7 +8,8 @@ Cenários cobertos:
 """
 import pytest
 
-from app.grafo import construir_grafo, decidir_destino, triar
+from app.grafo import construir_grafo, triar
+from app.roteamento import decidir_destino
 from app.modelos import Destino, TipoDocumento
 from app.resposta import montar_resposta
 from app.schemas import Extracao, Medicamento, Medico, Paciente
