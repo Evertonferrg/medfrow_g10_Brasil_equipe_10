@@ -1,3 +1,6 @@
+# Testes
+.pytest_cache/
+
 # Caches do Python
 __pycache__/
 *.pyc
