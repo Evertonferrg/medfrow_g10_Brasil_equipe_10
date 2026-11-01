@@ -1,0 +1,211 @@
+{
+  "$defs": {
+    "ArmazenamentoOCI": {
+      "properties": {
+        "bucket": {
+          "title": "Bucket",
+          "type": "string"
+        },
+        "caminho_objeto": {
+          "title": "Caminho Objeto",
+          "type": "string"
+        },
+        "local": {
+          "title": "Local",
+          "type": "string"
+        },
+        "status_backup": {
+          "title": "Status Backup",
+          "type": "string"
+        },
+        "urgente": {
+          "title": "Urgente",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bucket",
+        "caminho_objeto",
+        "status_backup",
+        "local",
+        "urgente"
+      ],
+      "title": "ArmazenamentoOCI",
+      "type": "object"
+    },
+    "Classificacao": {
+      "description": "Os 4 campos de classificação mostrados ao analista (T1).",
+      "properties": {
+        "especialidade": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Especialidade"
+        },
+        "nivel_prioridade": {
+          "enum": [
+            "Urgente",
+            "Rotina"
+          ],
+          "title": "Nivel Prioridade",
+          "type": "string"
+        },
+        "score_confianca_classificacao": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score Confianca Classificacao",
+          "type": "number"
+        },
+        "tipo_documento": {
+          "$ref": "#/$defs/TipoDocumento"
+        }
+      },
+      "required": [
+        "tipo_documento",
+        "nivel_prioridade",
+        "score_confianca_classificacao"
+      ],
+      "title": "Classificacao",
+      "type": "object"
+    },
+    "DecisaoRoteamento": {
+      "properties": {
+        "destino_principal": {
+          "title": "Destino Principal",
+          "type": "string"
+        },
+        "justificativa_roteamento": {
+          "title": "Justificativa Roteamento",
+          "type": "string"
+        },
+        "notificacao_gerada": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Notificacao"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "regra_aplicada": {
+          "title": "Regra Aplicada",
+          "type": "string"
+        },
+        "requer_auditoria_humana": {
+          "title": "Requer Auditoria Humana",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "destino_principal",
+        "requer_auditoria_humana",
+        "justificativa_roteamento",
+        "regra_aplicada"
+      ],
+      "title": "DecisaoRoteamento",
+      "type": "object"
+    },
+    "Notificacao": {
+      "properties": {
+        "canal": {
+          "title": "Canal",
+          "type": "string"
+        },
+        "mensagem": {
+          "title": "Mensagem",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canal",
+        "mensagem"
+      ],
+      "title": "Notificacao",
+      "type": "object"
+    },
+    "TipoDocumento": {
+      "description": "As 6 categorias clínicas do edital + 'Desconhecido' (dúvida → revisão humana).",
+      "enum": [
+        "Receituário Médico",
+        "Laudo de Exame de Imagem",
+        "Laudo Laboratorial",
+        "Guia de Solicitação de Procedimento",
+        "Relatório de Alta",
+        "Atestado Médico",
+        "Desconhecido"
+      ],
+      "title": "TipoDocumento",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "armazenamento_oci": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ArmazenamentoOCI"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "classificacao": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Classificacao"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "dados_extraidos": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dados Extraidos"
+    },
+    "decisao_roteamento": {
+      "$ref": "#/$defs/DecisaoRoteamento"
+    },
+    "documento_id": {
+      "title": "Documento Id",
+      "type": "string"
+    },
+    "problemas": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Problemas",
+      "type": "array"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status",
+    "documento_id",
+    "decisao_roteamento"
+  ],
+  "title": "ResultadoTriagem",
+  "type": "object"
+}

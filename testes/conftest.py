@@ -1,20 +1,30 @@
 import io
+
 import pytest
 from fastapi.testclient import TestClient
 from reportlab.pdfgen import canvas
 
 from app.api import criar_app
-from app.schemas import Extracao, Paciente, Medico, Medicamento, Exame
 
-LAUDO_TEP = ("HOSPITAL SANTA LUCIA - LAUDO DE EXAME RADIOLOFICO.Paciente: Carlos Eduardo Mendes, 52 anos. "
-             "Solicitante: Dra. Renata Silveira CRM-SP 145892. Exame: Tomografia de Torax com contraste. "
-             "Indicacao: Suspeita de embolia pulmonar aguda, dispneia subita. Achados: Falha de enchimento em "
-             "arteria pulmonar principal direita compativel com TEP agudo. CONCLUSAO: Quadro compativel com "
-             "Tromboembolismo Pulmonar Agudo. Sugere-se correlacao clinica urgente.")
-RECEITA = ("RECEITUARIO. Paciente: Maria Souza, 40 anos. Dr. Paulo Lima CRM 99887 SP. "
-           "Amoxicilina 500mg de 8 em 8 horas por 7 dias.")
-GUIA = ("GUIA DE SOLICITACAO. Paciente: Joao Pereira, 61 anos. Dra. Ana Torres CRM-RJ 55443. "
-        "Procedimento: Ressonancia de joelho codigo TUSS 40801020.")
+# from app.schemas import Exame, Extracao, Medicamento, Medico, Paciente
+from app.schemas import Extracao, Medico, Paciente
+
+LAUDO_TEP = (
+    "HOSPITAL SANTA LUCIA - LAUDO DE EXAME RADIOLOFICO.Paciente: Carlos Eduardo Mendes, 52 anos. "
+    "Solicitante: Dra. Renata Silveira CRM-SP 145892. Exame: Tomografia de Torax com contraste. "
+    "Indicacao: Suspeita de embolia pulmonar aguda, dispneia subita. Achados: Falha de enchimento em "
+    "arteria pulmonar principal direita compativel com TEP agudo. CONCLUSAO: Quadro compativel com "
+    "Tromboembolismo Pulmonar Agudo. Sugere-se correlacao clinica urgente."
+)
+RECEITA = (
+    "RECEITUARIO. Paciente: Maria Souza, 40 anos. Dr. Paulo Lima CRM 99887 SP. "
+    "Amoxicilina 500mg de 8 em 8 horas por 7 dias."
+)
+GUIA = (
+    "GUIA DE SOLICITACAO. Paciente: Joao Pereira, 61 anos. Dra. Ana Torres CRM-RJ 55443. "
+    "Procedimento: Ressonancia de joelho codigo TUSS 40801020."
+)
+
 
 @pytest.fixture(autouse=True)
 def storage_isolado(tmp_path, monkeypatch):
@@ -68,7 +78,7 @@ def pdf_com_texto(paginas: list) -> bytes:
 def pdf_sem_texto() -> bytes:
     buf = io.BytesIO()
     c = canvas.Canvas(buf)
-    c.rect(100, 100, 200, 200)     # só desenho, nenhum texto selecionável
+    c.rect(100, 100, 200, 200)  # só desenho, nenhum texto selecionável
     c.showPage()
     c.save()
     return buf.getvalue()

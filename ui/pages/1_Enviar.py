@@ -9,8 +9,10 @@ import streamlit as st
 
 ARQUIVO_REGRAS = Path(__file__).resolve().parents[2] / "config" / "regras.json"
 TIPO_ARQUIVO_TEXTO = "TEXTO"
-MAX_TEXTO = 200_000            # mesmo limite do servidor (app/schemas.py)
-TIMEOUT = (3.05, 15)           # (conexão, leitura) em segundos
+TIPOS_ARQUIVO = ["pdf", "jpg", "jpeg", "png"]  # H1.1.3 T6
+MAX_TEXTO = 200_000  # mesmo limite do servidor (app/schemas.py)
+MAX_ARQUIVO = 10 * 1024 * 1024  # mesmo limite da rota /triagem/arquivo
+TIMEOUT = (3.05, 15)  # (conexão, leitura) em segundos
 HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
 
 
@@ -62,6 +64,19 @@ def mensagem_do_servidor(resp) -> str:
     return f"Erro no servidor (HTTP {resp.status_code}). Tente novamente em instantes."
 
 
+def _resposta_envio(resp, documento_id: str) -> tuple[bool, str]:
+    """Interpreta a resposta de /triagem e de /triagem/arquivo (mesmo formato)."""
+    if resp.status_code == 202:
+        try:
+            corpo = resp.json()
+        except ValueError:
+            corpo = {}
+        doc_id = corpo.get("documento_id") or documento_id
+        status = corpo.get("status") or "recebido"
+        return True, f"Documento **{doc_id}** recebido. Status: **{status}**."
+    return False, mensagem_do_servidor(resp)
+
+
 def enviar_documento(url_base: str, payload: dict) -> tuple[bool, str]:
     try:
         resp = requests.post(
@@ -69,44 +84,79 @@ def enviar_documento(url_base: str, payload: dict) -> tuple[bool, str]:
         )
     except requests.RequestException:
         # Sem str(e): a exceção pode trazer URL e detalhes internos.
-        return False, "Não foi possível se comunicar com a API. Verifique se ela está no ar."
-    if resp.status_code == 202:
-        try:
-            corpo = resp.json()
-        except ValueError:
-            corpo = {}
-        doc_id = corpo.get("documento_id") or payload["documento_id"]
-        status = corpo.get("status") or "recebido"
-        return True, f"Documento **{doc_id}** recebido. Status: **{status}**."
-    return False, mensagem_do_servidor(resp)
+        return (
+            False,
+            "Não foi possível se comunicar com a API. Verifique se ela está no ar.",
+        )
+    return _resposta_envio(resp, payload["documento_id"])
+
+
+def enviar_arquivo(
+    url_base: str, documento_id: str, canal: str, arquivo
+) -> tuple[bool, str]:
+    """H1.1.3 T6: envia PDF, JPG ou PNG para POST /triagem/arquivo."""
+    try:
+        resp = requests.post(
+            f"{url_base}/triagem/arquivo",
+            data={"documento_id": documento_id.strip(), "canal_origem": canal},
+            files={
+                "arquivo": (
+                    arquivo.name,
+                    arquivo.getvalue(),
+                    arquivo.type or "application/octet-stream",
+                )
+            },
+            timeout=TIMEOUT,
+            allow_redirects=False,
+        )
+    except requests.RequestException:
+        return (
+            False,
+            "Não foi possível se comunicar com a API. Verifique se ela está no ar.",
+        )
+    return _resposta_envio(resp, documento_id)
 
 
 def _enviar() -> None:
     """Roda ao clicar em 'Enviar', antes da página ser redesenhada."""
     ss = st.session_state
+    n = ss.get("n_upload", 0)
+    arquivo = ss.get(f"arquivo_{n}")  # None se nenhum arquivo foi escolhido
     texto = ss.get("texto_documento", "")
     doc_id = (ss.get("documento_id") or "").strip()
 
     if not doc_id:
         ss["_resultado"] = (False, "Informe o ID do documento.")
-    elif not texto.strip():
+    elif arquivo is None and not texto.strip():
         ss["_resultado"] = (False, "documento vazio")
-    elif len(texto) > MAX_TEXTO:
+    elif arquivo is None and len(texto) > MAX_TEXTO:
         ss["_resultado"] = (False, f"documento acima de {MAX_TEXTO} caracteres")
+    elif arquivo is not None and arquivo.size > MAX_ARQUIVO:
+        ss["_resultado"] = (False, "arquivo acima de 10 MB")
     elif not ss.get("confirmo_sintetico"):
-        ss["_resultado"] = (False, "Confirme que o documento contém apenas dados sintéticos.")
-    else:
-        ok, msg = enviar_documento(
-            url_da_api(), montar_payload(doc_id, texto, ss.get("canal_origem", ""))
+        ss["_resultado"] = (
+            False,
+            "Confirme que o documento contém apenas dados sintéticos.",
         )
+    else:
+        canal = ss.get("canal_origem", "")
+        if arquivo is not None:  # arquivo tem prioridade sobre o texto
+            ok, msg = enviar_arquivo(url_da_api(), doc_id, canal, arquivo)
+        else:
+            ok, msg = enviar_documento(
+                url_da_api(), montar_payload(doc_id, texto, canal)
+            )
         ss["_resultado"] = (ok, msg)
-        if ok:  # não deixa o texto clínico parado na sessão
+        if ok:  # não deixa o conteúdo clínico parado na sessão
             ss["texto_documento"] = ""
             ss["confirmo_sintetico"] = False
             ss["documento_id"] = novo_id()
+            ss["n_upload"] = n + 1  # nova chave = uploader limpo
 
 
-st.set_page_config(page_title="Enviar documento · MediFlow", page_icon="🏥", layout="wide")
+st.set_page_config(
+    page_title="Enviar documento · MediFlow", page_icon="🏥", layout="wide"
+)
 st.title("📨 Enviar documento para triagem")
 
 st.info(
@@ -119,7 +169,9 @@ if not url_valida(URL):
     st.error("A variável de ambiente API_URL é inválida. Use http:// ou https://.")
     st.stop()
 if sem_https_fora_do_local(URL):
-    st.warning("A API não usa HTTPS: os dados trafegam sem criptografia. Não envie dados reais.")
+    st.warning(
+        "A API não usa HTTPS: os dados trafegam sem criptografia. Não envie dados reais."
+    )
 
 canais = carregar_canais()
 if not canais:
@@ -133,6 +185,20 @@ resultado = st.session_state.pop("_resultado", None)
 if resultado:
     (st.success if resultado[0] else st.error)(resultado[1])
 
+# H1.1.3 T6: o uploader fica FORA do st.form, senão a prévia só apareceria depois do envio.
+# A chave muda a cada envio com sucesso (n_upload) para limpar o arquivo escolhido.
+n_upload = st.session_state.get("n_upload", 0)
+arquivo = st.file_uploader(
+    "Foto, scan ou PDF (opcional; se enviado, vale no lugar do texto)",
+    type=TIPOS_ARQUIVO,
+    key=f"arquivo_{n_upload}",
+)
+if arquivo is not None:
+    if (arquivo.type or "").startswith("image/"):
+        st.image(arquivo, caption=arquivo.name, width=400)
+    else:
+        st.caption(f"📄 {arquivo.name} ({arquivo.size // 1024} KB)")
+
 with st.form("envio"):
     st.text_input(
         "ID do documento",
@@ -141,14 +207,20 @@ with st.form("envio"):
         help="Identificador único. Letras, números, '_' ou '-'. "
         "Não use CPF, nome ou outro dado do paciente.",
     )
-    st.selectbox("Canal de origem", canais, key="canal_origem", help="De onde o documento chegou.")
+    st.selectbox(
+        "Canal de origem",
+        canais,
+        key="canal_origem",
+        help="De onde o documento chegou.",
+    )
     st.text_area(
         "Texto do documento",
         key="texto_documento",
         height=250,
         # Sem max_chars de propósito: ele cortaria o texto em silêncio (perda de dados clínicos).
         # O limite é checado em _enviar(), que mostra um erro claro.
-        placeholder="Cole aqui o texto do laudo, receita, guia, alta ou atestado.",
+        placeholder="Cole aqui o texto do laudo, receita, guia, alta ou atestado "
+        "(ignorado se você anexou um arquivo acima).",
     )
     st.checkbox(
         "Confirmo que este documento contém apenas dados sintéticos (sem dados reais de pacientes).",

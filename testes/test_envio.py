@@ -1,4 +1,5 @@
 """T7: POST /triagem com o grafo e o armazenamento isolados (nada vai à nuvem)."""
+
 import logging
 
 import pytest
@@ -6,14 +7,18 @@ import pytest
 from app import storage
 from testes.conftest import cliente_com, extracao
 
-CORPO = {"documento_id": "DOC-CLIN-2026-8942", "tipo_arquivo": "PDF",
-         "documento_texto": "LAUDO sintetico. Paciente: Fulano Sintetico de Souza, 52 anos.",
-         "canal_origem": "Pronto_Socorro"}
+CORPO = {
+    "documento_id": "DOC-CLIN-2026-8942",
+    "tipo_arquivo": "PDF",
+    "documento_texto": "LAUDO sintetico. Paciente: Fulano Sintetico de Souza, 52 anos.",
+    "canal_origem": "Pronto_Socorro",
+}
 CAMINHO = "recebidos/DOC-CLIN-2026-8942.txt"
 
 
 class Espiao:
     """Extrator falso que anota o que recebeu: prova se o grafo rodou ou não."""
+
     def __init__(self):
         self.textos = []
 
@@ -38,7 +43,7 @@ def test_envio_valido_retorna_202_com_id_e_recebido(client, espiao):
     assert r.status_code == 202
     assert r.json() == {"documento_id": CORPO["documento_id"], "status": "recebido"}
     assert storage.ler(CAMINHO).decode("utf-8") == CORPO["documento_texto"]
-    assert espiao.textos == [CORPO["documento_texto"]]          # o grafo foi disparado
+    assert espiao.textos == [CORPO["documento_texto"]]  # o grafo foi disparado
 
 
 # ---- cenário 2: texto vazio ----
@@ -52,14 +57,17 @@ def test_texto_vazio_retorna_422_e_nada_e_gravado_nem_processado(client, espiao,
 
 
 # ---- segurança da entrada ----
-@pytest.mark.parametrize("campo,valor", [
-    ("documento_id", "../../fora"),
-    ("documento_id", "a/b"),
-    ("documento_id", "x" * 65),
-    ("canal_origem", "<script>"),
-    ("canal_origem", ""),
-    pytest.param("documento_texto", "x" * 200_001, id="texto-acima-do-limite"),
-])
+@pytest.mark.parametrize(
+    "campo,valor",
+    [
+        ("documento_id", "../../fora"),
+        ("documento_id", "a/b"),
+        ("documento_id", "x" * 65),
+        ("canal_origem", "<script>"),
+        ("canal_origem", ""),
+        pytest.param("documento_texto", "x" * 200_001, id="texto-acima-do-limite"),
+    ],
+)
 def test_entrada_insegura_retorna_422_e_nada_e_gravado(client, espiao, campo, valor):
     r = client.post("/triagem", json={**CORPO, campo: valor})
     assert r.status_code == 422
@@ -91,7 +99,12 @@ def test_id_repetido_retorna_409_sem_sobrescrever_e_sem_reprocessar(client, espi
 def test_conteudo_do_documento_nao_aparece_nos_logs(client, caplog):
     caplog.set_level(logging.DEBUG)
     client.post("/triagem", json=CORPO)
-    client.post("/triagem", json={**CORPO, "documento_texto": "   "})          # 422
+    client.post("/triagem", json={**CORPO, "documento_texto": "   "})  # 422
     assert caplog.records, "esperava ao menos o log de requisição"
-    for trecho in ("Fulano", "Sintetico de Souza", "LAUDO sintetico", CORPO["documento_texto"]):
+    for trecho in (
+        "Fulano",
+        "Sintetico de Souza",
+        "LAUDO sintetico",
+        CORPO["documento_texto"],
+    ):
         assert trecho not in caplog.text

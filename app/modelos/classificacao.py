@@ -1,5 +1,13 @@
+"""Modelos de classificação de documento (T1 — US "ver o tipo do documento").
+
+O enum TipoDocumento é a FONTE ÚNICA das categorias do edital (as 6
+categorias clínicas + "Desconhecido" como válvula de segurança). O Literal que
+vai no response_schema do Gemini é GERADO a partir do enum, então os dois nunca
+divergem.
+"""
+
 from enum import Enum
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +49,6 @@ class Classificacao(BaseModel):
     """Os 4 campos de classificação mostrados ao analista (T1)."""
 
     tipo_documento: TipoDocumento
-    especialidade: Optional[str] = None
+    especialidade: str | None = None
     nivel_prioridade: Prioridade
     score_confianca_classificacao: float = Field(ge=0, le=1)

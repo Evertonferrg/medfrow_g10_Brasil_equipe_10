@@ -1,23 +1,55 @@
-
 import csv
-from functools import lru_cache
-from pathlib import Path
 import re
 import unicodedata
+from functools import lru_cache
+from pathlib import Path
+
 from . import config
 from .schemas import Extracao
- 
-UFS_VALIDAS = {"AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
-               "PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"}
- 
+
+UFS_VALIDAS = {
+    "AC",
+    "AL",
+    "AP",
+    "AM",
+    "BA",
+    "CE",
+    "DF",
+    "ES",
+    "GO",
+    "MA",
+    "MT",
+    "MS",
+    "MG",
+    "PA",
+    "PB",
+    "PR",
+    "PE",
+    "PI",
+    "RJ",
+    "RN",
+    "RS",
+    "RO",
+    "RR",
+    "SC",
+    "SP",
+    "SE",
+    "TO",
+}
+
 # Quanto cada problema desconta do score (ajustável)
 PENALIDADES = {
-    "paciente_ausente": 0.30, "crm_ausente": 0.25, "tipo_desconhecido": 0.40,
-    "inconsistencia": 0.20, "nome_nao_encontrado": 0.30,
-    "medicamento_inventado": 0.30, "posologia_incompleta": 0.15,
-    "tuss_nao_encontrado": 0.20, "cid_invalido": 0.10,
-    "posologia_nao_confirmada": 0.15, #h1.3.4
-    "exame_inventado": 0.30,# h1.3.5
+    "paciente_ausente": 0.30,
+    "crm_ausente": 0.25,
+    "tipo_desconhecido": 0.40,
+    "inconsistencia": 0.20,
+    "nome_nao_encontrado": 0.30,
+    "medicamento_inventado": 0.30,
+    "posologia_incompleta": 0.15,
+    "tuss_nao_encontrado": 0.20,
+    "cid_invalido": 0.10,
+    "posologia_nao_confirmada": 0.15,  # h1.3.4
+    "exame_inventado": 0.30,  # h1.3.5
 }
 CID_REGEX = re.compile(r"^[A-Z]\d{2}(\.\d{1,2})?$")
 ARQUIVO_CID10 = Path(__file__).resolve().parents[1] / "config" / "cid10.csv"
@@ -34,15 +66,15 @@ def carregar_cids_validos(caminho: Path | None = None) -> frozenset[str]:
             if codigo:
                 codigos.add(codigo)
     return frozenset(codigos)
- 
- 
+
+
 def _simplificar(texto: str) -> str:
     """Sem acentos, minúsculas e espaços normalizados, para comparar textos."""
     t = unicodedata.normalize("NFD", texto)
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     return " ".join(t.lower().split())
- 
- 
+
+
 def normalizar_crm(crm):
     """'CRM-SP 145892' (e variações) -> '145892-SP'. None se faltar número ou UF válida."""
     if not crm or not isinstance(crm, str):
@@ -51,22 +83,31 @@ def normalizar_crm(crm):
     numeros = re.findall(r"\d+", limpo)
     candidatas = re.findall(r"\b([A-Za-z]{2})\b", limpo.upper().replace("CRM", " "))
     ufs = [c for c in candidatas if c in UFS_VALIDAS]
-    if len(numeros) == 1 and 3 <= len(numeros[0]) <= 7 and len(ufs) == 1 and len(candidatas) == 1:
+    if (
+        len(numeros) == 1
+        and 3 <= len(numeros[0]) <= 7
+        and len(ufs) == 1
+        and len(candidatas) == 1
+    ):
         return f"{numeros[0]}-{ufs[0]}"
     return None
- 
- 
+
+
 def _nome_aparece_no_texto(nome: str, texto: str) -> bool:
     """TODAS as palavras do nome precisam existir no texto (ignora Dr./Dra.),
     como palavras inteiras (assim 'ana' não casa com 'banana')."""
     palavras_texto = set(re.findall(r"\w+", _simplificar(texto)))
-    palavras = [p for p in re.findall(r"\w+", _simplificar(nome)) if p not in ("dr", "dra")]
+    palavras = [
+        p for p in re.findall(r"\w+", _simplificar(nome)) if p not in ("dr", "dra")
+    ]
     return all(p in palavras_texto for p in palavras)
- 
-#H1.3.4 medicamentos e posologia
+
+
+# H1.3.4 medicamentos e posologia
 CAMPO_FALTANTE = "campo faltante: "
 CAMPO_NAO_CONFIRMADO = "campo não confirmado no texto: "
-JANELA_MEDICAMENTO = 400 
+JANELA_MEDICAMENTO = 400
+
 
 def _achar_frase(frase_s: str, texto_s: str):
     """(inicio, fim) da 1º ocorrência da frase como palavras interias, ou Nome.
@@ -76,8 +117,10 @@ def _achar_frase(frase_s: str, texto_s: str):
     m = re.search(rf"(?<!\w){re.escape(frase_s)}(?!\w)", texto_s)
     return (m.start(), m.end()) if m else None
 
+
 def _dose_normalizada(dose: str) -> str:
     return re.sub(r"\s+", "", _simplificar(dose).replace(",", "."))
+
 
 def _dose_na_janela(dose: str, janela_s: str) -> bool:
     """'500mg' = '500 mg' , mas  '5mg' NÃO casa como '25mg' nem '1.5mg', e não há conversão de unidade."""
@@ -117,13 +160,15 @@ def _validar_medicamentos(extracao: Extracao, texto_s: str):
         nome_s = _simplificar(m.nome)
         pos = _achar_frase(nome_s, texto_s)
         if pos is None and nome_s:
-            pos = _achar_frase(nome_s.split()[0], texto_s)      # 'Dipirona sódica' -> 'Dipirona'
+            pos = _achar_frase(
+                nome_s.split()[0], texto_s
+            )  # 'Dipirona sódica' -> 'Dipirona'
         if pos is None:
             problemas.append(f"Medicamento '{m.nome}' não encontrado no texto original")
             pen += PENALIDADES["medicamento_inventado"]
             continue
         chave = (nome_s.split()[0], _dose_normalizada(m.dose or ""))
-        if chave in vistos:                                        # mesmo medicamento repetido
+        if chave in vistos:  # mesmo medicamento repetido
             continue
         vistos.add(chave)
         candidatos.append((m, pos[0]))
@@ -132,32 +177,47 @@ def _validar_medicamentos(extracao: Extracao, texto_s: str):
     mantidos = []
     for m, ini in candidatos:
         seguintes = [i for i in inicios if i > ini]
-        fim = min(seguintes[0] if seguintes else ini + JANELA_MEDICAMENTO, ini + JANELA_MEDICAMENTO)
+        fim = min(
+            seguintes[0] if seguintes else ini + JANELA_MEDICAMENTO,
+            ini + JANELA_MEDICAMENTO,
+        )
         janela = texto_s[ini:fim]
         tinha_dose = bool(m.dose)
-        for campo, confere in (("dose", _dose_na_janela), ("via", _valor_na_janela),
-                               ("frequencia", _valor_na_janela), ("duracao", _valor_na_janela)):
+        for campo, confere in (
+            ("dose", _dose_na_janela),
+            ("via", _valor_na_janela),
+            ("frequencia", _valor_na_janela),
+            ("duracao", _valor_na_janela),
+        ):
             valor = getattr(m, campo)
             if valor and not confere(valor, janela):
-                problemas.append(f"{CAMPO_NAO_CONFIRMADO}{campo} (medicamento '{m.nome}')")
+                problemas.append(
+                    f"{CAMPO_NAO_CONFIRMADO}{campo} (medicamento '{m.nome}')"
+                )
                 pen += PENALIDADES["posologia_nao_confirmada"]
                 setattr(m, campo, None)
         if e_receita and not tinha_dose:
-            problemas.append(f"{CAMPO_FALTANTE}dose | Medicamento '{m.nome}' sem dose informada")
+            problemas.append(
+                f"{CAMPO_FALTANTE}dose | Medicamento '{m.nome}' sem dose informada"
+            )
             pen += PENALIDADES["posologia_incompleta"]
         mantidos.append(m)
     extracao.medicamentos = mantidos
     return problemas, pen
 
-#h1.3.5 exames e procedimentos
+
+# h1.3.5 exames e procedimentos
 DISTANCIA_MAXIMA_TUSS = 300
 
+
 def _padrao_tuss(digitos: str) -> str:
-    """Os digitos do código, com ponto, hifen ou espaço opicionais entre eles, sem colocar em outro número. """
+    """Os digitos do código, com ponto, hifen ou espaço opicionais entre eles, sem colocar em outro número."""
     return r"(?<!\d)" + r"[.\-\s]?".join(digitos) + r"(?!\d)"
+
 
 def _distancia(posicao: int, trecho) -> int:
     return max(trecho[0] - posicao, posicao - trecho[1], 0)
+
 
 def _validar_exames(extracao: Extracao, texto_s: str):
     """Um item por exame, todos presentes no texto, sem duplicatas. O código TUSS só fica se estiver
@@ -165,7 +225,7 @@ def _validar_exames(extracao: Extracao, texto_s: str):
     problemas, pen = [], 0.0
 
     unicos = {}
-    for e in extracao.exames:                          # funde duplicatas; o código não se perde
+    for e in extracao.exames:  # funde duplicatas; o código não se perde
         chave = _simplificar(e.nome)
         if chave in unicos:
             if not unicos[chave].codigo_tuss and e.codigo_tuss:
@@ -187,9 +247,15 @@ def _validar_exames(extracao: Extracao, texto_s: str):
         if not e.codigo_tuss:
             continue
         digitos = re.sub(r"\D", "", e.codigo_tuss)
-        ocorrencias = [m.start() for m in re.finditer(_padrao_tuss(digitos), texto_s)] if digitos else []
+        ocorrencias = (
+            [m.start() for m in re.finditer(_padrao_tuss(digitos), texto_s)]
+            if digitos
+            else []
+        )
         if not ocorrencias:
-            problemas.append(f"Código TUSS {e.codigo_tuss} não encontrado no texto original")
+            problemas.append(
+                f"Código TUSS {e.codigo_tuss} não encontrado no texto original"
+            )
             pen += PENALIDADES["tuss_nao_encontrado"]
             e.codigo_tuss = None
             continue
@@ -197,41 +263,49 @@ def _validar_exames(extracao: Extracao, texto_s: str):
         junto = any(
             _distancia(o, pos) <= min(_distancia(o, outro) for outro in todos)
             and (limite is None or _distancia(o, pos) <= limite)
-            for o in ocorrencias)
+            for o in ocorrencias
+        )
         if junto:
-            e.codigo_tuss = digitos                     # forma canônica: só dígitos
+            e.codigo_tuss = digitos  # forma canônica: só dígitos
         else:
-            problemas.append(f"Código TUSS {e.codigo_tuss} não está junto do exame '{e.nome}' no texto")
+            problemas.append(
+                f"Código TUSS {e.codigo_tuss} não está junto do exame '{e.nome}' no texto"
+            )
             pen += PENALIDADES["tuss_nao_encontrado"]
             e.codigo_tuss = None
     extracao.exames = [e for e, _ in achados]
     return problemas, pen
 
+
 def validar(extracao: Extracao, texto: str):
     """Devolve (extracao_corrigida, lista_de_problemas, score_final)."""
     problemas, pen = [], 0.0
     texto_s = _simplificar(texto)
- 
+
     # 1) CRM: normaliza e confere o número no texto (nunca um valor "plausível")
     bruto = extracao.medico_solicitante.crm
     crm = normalizar_crm(bruto)
     erro_crm = None
     if not bruto:
         erro_crm = "CRM do solicitante não encontrado"
-        problemas.append(erro_crm); pen += PENALIDADES["crm_ausente"]
+        problemas.append(erro_crm)
+        pen += PENALIDADES["crm_ausente"]
     elif not crm:
         erro_crm = f"CRM em formato inválido: '{bruto}'"
-        problemas.append(erro_crm); pen += PENALIDADES["crm_ausente"]
+        problemas.append(erro_crm)
+        pen += PENALIDADES["crm_ausente"]
     elif crm.split("-")[0] not in re.sub(r"[.\s]", "", texto):
         erro_crm = f"CRM {crm} não consta no texto original"
-        problemas.append(erro_crm); pen += PENALIDADES["crm_ausente"]
+        problemas.append(erro_crm)
+        pen += PENALIDADES["crm_ausente"]
         crm = None
     extracao.medico_solicitante.crm = crm
- 
+
     # 2) Paciente e médico: o nome existe no texto?
     nome = extracao.paciente.nome
     if not nome:
-        problemas.append("Nome do paciente ausente"); pen += PENALIDADES["paciente_ausente"]
+        problemas.append("Nome do paciente ausente")
+        pen += PENALIDADES["paciente_ausente"]
     elif not _nome_aparece_no_texto(nome, texto):
         problemas.append(f"Nome '{nome}' não encontrado no texto original")
         pen += PENALIDADES["nome_nao_encontrado"]
@@ -239,15 +313,17 @@ def validar(extracao: Extracao, texto: str):
     if medico and not _nome_aparece_no_texto(medico, texto):
         problemas.append(f"Nome do médico '{medico}' não encontrado no texto original")
         pen += PENALIDADES["nome_nao_encontrado"]
- 
+
     # 3) Tipo e inconsistências apontadas pelo LLM
     if extracao.tipo_documento == "Desconhecido":
-        problemas.append("Tipo de documento não identificado"); pen += PENALIDADES["tipo_desconhecido"]
+        problemas.append("Tipo de documento não identificado")
+        pen += PENALIDADES["tipo_desconhecido"]
     for item in extracao.inconsistencias:
-        problemas.append(f"Inconsistência: {item}"); pen += PENALIDADES["inconsistencia"]
+        problemas.append(f"Inconsistência: {item}")
+        pen += PENALIDADES["inconsistencia"]
     if erro_crm and erro_crm not in extracao.inconsistencias:
         extracao.inconsistencias.append(erro_crm)
- 
+
     # 4) CID: formato válido e presente na tabela CID-10? Está escrito ou sugerido?
     if extracao.cid_sugerido:
         cid_bruto = extracao.cid_sugerido.strip().upper()
@@ -260,7 +336,10 @@ def validar(extracao: Extracao, texto: str):
         if CID_REGEX.match(cid) and cid in cids_validos:
             extracao.cid_sugerido = cid
             texto_lower = texto.lower()
-            escrito = cid.lower() in texto_lower or cid.replace(".", "").lower() in texto_lower
+            escrito = (
+                cid.lower() in texto_lower
+                or cid.replace(".", "").lower() in texto_lower
+            )
             origem = "escrito" if escrito else "sugerido"
             extracao.origem_cid = origem
             extracao.cid_origem = origem
@@ -270,25 +349,32 @@ def validar(extracao: Extracao, texto: str):
             extracao.cid_sugerido = None
             extracao.origem_cid = None
             extracao.cid_origem = None
- 
+
     # 5) Medicamentos: descarta inventados, confere posologia na região do medicamento
     p, d = _validar_medicamentos(extracao, texto_s)
-    problemas += p; pen += d
+    problemas += p
+    pen += d
 
     # 6) Exames: funde duplicatas, descarta inventados, confere TUSS junto do exame
     p, d = _validar_exames(extracao, texto_s)
-    problemas += p; pen += d
- 
+    problemas += p
+    pen += d
+
     # 7) Evidências: só ficam os trechos que realmente existem no documento
-    extracao.evidencias = [ev for ev in extracao.evidencias
-                           if ev.trecho and _simplificar(ev.trecho) in texto_s]
- 
+    extracao.evidencias = [
+        ev
+        for ev in extracao.evidencias
+        if ev.trecho and _simplificar(ev.trecho) in texto_s
+    ]
+
     # 8) Score final: base do LLM limitada a 0.95 menos as penalidades
     base = min(extracao.score_confianca_classificacao, 0.95)
     return extracao, problemas, max(0.0, round(base - pen, 2))
- 
- 
-def motivo_revisao(score: float, problemas: list, limite: float, erro: str | None = None) -> str:
+
+
+def motivo_revisao(
+    score: float, problemas: list, limite: float, erro: str | None = None
+) -> str:
     """Motivo registrado no estado quando o documento não é roteado sozinho.
 
     A ordem espelha a decisão do grafo: falha de extração, baixa confiança,

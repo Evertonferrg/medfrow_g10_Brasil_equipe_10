@@ -10,6 +10,10 @@ __pycache__/
 venv/
 .venv/
 
+# Cache do ruff
+.ruff_cache
+
 # Segredos e dados locais
 .env
 storage_local/
+debug.log

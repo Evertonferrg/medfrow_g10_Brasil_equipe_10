@@ -16,7 +16,9 @@ def configurar_log() -> None:
     logger.setLevel(logging.INFO)
     if not logger.handlers:
         h = logging.StreamHandler()
-        h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        h.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
         logger.addHandler(h)
 
 
@@ -40,10 +42,18 @@ class MedirTempoMiddleware:
             nivel = logging.WARNING if duracao_ms > LIMITE_MS else logging.INFO
             caminho = limpar(scope.get("path", ""))
             logger.log(
-                nivel, "%s %s -> %s em %.1f ms", scope.get("method", "?"), caminho, status,
+                nivel,
+                "%s %s -> %s em %.1f ms",
+                scope.get("method", "?"),
+                caminho,
+                status,
                 duracao_ms,
-                extra={"metodo": scope.get("method", "?"), "caminho": caminho,
-                       "status_http": status, "duracao_ms": duracao_ms},
+                extra={
+                    "metodo": scope.get("method", "?"),
+                    "caminho": caminho,
+                    "status_http": status,
+                    "duracao_ms": duracao_ms,
+                },
             )
 
         async def enviar(message):

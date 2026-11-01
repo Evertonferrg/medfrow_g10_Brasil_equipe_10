@@ -1,21 +1,28 @@
-import json
 import logging
 import re
+from typing import Annotated
 
-from fastapi import FastAPI, BackgroundTasks, File, Form, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
-from app import config, storage
-from app.schemas import DocumentoEntrada, validar_id
+from app import storage
+from app.api.tempo import MedirTempoMiddleware, configurar_log
+from app.arquivos import extensao_por_assinatura
+from app.resposta import carregar_resultado
+from app.schemas import DocumentoEntrada, ResultadoTriagem, validar_id
 from app.servico import processar
 from app.storage import ObjetoJaExisteError
-from app.api.tempo import MedirTempoMiddleware, configurar_log
 
 logger = logging.getLogger(__name__)
 
-PASTAS_RESULTADO = ('processados/urgentes', 'processados/rotina', 'auditoria_humana')
 MAX_PDF = 10 * 1024 * 1024
+MAX_ARQUIVO = 10 * 1024 * 1024
+# H2.3.1 T3: documenta o formato combinado no OpenAPI (/docs). Usamos "responses" e não
+# response_model porque estas rotas também devolvem 202 {"documento_id","status"}.
+# RESPOSTA_RESULTADO = {200: {"model": ResultadoTriagem, "description": "Resultado da triagem"}}
+RESPOSTA_RESULTADO = {"model": ResultadoTriagem, "description": "Resultado da triagem"}
 # T4: charset limpo para o ID da rota /documentos — sem "/", "\" nem "." (e
 # portanto sem ".."). A checagem acontece ANTES de montar qualquer caminho.
 ID_LIMPO = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -26,117 +33,182 @@ def _validar_id_limpo(documento_id: str):
     if not ID_LIMPO.fullmatch(documento_id or ""):
         return JSONResponse(
             status_code=400,
-            content={"detail": "documento_id inválido: use apenas letras, números, "
-                               "'-' e '_', sem '/', '\\', '..' ou espaços."})
+            content={
+                "detail": "documento_id inválido: use apenas letras, números, "
+                "'-' e '_', sem '/', '\\', '..' ou espaços."
+            },
+        )
     return None
+
+
+def _recebido(documento_id: str) -> bool:
+    """True se o original já está em recebidos/ (em qualquer formato aceito)."""
+    return any(
+        storage.existe(f"recebidos/{documento_id}{e}") for e in storage.EXTENSOES
+    )
+
+
+def _responder_consulta(documento_id: str):
+    """Resultado no formato combinado (validado), 202 se ainda processa, 404 se não existe."""
+    try:
+        resultado = carregar_resultado(documento_id)
+    except ValidationError:
+        logger.exception("Resultado salvo fora do formato: %s", documento_id)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "resultado armazenado fora do formato combinado"},
+        )
+    if resultado is not None:
+        return JSONResponse(status_code=200, content=resultado)
+    if _recebido(documento_id):
+        return JSONResponse(
+            status_code=202,
+            content={"documento_id": documento_id, "status": "processando"},
+        )
+    return JSONResponse(status_code=404, content={"detail": "documento não encontrado"})
+
 
 def criar_app(extrator=None) -> FastAPI:
     if extrator is None:
         from app.llm import extrair as extrator
-    app = FastAPI(title='MediFlow', version='0.1')
+    app = FastAPI(title="MediFlow", version="0.1")
     configurar_log()
-    app.add_middleware(MedirTempoMiddleware)   # T8: log da duração de cada requisição
+    app.add_middleware(MedirTempoMiddleware)  # T8: log da duração de cada requisição
 
     @app.exception_handler(RequestValidationError)
     async def _422(request: Request, exc: RequestValidationError):
         erro = exc.errors()[0]
-        campo = ".".join(str(p) for p in erro['loc'] if p != "body" )
+        campo = ".".join(str(p) for p in erro["loc"] if p != "body")
         msg = erro["msg"].replace("Value error, ", "")
         if erro["type"] == "missing":
             msg = f"campo obrigatório ausente: {campo}"
         return JSONResponse(status_code=422, content={"detail": msg})
 
-    def _aceitar(documento_id: str, conteudo: bytes, extensao: str):
-        """Recusa ID repetido (409) e grava o original ANTES de qualquer processamento.
+    def _aceitar(
+        documento_id: str, conteudo: bytes, extensao: str
+    ) -> tuple[str | None, JSONResponse | None]:
+        """H5.1.1: grava o original ANTES de qualquer processamento.
 
-        A gravação usa sobrescrever=False: é atômica, então dois envios simultâneos
-        com o mesmo ID não passam os dois e o original nunca é trocado.
+        Devolve (caminho_do_original, None) se aceito, ou (None, resposta_409) se o ID já foi
+        recebido. A gravação é condicional (if_none_match="*"): dois envios simultâneos com o
+        mesmo ID não passam os dois, e o original nunca é trocado.
         """
-        recusa = JSONResponse(status_code=409,
-                              content={"detail": f"documento_id já recebido: {documento_id}"})
-        outra = ".pdf" if extensao == ".txt" else ".txt"
-        if storage.existe(f"recebidos/{documento_id}{outra}"):
-            return recusa
         try:
-            storage.salvar(f"recebidos/{documento_id}{extensao}", conteudo, sobrescrever=False)
+            salvo = storage.salvar_original(documento_id, conteudo, extensao)
         except ObjetoJaExisteError:
-            return recusa
-        return None
+            return None, JSONResponse(
+                status_code=409,
+                content={"detail": f"documento_id já recebido: {documento_id}"},
+            )
+        return salvo["caminho_objeto"], None
 
-    @app.post("/triagem", status_code=202)
-    def enviar_texto(doc: DocumentoEntrada, background: BackgroundTasks, aguardar: bool = False):
-        recusa = _aceitar(doc.documento_id, doc.documento_texto.encode("utf-8"), ".txt")
-        if recusa:
-            return recusa
+    def _processar_original(
+        documento_id: str, caminho: str, background: BackgroundTasks, aguardar: bool
+    ):
+        """H5.1.1 T3: o grafo recebe o CAMINHO do original (já gravado), não o arquivo."""
         if aguardar:
-            return JSONResponse(status_code=200, content=processar(
-                doc.documento_id, doc.documento_texto, None, extrator))
+            return JSONResponse(
+                status_code=200,
+                content=processar(
+                    documento_id, "", None, extrator, caminho_original=caminho
+                ),
+            )
+        background.add_task(
+            processar, documento_id, "", None, extrator, caminho_original=caminho
+        )
+        return {"documento_id": documento_id, "status": "recebido"}
 
-        background.add_task(processar, doc.documento_id, doc.documento_texto, None, extrator)
-        return {"documento_id": doc.documento_id, "status": "recebido"}
+    @app.post("/triagem", status_code=202, responses={200: RESPOSTA_RESULTADO})
+    def enviar_texto(
+        doc: DocumentoEntrada, background: BackgroundTasks, aguardar: bool = False
+    ):
+        caminho, recusa = _aceitar(
+            doc.documento_id, doc.documento_texto.encode("utf-8"), ".txt"
+        )
+        if recusa or caminho is None:
+            return recusa
+        return _processar_original(doc.documento_id, caminho, background, aguardar)
 
-    @app.post("/triagem/pdf", status_code=202)
-    async def enviar_pdf(background: BackgroundTasks, documento_id: str = Form(...),
-                         canal_origem: str = Form(...), arquivo: UploadFile = File(...),
-                         aguardar: bool = False):
+    @app.post("/triagem/pdf", status_code=202, responses={200: RESPOSTA_RESULTADO})
+    async def enviar_pdf(
+        background: BackgroundTasks,
+        documento_id: Annotated[str, Form()],
+        canal_origem: Annotated[str, Form()],
+        arquivo: Annotated[UploadFile, File()],
+        aguardar: bool = False,
+    ):
         try:
             documento_id = validar_id(documento_id)
         except ValueError as e:
             return JSONResponse(status_code=422, content={"detail": str(e)})
         conteudo = await arquivo.read()
         if not conteudo.startswith(b"%PDF"):
-            return JSONResponse(status_code=422, content={"detail": "o arquivo enviado não é um PDF"})
+            return JSONResponse(
+                status_code=422, content={"detail": "o arquivo enviado não é um PDF"}
+            )
         if len(conteudo) > MAX_PDF:
-            return JSONResponse(status_code=413, content={"detail": "PDF acima de 10 MB"})
-        recusa = _aceitar(documento_id, conteudo, ".pdf")
-        if recusa:
+            return JSONResponse(
+                status_code=413, content={"detail": "PDF acima de 10 MB"}
+            )
+        caminho, recusa = _aceitar(documento_id, conteudo, ".pdf")
+        if recusa or caminho is None:
             return recusa
-        if aguardar:
-            return JSONResponse(status_code=200, content=processar(documento_id, "", conteudo, extrator))
-        background.add_task(processar, documento_id, "", conteudo, extrator)
-        return {"documento_id": documento_id, "status": "recebido"}
+        return _processar_original(documento_id, caminho, background, aguardar)
 
-    @app.get("/triagem/{documento_id}")
+    @app.post("/triagem/arquivo", status_code=202, responses={200: RESPOSTA_RESULTADO})
+    async def enviar_arquivo(
+        background: BackgroundTasks,
+        documento_id: Annotated[str, Form()],
+        canal_origem: Annotated[str, Form()],
+        arquivo: Annotated[UploadFile, File()],
+        aguardar: bool = False,
+    ):
+        """H1.1.3 T1: PDF (digital ou escaneado), JPG ou PNG.
+
+        O tipo vem dos bytes iniciais do arquivo, não do nome nem do MIME enviado.
+        """
+        try:
+            documento_id = validar_id(documento_id)
+        except ValueError as e:
+            return JSONResponse(status_code=422, content={"detail": str(e)})
+        conteudo = await arquivo.read(MAX_ARQUIVO + 1)
+        if len(conteudo) > MAX_ARQUIVO:
+            return JSONResponse(
+                status_code=413, content={"detail": "arquivo acima de 10 MB"}
+            )
+        extensao = extensao_por_assinatura(conteudo)
+        if extensao is None:
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "formato não suportado: envie PDF, JPG ou PNG"},
+            )
+        caminho, recusa = _aceitar(documento_id, conteudo, extensao)
+        if recusa or caminho is None:
+            return recusa
+        return _processar_original(documento_id, caminho, background, aguardar)
+
+    @app.get("/triagem/{documento_id}", responses={200: RESPOSTA_RESULTADO})
     def consultar(documento_id: str):
         try:
             validar_id(documento_id)
         except ValueError as e:
             return JSONResponse(status_code=422, content={"detail": str(e)})
-        for pasta in PASTAS_RESULTADO:
-            bruto = storage.ler(f"{pasta}/{documento_id}.json")
-            if bruto is not None:
-                resultado = json.loads(bruto)
-                resultado["armazenamento_oci"] = {"bucket": config.bucket(),
-                                                 "caminho_objeto": f"{pasta}/{documento_id}.json",
-                                                 "urgente": pasta.endswith("urgentes")}
-                return resultado
-        if storage.existe(f"recebidos/{documento_id}.txt") or storage.existe(f"recebidos/{documento_id}.pdf"):
-            return JSONResponse(status_code=202, content={"documento_id": documento_id, "status": "processando"})
-        return JSONResponse(status_code=404, content={"detail": "documento não encontrado"})
+        return _responder_consulta(documento_id)
 
-    @app.get("/documentos/{documento_id}")
-    def consultar_bruto(documento_id: str):
-        """T4 — forma mínima: devolve o resultado COMO ESTÁ SALVO (bruto).
-
-        Diferente de GET /triagem/{id}, aqui não se remonta nada: é a tela de
-        resultado que lê este caminho.
-        """
+    @app.get("/documentos/{documento_id}", responses={200: RESPOSTA_RESULTADO})
+    def consultar_documento(documento_id: str):
+        """H2.3.1 T3: mesmo formato combinado de GET /triagem/{id} (resultado validado)."""
         recusa = _validar_id_limpo(documento_id)
         if recusa:
             return recusa
-        for pasta in PASTAS_RESULTADO:
-            bruto = storage.ler(f"{pasta}/{documento_id}.json")
-            if bruto is not None:
-                return JSONResponse(status_code=200, content=json.loads(bruto))
-        if storage.existe(f"recebidos/{documento_id}.txt") or storage.existe(f"recebidos/{documento_id}.pdf"):
-            return JSONResponse(status_code=202, content={"documento_id": documento_id, "status": "processando"})
-        return JSONResponse(status_code=404, content={"detail": "documento não encontrado"})
+        return _responder_consulta(documento_id)
 
     @app.get("/health")
     def health():
         return {"status": "ok"}
 
     return app
+
 
 try:
     app = criar_app()

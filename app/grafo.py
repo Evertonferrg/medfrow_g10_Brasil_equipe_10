@@ -1,30 +1,41 @@
-from typing import Optional, TypedDict
+import logging
+from typing import TypedDict
+
 from langgraph.graph import END, StateGraph
 
 from . import config
-from .llm import extrair
-from .modelos import Classificacao, Destino
-from .pdf import extrair_texto_pdf
-from .validacao import validar, precisa_revisao, motivo_revisao
 from . import roteamento as rt
-from .roteamento import decidir_destino, criar_decisao_roteamento  # exportado em app/grafo (H2.1.1 T2)
+from .arquivos import extensao_por_assinatura
+from .llm import extrair, ler_imagem
+from .modelos import Classificacao
+from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
+from .resposta import falha_de_processamento, montar_resposta
+from .validacao import motivo_revisao, precisa_revisao, validar
+
+logger = logging.getLogger(__name__)
 
 
+# dicionario compartilhado entre os nos
 # Dicionário compartilhado entre os nós do LangGraph
 class Estado(TypedDict, total=False):
+    documento_id: str
     texto: str
-    pdf_bytes: Optional[bytes]
-    limite_confianca: float      # H1.2.2 T2: carregado uma vez por execução do grafo
-    extracao: Optional[object]   # objeto Extracao (None se falhou)
-    classificacao: Optional[object]  # objeto Classificacao montado pelo nó classificar
-    erro: Optional[str]
+    pdf_bytes: bytes | None  # na prática: bytes do arquivo (PDF, PNG ou JPG)
+    limite_confianca: float  # H1.2.2 T2: carregado uma vez por execução do grafo
+    extracao: object | None  # objeto Extracao (None se falhou)
+    classificacao: object | None  # objeto Classificacao montado pelo nó classificar
+    erro: str | None
     problemas: list
     score: float
     destino: str
-    regra: str                   # id da regra aplicada (R-URGENCIA, R-RECEITA...)
+    regra: str  # id da regra aplicada (R-URGENCIA, R-RECEITA...)
     requer_revisao: bool
-    motivo_revisao: Optional[str]
+    motivo_revisao: str | None
     justificativa: str
+    notificacao: dict | None
+    tipo_arquivo: str  # "TEXTO", "PDF" ou "Imagem"
+    ilegivel: bool
+    resultado: dict
     notificacao: Optional[dict]
     decisao_roteamento: Optional[object]  # submodelo DecisaoRoteamento (H2.1.1 T1/T4)
 
@@ -42,21 +53,49 @@ def montar_classificacao(extracao, score) -> Classificacao:
     )
 
 
-def construir_grafo(extrator=extrair, classificador=montar_classificacao):
-    """'extrator' e 'classificador' podem ser trocados por versões falsas nos
+def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor=None):
+    """'extrator', 'classificador' e 'leitor' podem ser trocados por versões falsas nos
     testes (sem LLM, sem rede)."""
+    # Resolvido na chamada (e não na assinatura) para que os testes possam trocar
+    # app.grafo.ler_imagem com monkeypatch.
+    leitor = leitor or ler_imagem
 
     def n_ler_entrada(s: Estado):
         # H1.2.2 T2: carrega o limite de confiança uma única vez por execução do grafo
-        saida: dict = {"limite_confianca": config.limite_confianca()}
-        # estrair textos das paginas
-        if s.get("pdf_bytes"):
-            try:
-                saida["texto"] = extrair_texto_pdf(s["pdf_bytes"])
-            except Exception as e:
-                saida["texto"] = ""
-                saida["erro"] = str(e)
-        return saida
+        limite = config.limite_confianca()
+        dados = s.get("pdf_bytes")
+        if not dados:
+            return {"tipo_arquivo": "TEXTO", "limite_confianca": limite}
+        try:
+            if extensao_por_assinatura(dados) == ".pdf":
+                try:
+                    return {
+                        "texto": extrair_texto_pdf(dados),
+                        "tipo_arquivo": "PDF",
+                        "limite_confianca": limite,
+                    }
+                except PDFSemTexto:
+                    imagens, tipo = renderizar_paginas(dados), "PDF"  # T2: escaneado
+            else:
+                imagens, tipo = [dados], "Imagem"
+            texto, leg = leitor(imagens)  # T4
+        except Exception as e:
+            logger.exception("Falha ao ler a entrada")
+            return {"texto": "", "erro": str(e), "limite_confianca": limite}
+
+        if not leg.legivel or not texto.strip():  # T5
+            motivo = leg.motivo or "sem texto reconhecível"
+            return {
+                "texto": "",
+                "tipo_arquivo": tipo,
+                "ilegivel": True,
+                "extracao": None,
+                "score": 0.0,
+                "motivo_revisao": "ilegível",
+                "problemas": [f"ilegível: {motivo}"],
+                "limite_confianca": limite,
+            }
+        return {"texto": texto, "tipo_arquivo": tipo, "limite_confianca": limite}
 
     def n_extrair(s: Estado):
         if s.get("erro"):
@@ -64,6 +103,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
         try:
             return {"extracao": extrator(s["texto"])}
         except Exception as e:
+            logger.exception("Falha na extração automática")
             return {"extracao": None, "erro": f"Falha na extração automática: {e}"}
 
     def n_validar(s: Estado):
@@ -78,6 +118,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
         try:
             return {"classificacao": classificador(s["extracao"], s["score"])}
         except Exception:
+            logger.exception("Falha na classificação automática")
             return {"classificacao": None}
 
     def n_decidir(s: Estado):
@@ -114,6 +155,46 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
             "decisao_roteamento": decisao,
         }
 
+    def n_montar_resultado(s: Estado):
+        """H2.3.1 T2: último nó. Monta e valida o ResultadoTriagem.
+
+        Se o resultado sair fora do formato (ValidationError), NÃO entrega resposta parcial:
+        o documento vai para a revisão com o motivo "falha de processamento".
+        """
+        doc_id = s.get("documento_id", "")
+        try:
+            return {"resultado": montar_resposta(doc_id, s).model_dump(mode="json")}
+        except Exception as e:
+            logger.exception("Resultado fora do formato")
+            rev = n_revisao(
+                {
+                    **s,
+                    "erro": f"falha de processamento: {e}",
+                    "motivo_revisao": "falha de processamento",
+                }
+            )
+            resultado = falha_de_processamento(
+                doc_id,
+                str(e),
+                justificativa=rev["justificativa"],
+                notificacao=rev["notificacao"],
+            )
+            return {
+                **rev,
+                "classificacao": None,
+                "resultado": resultado.model_dump(mode="json"),
+            }
+
+    # condicional = segurança 1º , depois urgencia , por fim rotina
+    def decidir(s: Estado) -> str:
+        limite = (
+            s["limite_confianca"]
+            if "limite_confianca" in s
+            else config.limite_confianca()
+        )
+        if s.get("erro") or precisa_revisao(s["score"], s["problemas"], limite):
+            return "revisao"
+        return "urgencia" if s["extracao"].nivel_prioridade == "Urgente" else "padrao"
     def rota_condicional(s: Estado) -> str:
         """Aresta condicional após decidir: leva a rotear ou a enviar_revisao."""
         if s.get("requer_revisao") or s.get("destino") == Destino.FILA_REVISAO_HUMANA.value:
@@ -126,6 +207,10 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
         ("extrair", n_extrair),
         ("validar", n_validar),
         ("classificar", n_classificar),
+        ("urgencia", n_urgencia),
+        ("revisao", n_revisao),
+        ("padrao", n_padrao),
+        ("montar_resultado", n_montar_resultado),
         ("decidir", n_decidir),
         ("rotear", n_rotear),
         ("enviar_revisao", n_enviar_revisao),
@@ -133,7 +218,12 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
         g.add_node(nome, fn)
 
     g.set_entry_point("ler_entrada")
-    g.add_edge("ler_entrada", "extrair")
+    # T5: ilegível vai direto para a revisão, sem passar por extrair/validar/classificar
+    g.add_conditional_edges(
+        "ler_entrada",
+        lambda s: "revisao" if s.get("ilegivel") else "extrair",
+        {"revisao": "revisao", "extrair": "extrair"},
+    )
     g.add_edge("extrair", "validar")
     g.add_edge("validar", "classificar")
     g.add_edge("classificar", "decidir")
@@ -152,9 +242,11 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao):
 def triar(
     texto: str,
     extrator=extrair,
-    pdf_bytes: Optional[bytes] = None,
+    pdf_bytes: bytes | None = None,
     classificador=montar_classificacao,
+    leitor=None,
+    documento_id: str = "",
 ) -> dict:
-    return construir_grafo(extrator, classificador).invoke(
-        {"texto": texto, "pdf_bytes": pdf_bytes}
+    return construir_grafo(extrator, classificador, leitor).invoke(
+        {"texto": texto, "pdf_bytes": pdf_bytes, "documento_id": documento_id}
     )

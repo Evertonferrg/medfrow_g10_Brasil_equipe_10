@@ -29,7 +29,10 @@ def _sem_api_url(monkeypatch):
 @pytest.fixture
 def api(monkeypatch):
     """Substitui requests.post: nenhum teste chama a rede de verdade."""
-    reg = {"chamadas": [], "resposta": Resp(202, {"documento_id": "DOC-TESTE1", "status": "recebido"})}
+    reg = {
+        "chamadas": [],
+        "resposta": Resp(202, {"documento_id": "DOC-TESTE1", "status": "recebido"}),
+    }
 
     def falso_post(url, **kw):
         reg["chamadas"].append((url, kw))
@@ -89,9 +92,13 @@ def test_sucesso_mostra_id_e_status_e_chama_a_api_do_jeito_certo(api):
     assert "DOC-TESTE1" in at.success[0].value and "recebido" in at.success[0].value
     url, kw = api["chamadas"][0]
     assert url == "http://localhost:8000/triagem"
-    assert kw["json"] == {"documento_id": "DOC-TESTE1", "tipo_arquivo": "TEXTO",
-                          "documento_texto": TEXTO, "canal_origem": "Pronto_Socorro"}
-    assert isinstance(kw["timeout"], tuple)          # sem timeout a tela poderia travar
+    assert kw["json"] == {
+        "documento_id": "DOC-TESTE1",
+        "tipo_arquivo": "TEXTO",
+        "documento_texto": TEXTO,
+        "canal_origem": "Pronto_Socorro",
+    }
+    assert isinstance(kw["timeout"], tuple)  # sem timeout a tela poderia travar
     assert kw["allow_redirects"] is False
 
 
@@ -107,7 +114,7 @@ def test_url_da_api_vem_de_variavel_de_ambiente(api, monkeypatch):
     monkeypatch.setenv("API_URL", "https://api.exemplo.com/")
     at = enviar(abrir())
     assert api["chamadas"][0][0] == "https://api.exemplo.com/triagem"
-    assert not at.warning                              # https: sem aviso
+    assert not at.warning  # https: sem aviso
 
 
 def test_http_fora_do_local_mostra_aviso(monkeypatch):
@@ -121,16 +128,19 @@ def test_url_invalida_bloqueia_a_tela(monkeypatch):
     assert at.error and not at.button
 
 
-@pytest.mark.parametrize("status,detalhe", [
-    (409, "documento_id já recebido: DOC-TESTE1"),
-    (422, "documento vazio"),
-])
+@pytest.mark.parametrize(
+    "status,detalhe",
+    [
+        (409, "documento_id já recebido: DOC-TESTE1"),
+        (422, "documento vazio"),
+    ],
+)
 def test_erro_mostra_a_mensagem_do_servidor(api, status, detalhe):
     api["resposta"] = Resp(status, {"detail": detalhe})
     at = enviar(abrir())
     assert at.error[0].value == detalhe
     assert not at.success
-    assert at.text_area(key="texto_documento").value == TEXTO   # não perde o que digitou
+    assert at.text_area(key="texto_documento").value == TEXTO  # não perde o que digitou
 
 
 def test_erro_do_servidor_sem_detalhe_mostra_mensagem_generica(api):
@@ -140,17 +150,25 @@ def test_erro_do_servidor_sem_detalhe_mostra_mensagem_generica(api):
 
 
 def test_falha_de_rede_nao_vaza_detalhes_internos(api):
-    api["resposta"] = requests.ConnectionError("HTTPConnectionPool(host='10.0.0.5', port=8000)")
+    api["resposta"] = requests.ConnectionError(
+        "HTTPConnectionPool(host='10.0.0.5', port=8000)"
+    )
     at = enviar(abrir())
-    assert "10.0.0.5" not in at.error[0].value and "HTTPConnectionPool" not in at.error[0].value
+    assert (
+        "10.0.0.5" not in at.error[0].value
+        and "HTTPConnectionPool" not in at.error[0].value
+    )
 
 
 # ---- validações locais: nada é enviado ----
-@pytest.mark.parametrize("texto,confirmar,esperado", [
-    pytest.param("   ", True, "documento vazio", id="texto-vazio"),
-    pytest.param(TEXTO, False, "dados sintéticos", id="sem-confirmacao"),
-    pytest.param("x" * 200_001, True, "acima de", id="texto-grande"),
-])
+@pytest.mark.parametrize(
+    "texto,confirmar,esperado",
+    [
+        pytest.param("   ", True, "documento vazio", id="texto-vazio"),
+        pytest.param(TEXTO, False, "dados sintéticos", id="sem-confirmacao"),
+        pytest.param("x" * 200_001, True, "acima de", id="texto-grande"),
+    ],
+)
 def test_validacao_local_nao_chama_a_api(api, texto, confirmar, esperado):
     at = enviar(abrir(), texto=texto, confirmar=confirmar)
     assert esperado in at.error[0].value
@@ -166,4 +184,6 @@ def test_id_vazio_nao_chama_a_api(api):
 def test_texto_no_limite_e_enviado_inteiro_sem_cortar(api):
     texto = "x" * 200_000
     enviar(abrir(), texto=texto)
-    assert api["chamadas"][0][1]["json"]["documento_texto"] == texto   # nada foi truncado
+    assert (
+        api["chamadas"][0][1]["json"]["documento_texto"] == texto
+    )  # nada foi truncado
