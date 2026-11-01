@@ -1,5 +1,7 @@
+"""H2.1.1 T5 — Tela de resultado: consulta GET /documentos/{documento_id} e exibe
+o destino de roteamento em destaque, acima dos dados extraídos clínicos.
+"""
 import json
-
 """T4 — tela de resultado: consulta GET /documentos/{documento_id} e mostra
 o tipo identificado, o score de confiança ao lado do tipo e a especialidade provável ao analista."""
 import os
@@ -9,6 +11,14 @@ from pathlib import Path
 import requests
 import streamlit as st
 
+RAIZ_UI = Path(__file__).resolve().parents[1]
+if str(RAIZ_UI) not in sys.path:
+    sys.path.insert(0, str(RAIZ_UI))
+
+try:
+    from componentes.paciente import bloco_paciente
+except ImportError:
+    bloco_paciente = None
 PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
     sys.path.insert(0, PASTA_UI)
@@ -120,6 +130,38 @@ if buscar and doc_id.strip():
         st.error(r.json().get("detail", r.text))
     else:
         res = r.json()
+        st.caption(f"**ID:** {res.get('documento_id', doc_id)} | **Status:** {res.get('status', '-')}")
+
+        # H2.1.1 T5: Destino em grande destaque na página, acima dos dados extraídos
+        d = res.get("decisao_roteamento") or {}
+        destino = d.get("destino_principal", "—")
+        justificativa = d.get("justificativa_roteamento", "")
+        requer_auditoria = d.get("requer_auditoria_humana", False)
+
+        if destino == "Fila_Emergencia_Medica":
+            st.error(f"### 🚨 Destino: {destino}\n\n{justificativa}")
+        elif requer_auditoria or destino == "Fila_Revisao_Humana":
+            st.warning(f"### ⚠️ Destino: {destino}\n\n{justificativa}")
+        elif destino == "Farmacia_Hospitalar":
+            st.success(f"### 💊 Destino: {destino}\n\n{justificativa}")
+        else:
+            st.success(f"### 📋 Destino: {destino}\n\n{justificativa}")
+
+        notificacao = d.get("notificacao_gerada")
+        if notificacao:
+            st.info(f"📢 **Notificação ({notificacao.get('canal', 'Alerta')}):** {notificacao.get('mensagem', '')}")
+
+        # Classificação clínica
+        cl = res.get("classificacao")
+        if cl:
+            st.markdown("#### Classificação")
+            a, b, c, e = st.columns(4)
+            a.metric("Tipo do documento", cl.get("tipo_documento") or "—")
+            b.metric("Especialidade", cl.get("especialidade") or "—")
+            c.metric("Prioridade", cl.get("nivel_prioridade") or "—")
+            e.metric("Confiança", cl.get("score_confianca_classificacao", "—"))
+        else:
+            st.warning("Sem classificação automática: o documento requer revisão humana.")
         st.caption(f"**Status:** {res.get('status', '-')}")
         exibir_classificacao(res.get("classificacao"))
         if res.get("dados_extraidos") is not None:

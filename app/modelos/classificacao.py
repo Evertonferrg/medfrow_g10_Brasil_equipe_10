@@ -24,16 +24,25 @@ class TipoDocumento(str, Enum):
     DESCONHECIDO = "Desconhecido"
 
     def __str__(self) -> str:
-        # f-string e comparação com str mostram o valor legível, não "Tipo.X"
         return self.value
 
 
-# Literal gerado do enum — é o que vai no response_schema do Gemini (fallback
-# decidido: enum Python no schema exige validação real com GEMINI_API_KEY,
-# que não temos; ver bloco "Não testado sem chave" do PR).
 TipoDocumentoLiteral = Literal[tuple(m.value for m in TipoDocumento)]
 
 Prioridade = Literal["Urgente", "Rotina"]
+
+
+class Destino(str, Enum):
+    """Destinos finais do roteamento clínico."""
+
+    FARMACIA_HOSPITALAR = "Farmacia_Hospitalar"
+    AUDITORIA_AUTORIZACOES = "Auditoria_Autorizacoes"
+    PRONTUARIO_ELETRONICO = "Prontuario_Eletronico"
+    FILA_EMERGENCIA_MEDICA = "Fila_Emergencia_Medica"
+    FILA_REVISAO_HUMANA = "Fila_Revisao_Humana"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class Classificacao(BaseModel):

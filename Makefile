@@ -49,6 +49,16 @@ lint: ## Lint e checagem de formatação (ruff)
 test: ## Testes unitários (contratos JSON e nós do LangGraph)
 	uv run pytest -v
 
+api: ## Inicia a API FastAPI (porta 8000)
+	uv run uvicorn app.main:app --reload --port 8000
+
+ui: ## Inicia o frontend Streamlit (porta 8501)
+	uv run streamlit run ui/Home.py
+
+dev: ## Inicia tanto a API quanto o Streamlit simultaneamente
+	@trap 'kill 0' EXIT; uv run uvicorn app.main:app --reload --port 8000 & uv run streamlit run ui/Home.py
+
+
 # ------------------------------------------------------------------------------
 #  3. Container
 # ------------------------------------------------------------------------------
