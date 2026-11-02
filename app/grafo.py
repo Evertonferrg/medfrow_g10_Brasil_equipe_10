@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 
