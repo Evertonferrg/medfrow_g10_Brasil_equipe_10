@@ -45,7 +45,10 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
 COPY --from=builder --chown=nonroot:nonroot /app/.venv /app/.venv
-COPY --chown=nonroot:nonroot . /app/
+COPY --chown=nonroot:nonroot app/ /app/app/
+COPY --chown=nonroot:nonroot ui/ /app/ui/
+COPY --chown=nonroot:nonroot config/ /app/config/
+COPY --chown=nonroot:nonroot .streamlit/ /app/.streamlit/
 
 USER nonroot
 

@@ -10,7 +10,7 @@ Cenários cobertos:
 import pytest
 
 from app import config
-from app.grafo import triar
+from app.grafo import construir_grafo, triar
 from app.modelos import Destino, TipoDocumento
 from app.resposta import montar_resposta
 from app.roteamento import decidir_destino

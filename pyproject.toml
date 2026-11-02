@@ -1,0 +1,25 @@
+[project]
+name = "mediflow"
+version = "0.1.0"
+requires-python = ">=3.13"
+dynamic = ["dependencies"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+# Dependências vêm do requirements.in (fonte única de verdade)
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.in"] }
+
+# Não empacota nada: o projeto só existe para o uv montar a .venv
+[tool.setuptools]
+packages = []
+
+# Ferramentas de dev: ficam na .venv local, não entram na imagem
+[dependency-groups]
+dev = ["ruff", "pytest"]
+
+# Reinstala quando o requirements.in mudar
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.in" }]
