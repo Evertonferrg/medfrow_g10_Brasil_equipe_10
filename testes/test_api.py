@@ -1,3 +1,14 @@
+import os
+import time
+from pathlib import Path
+
+import pytest
+
+from app.grafo import triar
+from app.llm import extrair
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
 import io
 
 from PIL import Image
@@ -110,28 +121,82 @@ def test_resposta_no_formato_do_edital(cliente):
 
 
 # ---- H1.1.2: PDF ----
-def test_pdf_de_varias_paginas_considera_todas_as_paginas():
-    vistos = []
+@pytest.mark.parametrize(
+    ("arquivo", "marcadores"),
+    [
+        ("pdf_textual_1_pagina.pdf", ["Página 1"]),
+        (
+            "pdf_textual_3_paginas.pdf",
+            ["Página 1", "Página 2", "Página 3"],
+        ),
+    ],
+)
+def test_pdf_textual_le_todas_as_paginas(arquivo, marcadores):
+    textos_recebidos = []
 
     def espiao(texto):
-        vistos.append(texto)
+        textos_recebidos.append(texto)
         return extracao()
 
-    c = cliente_com(espiao)
-    pdf = pdf_com_texto(
-        [
-            "Pagina um Carlos Eduardo Mendes",
-            "Pagina dois Dra. Renata Silveira CRM-SP 145892",
-        ]
+    estado = triar(
+        "",
+        extrator=espiao,
+        pdf_bytes=(FIXTURES / arquivo).read_bytes(),
     )
-    r = c.post(
-        "/triagem/pdf?aguardar=true",
-        data={"documento_id": "PDF-001", "canal_origem": "Ambulatorio"},
-        files={"arquivo": ("laudo.pdf", pdf, "application/pdf")},
+
+    assert estado["tipo_arquivo"] == "PDF"
+    assert len(textos_recebidos) == 1
+    assert all(marcador in estado["texto"] for marcador in marcadores)
+    assert all(marcador in textos_recebidos[0] for marcador in marcadores)
+
+
+def test_pdf_apenas_imagem_vai_para_fluxo_de_imagem():
+    imagens_recebidas = []
+    textos_recebidos = []
+
+    def leitor_falso(imagens):
+        imagens_recebidas.extend(imagens)
+        return (
+            "Paciente: Maria Teste. Hemograma sem alterações.",
+            Legibilidade(legivel=True),
+        )
+
+    def extrator_falso(texto):
+        textos_recebidos.append(texto)
+        return extracao()
+
+    estado = triar(
+        "",
+        extrator=extrator_falso,
+        pdf_bytes=(FIXTURES / "amostra_escaneada.pdf").read_bytes(),
+        leitor=leitor_falso,
     )
-    assert r.status_code == 200
-    assert "Pagina um" in vistos[0] and "Pagina dois" in vistos[0]
-    assert storage.existe("recebidos/PDF-001.pdf")
+
+    assert estado["tipo_arquivo"] == "PDF"
+    assert imagens_recebidas
+    assert all(imagem.startswith(b"\x89PNG") for imagem in imagens_recebidas)
+    assert textos_recebidos == ["Paciente: Maria Teste. Hemograma sem alterações."]
+
+
+@pytest.mark.llm
+@pytest.mark.skipif(
+    not os.getenv("GEMINI_API_KEY"),
+    reason="sem GEMINI_API_KEY",
+)
+def test_pdf_de_10_paginas_e_processado_em_ate_30s():
+    inicio = time.perf_counter()
+
+    estado = triar(
+        "",
+        extrator=extrair,
+        pdf_bytes=(FIXTURES / "pdf_textual_10_paginas.pdf").read_bytes(),
+    )
+
+    duracao_s = time.perf_counter() - inicio
+
+    assert estado["tipo_arquivo"] == "PDF"
+    assert "Página 10 de 10" in estado["texto"]
+    assert duracao_s < 30, f"processamento levou {duracao_s:.2f}s; limite: 30s"
 
 
 def test_pdf_sem_texto_vai_para_revisao_humana(cliente, monkeypatch):
