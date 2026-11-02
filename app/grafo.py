@@ -5,6 +5,7 @@ from langgraph.graph import END, StateGraph
 
 from . import config
 from . import roteamento as rt
+from .alerta import gerar_alerta                                  # NOVO (H3.3.1)
 from .arquivos import extensao_por_assinatura
 from .llm import extrair, ler_imagem
 from .modelos import Classificacao, Destino
@@ -12,6 +13,7 @@ from .modelos.destino import DecisaoRoteamento, Notificacao
 from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
 from .resposta import falha_de_processamento, montar_resposta
 from .schemas import Extracao
+from .urgencia import avaliar_urgencia, carregar_regras          # NOVO (H3.1)
 from .validacao import validar
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,10 @@ class Estado(TypedDict, total=False):
     decisao_roteamento: (
         DecisaoRoteamento | None
     )  # submodelo DecisaoRoteamento (H2.1.1 T1/T4)
+    canal_origem: str | None   # NOVO H3.1.2: vem da rota de envio
+    nivel_prioridade: str      # NOVO H3.1.3: Urgente | Prioritário | Rotina (sempre gravado)
+    sinal_prioridade: str      # NOVO H3.1.3: o que definiu o nível
+    achado_critico: str | None # NOVO
 
 
 def montar_classificacao(extracao, score) -> Classificacao:
@@ -57,9 +63,26 @@ def montar_classificacao(extracao, score) -> Classificacao:
     )
 
 
-def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor=None):
-    """'extrator', 'classificador' e 'leitor' podem ser trocados por versões falsas nos
-    testes (sem LLM, sem rede)."""
+def _valor(x):                                                    # NOVO
+    return x.value if hasattr(x, "value") else x
+
+
+def _com_nivel(extracao, nivel: str):                             # NOVO
+    """Cópia da extração com o nível final (sem revalidar o campo)."""
+    if extracao is None or _valor(getattr(extracao, "nivel_prioridade", None)) == nivel:
+        return extracao
+    try:
+        return extracao.model_copy(update={"nivel_prioridade": nivel})
+    except AttributeError:
+        extracao.nivel_prioridade = nivel
+        return extracao
+
+
+def construir_grafo(
+    extrator=extrair, classificador=montar_classificacao, leitor=None, confirmador=None  # NOVO: confirmador
+):
+    """'extrator', 'classificador', 'leitor' e 'confirmador' podem ser trocados por
+    versões falsas nos testes (sem LLM, sem rede)."""
     # Resolvido na chamada (e não na assinatura) para que os testes possam trocar
     # app.grafo.ler_imagem com monkeypatch.
     leitor = leitor or ler_imagem
@@ -116,6 +139,25 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         extracao, problemas, score = validar(s["extracao"], s["texto"])
         return {"extracao": extracao, "problemas": problemas, "score": score}
 
+    def n_avaliar_urgencia(s: Estado):                            # NOVO NÓ (H3.1.1/2/3)
+        """SEMPRE roda antes de decidir (também com erro, score baixo ou ilegível).
+        Só grava nível/sinal/achado; quem escolhe o destino é o nó decidir."""
+        e = s.get("extracao")
+        aval = avaliar_urgencia(
+            s.get("texto", ""),
+            s.get("canal_origem"),
+            _valor(getattr(e, "nivel_prioridade", None)) if e is not None else None,
+            carregar_regras(config.ARQUIVO_REGRAS),
+            confirmador,
+        )
+        nivel = _valor(aval.nivel)
+        return {
+            "nivel_prioridade": nivel,
+            "sinal_prioridade": aval.sinal,
+            "achado_critico": aval.achado,
+            "extracao": _com_nivel(e, nivel),
+        }
+
     def n_classificar(s: Estado):
         if s.get("erro") or s.get("extracao") is None:
             return {"classificacao": None}
@@ -166,6 +208,25 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 ),
             }
 
+    def n_alertar_plantao(s: Estado):                             # NOVO NÓ (H3.3.1 T2)
+        """Só roda para Urgente roteado (sem revisão). Mensagem por modelo de texto,
+        até 200 caracteres; grava no estado e na decisão de roteamento."""
+        e = s.get("extracao")
+        achado = (
+            s.get("achado_critico")
+            or getattr(e, "diagnostico_principal", None)
+            or getattr(e, "tipo_documento", None)
+        )
+        nome = getattr(getattr(e, "paciente", None), "nome", None)
+        alerta = gerar_alerta(achado, nome, s.get("canal_origem"))
+        saida = {"notificacao": alerta.model_dump()}
+        decisao = s.get("decisao_roteamento")
+        if decisao is not None:
+            saida["decisao_roteamento"] = decisao.model_copy(
+                update={"notificacao_gerada": alerta}
+            )
+        return saida
+
     def n_montar_resultado(s: Estado):
         """H2.3.1 T2: último nó. Monta e valida o ResultadoTriagem.
 
@@ -189,30 +250,48 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 "resultado": resultado.model_dump(mode="json"),
             }
 
+    def urgente_roteado(s: Estado) -> str:                        # NOVO (condicional)
+        """Alerta só para urgência decidida (a dúvida já notifica pelo próprio roteamento)."""
+        if s.get("regra") == "R-URGENCIA" and not s.get("requer_revisao"):
+            return "alertar_plantao"
+        return "montar_resultado"
+
     g = StateGraph(Estado)
     for nome, fn in [
         ("ler_entrada", n_ler_entrada),
         ("extrair", n_extrair),
         ("validar", n_validar),
+        ("avaliar_urgencia", n_avaliar_urgencia),                 # NOVO
         ("classificar", n_classificar),
         ("decidir", n_decidir),
         ("rotear", n_rotear),
+        ("alertar_plantao", n_alertar_plantao),                   # NOVO
         ("montar_resultado", n_montar_resultado),
     ]:
         g.add_node(nome, fn)
 
     g.set_entry_point("ler_entrada")
-    # T5: ilegível vai direto para a revisão, sem passar por extrair/validar/classificar
+    # T5: ilegível pula extrair/validar/classificar, mas NÃO pula a urgência (H3.1.2 T3)
     g.add_conditional_edges(
         "ler_entrada",
-        lambda s: "decidir" if s.get("ilegivel") else "extrair",
-        {"decidir": "decidir", "extrair": "extrair"},
+        lambda s: "avaliar_urgencia" if s.get("ilegivel") else "extrair",   # NOVO destino
+        {"avaliar_urgencia": "avaliar_urgencia", "extrair": "extrair"},
     )
     g.add_edge("extrair", "validar")
-    g.add_edge("validar", "classificar")
+    g.add_edge("validar", "avaliar_urgencia")                     # NOVO (antes: validar → classificar)
+    g.add_conditional_edges(                                      # NOVO
+        "avaliar_urgencia",
+        lambda s: "decidir" if s.get("ilegivel") else "classificar",
+        {"decidir": "decidir", "classificar": "classificar"},
+    )
     g.add_edge("classificar", "decidir")
     g.add_edge("decidir", "rotear")
-    g.add_edge("rotear", "montar_resultado")
+    g.add_conditional_edges(                                      # NOVO (antes: rotear → montar_resultado)
+        "rotear",
+        urgente_roteado,
+        {"alertar_plantao": "alertar_plantao", "montar_resultado": "montar_resultado"},
+    )
+    g.add_edge("alertar_plantao", "montar_resultado")             # NOVO
     g.add_edge("montar_resultado", END)
     return g.compile()
 
@@ -224,7 +303,14 @@ def triar(
     classificador=montar_classificacao,
     leitor=None,
     documento_id: str = "",
+    canal_origem: str | None = None,                              # NOVO
+    confirmador=None,                                             # NOVO
 ) -> dict:
-    return construir_grafo(extrator, classificador, leitor).invoke(
-        {"texto": texto, "pdf_bytes": pdf_bytes, "documento_id": documento_id}
+    return construir_grafo(extrator, classificador, leitor, confirmador).invoke(
+        {
+            "texto": texto,
+            "pdf_bytes": pdf_bytes,
+            "documento_id": documento_id,
+            "canal_origem": canal_origem,                         # NOVO
+        }
     )

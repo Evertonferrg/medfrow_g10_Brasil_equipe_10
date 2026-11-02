@@ -8,7 +8,7 @@ from app import resposta, storage
 from app.grafo import triar
 from app.schemas import ResultadoTriagem
 from testes.conftest import LAUDO_TEP, cliente_com, extracao, extrator_fixo
-
+from types import SimpleNamespace
 
 def _corpo(doc_id):
     return {
@@ -28,7 +28,13 @@ def test_urgente_grava_em_processados_urgentes(cliente):
     assert storage.existe(arm["caminho_objeto"])
 
 
-def test_rotina_grava_em_processados_rotina():
+def test_rotina_grava_em_processados_rotina(monkeypatch):
+    # este teste verifica a PASTA de gravação para um documento de rotina; a detecção de
+    # urgência (H3.1) é testada em test_urgencia.py, então aqui ela devolve "Rotina"
+    monkeypatch.setattr(
+        "app.grafo.avaliar_urgencia",
+        lambda *a, **k: SimpleNamespace(nivel="Rotina", sinal="nenhum sinal", achado=None),
+    )
     c = cliente_com(extrator_fixo(extracao(nivel_prioridade="Rotina")))
     arm = c.post("/triagem?aguardar=true", json=_corpo("DOC-RES-002")).json()[
         "armazenamento_oci"
@@ -37,7 +43,6 @@ def test_rotina_grava_em_processados_rotina():
     assert arm["status_backup"] == "sucesso"
     assert arm["urgente"] is False
     assert storage.existe(arm["caminho_objeto"])
-
 
 def test_o_que_foi_gravado_e_o_resultado_completo(cliente):
     cliente.post("/triagem?aguardar=true", json=_corpo("DOC-RES-003"))
