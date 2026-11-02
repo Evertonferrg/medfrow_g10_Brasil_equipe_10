@@ -121,6 +121,7 @@ def justificativa(
     achado: str | None = None,
     problemas: list | None = None,
     erro: str | None = None,
+    sinal: str | None = None,                      # NOVO: o que definiu o nível (H3.1.3)
 ) -> str:
     """Gera a justificativa textual explicativa da rota decidida."""
     destino_str = str(destino)
@@ -130,7 +131,10 @@ def justificativa(
             if erro
             else "; ".join(problemas or []) or f"score baixo ({score})"
         )
-        return f"Enviado à revisão humana (regra R-REVISAO): {motivo}."
+        texto = f"Enviado à revisão humana (regra R-REVISAO): {motivo}."
+        if prioridade and prioridade != "Rotina" and sinal:          # NOVO
+            texto += f" Prioridade {prioridade}: {sinal}."           # NOVO
+        return texto                                                 # NOVO
 
     if regra == "R-URGENCIA" or destino_str == Destino.FILA_EMERGENCIA_MEDICA.value:
         return (
@@ -141,6 +145,8 @@ def justificativa(
     tipo_str = str(tipo) if tipo else ""
     descricao = ROTINA[tipo_str][2] if tipo_str in ROTINA else REGRA_PRONTUARIO[1]
     prio_str = prioridade or "Rotina"
+    if sinal:                                                        # NOVO
+        prio_str = f"{prio_str} ({sinal})"                           # NOVO
     return (
         f"{tipo_str} com prioridade {prio_str} e confiança {score}; "
         f"regra {regra}: {descricao} → {destino_str}."
@@ -334,6 +340,11 @@ def criar_decisao_roteamento(
         notificacao = None
 
     prioridade_str = "Urgente" if urgente else "Rotina"
+    sinal = None                                                          # NOVO
+    if isinstance(estado_ou_tipo, dict):                                  # NOVO
+        # nível final e sinal gravados pelo nó avaliar_urgencia (H3.1.3)
+        prioridade_str = estado_ou_tipo.get("nivel_prioridade") or prioridade_str
+        sinal = estado_ou_tipo.get("sinal_prioridade")
     just = justificativa(
         tipo=tipo,
         prioridade=prioridade_str,
@@ -343,6 +354,7 @@ def criar_decisao_roteamento(
         achado=achado,
         problemas=problemas,
         erro=erro,
+        sinal=sinal,                                                      # NOVO
     )
 
     return DecisaoRoteamento(

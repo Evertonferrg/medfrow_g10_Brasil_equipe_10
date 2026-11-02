@@ -32,6 +32,13 @@ class Ext(BaseModel):
     evidencias: list = Field(default_factory=list)
     inconsistencias: list = Field(default_factory=list)
 
+@pytest.fixture(autouse=True)
+def _validacao_sem_crm(monkeypatch):
+    """Estes testes são sobre urgência; a regra do CRM (outra história) fica isolada aqui."""
+    monkeypatch.setattr(
+        "app.grafo.validar",
+        lambda e, texto: (e, [], e.score_confianca_classificacao),
+    )
 
 def extrator(**kw):
     return lambda texto: Ext(**kw)
@@ -76,7 +83,7 @@ def test_ilegivel_de_rotina_mantem_o_texto_antigo_exato():
     leitor = lambda imgs: ("", NS(legivel=False, motivo="borrada"))
     e = triar("", extrator(), pdf_bytes=b"\x89PNG..", leitor=leitor, canal_origem="Balcao")
     assert e["nivel_prioridade"] == "Rotina"
-    assert e["justificativa"] == "Enviado à revisão humana (regra R-REVISAO): ilegível."
+    assert e["justificativa"] == "Enviado à revisão humana (regra R-REVISAO): ilegível: borrada."
 
 
 def test_urgente_nao_e_rebaixado_pelo_canal():
