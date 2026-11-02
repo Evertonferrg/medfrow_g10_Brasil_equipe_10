@@ -10,6 +10,7 @@ import streamlit as st
 ARQUIVO_REGRAS = Path(__file__).resolve().parents[2] / "config" / "regras.json"
 TIPO_ARQUIVO_TEXTO = "TEXTO"
 TIPOS_ARQUIVO = ["pdf", "jpg", "jpeg", "png"]  # H1.1.3 T6
+FORMATO_DOCUMENTO = ["Texto", "Arquivo"]
 MAX_TEXTO = 200_000  # mesmo limite do servidor (app/schemas.py)
 MAX_ARQUIVO = 10 * 1024 * 1024  # mesmo limite da rota /triagem/arquivo
 TIMEOUT = (3.05, 15)  # (conexão, leitura) em segundos
@@ -185,19 +186,14 @@ resultado = st.session_state.pop("_resultado", None)
 if resultado:
     (st.success if resultado[0] else st.error)(resultado[1])
 
-# H1.1.3 T6: o uploader fica FORA do st.form, senão a prévia só apareceria depois do envio.
-# A chave muda a cada envio com sucesso (n_upload) para limpar o arquivo escolhido.
-n_upload = st.session_state.get("n_upload", 0)
-arquivo = st.file_uploader(
-    "Foto, scan ou PDF (opcional; se enviado, vale no lugar do texto)",
-    type=TIPOS_ARQUIVO,
-    key=f"arquivo_{n_upload}",
+
+# Selectbox para selecionar tipo de documento:
+tipo_documento = st.selectbox(
+    "Formato do documento",
+    FORMATO_DOCUMENTO,
+    key="formato_documento",
+    help='A extensão do arquivo (se for PDF, JPG, etc, escolha "Arquivo")',
 )
-if arquivo is not None:
-    if (arquivo.type or "").startswith("image/"):
-        st.image(arquivo, caption=arquivo.name, width=400)
-    else:
-        st.caption(f"📄 {arquivo.name} ({arquivo.size // 1024} KB)")
 
 with st.form("envio"):
     st.text_input(
@@ -213,15 +209,30 @@ with st.form("envio"):
         key="canal_origem",
         help="De onde o documento chegou.",
     )
-    st.text_area(
-        "Texto do documento",
-        key="texto_documento",
-        height=250,
-        # Sem max_chars de propósito: ele cortaria o texto em silêncio (perda de dados clínicos).
-        # O limite é checado em _enviar(), que mostra um erro claro.
-        placeholder="Cole aqui o texto do laudo, receita, guia, alta ou atestado "
-        "(ignorado se você anexou um arquivo acima).",
-    )
+    if tipo_documento == "Texto":
+        st.text_area(
+            "Texto do documento",
+            key="texto_documento",
+            height=250,
+            # Sem max_chars de propósito: ele cortaria o texto em silêncio (perda de dados clínicos).
+            # O limite é checado em _enviar(), que mostra um erro claro.
+            placeholder="Cole aqui o texto do laudo, receita, guia, alta ou atestado.",
+        )
+    else:
+        # H1.1.3 T6: o uploader fica FORA do st.form, senão a prévia só apareceria depois do envio.
+        # A chave muda a cada envio com sucesso (n_upload) para limpar o arquivo escolhido.
+        n_upload = st.session_state.get("n_upload", 0)
+        arquivo = st.file_uploader(
+            "Foto, scan ou PDF",
+            type=TIPOS_ARQUIVO,
+            key=f"arquivo_{n_upload}",
+            max_upload_size=10,
+        )
+        if arquivo is not None:
+            if (arquivo.type or "").startswith("image/"):
+                st.image(arquivo, caption=arquivo.name, width=400)
+            else:
+                st.caption(f"📄 {arquivo.name} ({arquivo.size // 1024} KB)")
     st.checkbox(
         "Confirmo que este documento contém apenas dados sintéticos (sem dados reais de pacientes).",
         key="confirmo_sintetico",
