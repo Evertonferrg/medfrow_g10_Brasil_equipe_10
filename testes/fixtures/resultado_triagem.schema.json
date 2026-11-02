@@ -75,10 +75,10 @@
       "type": "object"
     },
     "DecisaoRoteamento": {
+      "description": "Submodelo de decisão de roteamento (H2.1.1 T1).",
       "properties": {
         "destino_principal": {
-          "title": "Destino Principal",
-          "type": "string"
+          "$ref": "#/$defs/Destino"
         },
         "justificativa_roteamento": {
           "title": "Justificativa Roteamento",
@@ -113,7 +113,20 @@
       "title": "DecisaoRoteamento",
       "type": "object"
     },
+    "Destino": {
+      "description": "Destinos de roteamento previstos pelo edital e regras de negócio.",
+      "enum": [
+        "Farmacia_Hospitalar",
+        "Auditoria_Autorizacoes",
+        "Prontuario_Eletronico",
+        "Fila_Emergencia_Medica",
+        "Fila_Revisao_Humana"
+      ],
+      "title": "Destino",
+      "type": "string"
+    },
     "Notificacao": {
+      "description": "Notificação gerada pelo roteamento (ex.: alerta plantão médico).",
       "properties": {
         "canal": {
           "title": "Canal",

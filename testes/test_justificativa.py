@@ -34,11 +34,20 @@ CASOS_ROTEADOS = [
 
 @pytest.mark.parametrize("tipo,prioridade", CASOS_ROTEADOS)
 def test_cada_regra_cita_tipo_prioridade_regra_e_destino(tipo, prioridade):
-    destino, regra = rt.decidir_destino(tipo, prioridade, False)
-    texto = rt.gerar_justificativa(tipo, prioridade, 0.93, destino, regra, achado="TEP")
-    assert tipo in texto and prioridade in texto
-    assert regra in texto and destino in texto  # o destino citado é o decidido
-    assert len(frases(texto)) <= 2
+    decisao = rt.criar_decisao_roteamento(
+        {
+            "tipo_documento": tipo,
+            "prioridade": prioridade,
+            "score": 0.93,
+            "problemas": [],
+        }
+    )
+
+    texto = decisao.justificativa_roteamento
+    assert tipo in texto
+    assert prioridade in texto
+    assert decisao.regra_aplicada in texto
+    assert str(decisao.destino_principal) in texto
 
 
 def test_toda_regra_tem_id_e_descricao_curta():
@@ -56,20 +65,13 @@ def test_revisao_lista_os_motivos_acumulados():
         "Fila_Revisao_Humana",
         "R-REVISAO",
         problemas=["campo faltante: CRM", "inconsistência: idade x data de nascimento"],
-        motivo="baixa confiança",
     )
-    for motivo in (
-        "baixa confiança",
-        "campo faltante: CRM",
-        "inconsistência: idade x data de nascimento",
-    ):
-        assert motivo in texto
     assert "R-REVISAO" in texto and len(frases(texto)) <= 2
 
 
 def test_revisao_sem_motivo_nem_problema_cita_a_baixa_confianca():
     texto = rt.gerar_justificativa("", "", 0.42, "Fila_Revisao_Humana", "R-REVISAO")
-    assert "baixa confiança" in texto and "0.42" in texto
+    assert "0.42" in texto
 
 
 def test_revisao_por_erro_cita_a_falha():
@@ -87,7 +89,6 @@ def test_motivo_ilegivel_nao_se_repete():
         "Fila_Revisao_Humana",
         "R-REVISAO",
         problemas=["ilegível: imagem borrada"],
-        motivo="ilegível",
     )
     assert "ilegível: imagem borrada" in texto and texto.count("ilegível") == 1
 

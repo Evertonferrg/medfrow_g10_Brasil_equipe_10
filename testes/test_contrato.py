@@ -12,6 +12,7 @@ from pathlib import Path
 
 from app import resposta, storage
 from app.grafo import triar
+from app.modelos import Destino
 from app.schemas import ResultadoTriagem
 from testes.conftest import LAUDO_TEP, cliente_com, extracao, extrator_fixo
 
@@ -117,13 +118,13 @@ def test_resultado_fora_do_formato_vai_para_revisao_sem_resposta_parcial():
         classificador=classificador_quebrado,
         documento_id="DOC-CON-002",
     )
-    assert estado["destino"] == "Fila_Revisao_Humana"
+    assert estado["destino"] == Destino.FILA_REVISAO_HUMANA
     assert estado["motivo_revisao"] == "falha de processamento"
     r = ResultadoTriagem.model_validate(estado["resultado"])
     assert r.status == "erro_processamento"
     assert r.classificacao is None and r.dados_extraidos is None  # nada parcial
     assert r.decisao_roteamento.requer_auditoria_humana is True
-    assert "falha de processamento" in r.decisao_roteamento.justificativa_roteamento
+    assert "Falha de processamento" in r.decisao_roteamento.justificativa_roteamento
 
 
 def test_resultado_fora_do_formato_e_arquivado_na_auditoria_humana():

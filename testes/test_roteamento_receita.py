@@ -6,13 +6,22 @@ Cenários cobertos:
 3. Critério de aceite ponta a ponta: receita roteada sem urgência e com score >= limite
    vai para Farmacia_Hospitalar e preserva a lista estruturada de medicamentos (H1.3.4).
 """
+
 import pytest
 
-from app.grafo import construir_grafo, decidir_destino, triar
+from app import config
+from app.grafo import triar
 from app.modelos import Destino, TipoDocumento
 from app.resposta import montar_resposta
+from app.roteamento import decidir_destino
 from app.schemas import Extracao, Medicamento, Medico, Paciente
-from testes.conftest import RECEITA, cliente_com, extrator_fixo
+from testes.conftest import cliente_com, extrator_fixo
+
+
+@pytest.fixture(autouse=True)
+def limite_de_teste(monkeypatch):
+    monkeypatch.setattr(config, "limite_confianca", lambda: 0.80)
+    monkeypatch.setattr(config, "limiar_confianca", lambda: 0.80)
 
 
 # ==============================================================================
@@ -137,7 +146,9 @@ from testes.conftest import RECEITA, cliente_com, extrator_fixo
         ),
     ],
 )
-def test_tabela_parametrizada_decidir_destino(tipo, score, urgencia, pendencia, destino_esperado):
+def test_tabela_parametrizada_decidir_destino(
+    tipo, score, urgencia, pendencia, destino_esperado
+):
     estado = {
         "tipo_documento": tipo,
         "score": score,
@@ -174,7 +185,7 @@ def test_determinismo_mesma_entrada_executada_10_vezes():
 def _criar_extracao_receita(
     urgente: bool = False,
     score: float = 0.95,
-    medicamentos: list = None,
+    medicamentos: list | None = None,
 ) -> Extracao:
     if medicamentos is None:
         medicamentos = [
@@ -222,9 +233,12 @@ def test_receita_sem_urgencia_com_score_alto_vai_para_farmacia_hospitalar_com_me
     assert resultado.status == "processado"
     assert resultado.decisao_roteamento.destino_principal == Destino.FARMACIA_HOSPITALAR
     assert resultado.decisao_roteamento.requer_auditoria_humana is False
-    assert "Farmacia_Hospitalar" in resultado.decisao_roteamento.justificativa_roteamento
+    assert (
+        "Farmacia_Hospitalar" in resultado.decisao_roteamento.justificativa_roteamento
+    )
 
     # A farmácia recebe os medicamentos já estruturados (H1.3.4)
+    assert resultado.dados_extraidos is not None
     meds = resultado.dados_extraidos["medicamentos"]
     assert len(meds) == 2
     assert meds[0]["nome"] == "Amoxicilina"
