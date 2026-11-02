@@ -31,8 +31,13 @@ class Estado(TypedDict, total=False):
     motivo_revisao: Optional[str]
     justificativa: str
     notificacao: Optional[dict]
+    decisao_roteamento: Optional[object]   # submodelo DecisaoRoteamento (H2.1.1 T1/T4)
     tipo_arquivo: str            # "TEXTO", "PDF" ou "Imagem"
     ilegivel: bool
+    canal_origem: Optional[str]  # H3.1.2: vem da rota de envio
+    nivel_prioridade: str        # H3.1.3: Urgente | Prioritário | Rotina (sempre gravado)
+    sinal_prioridade: str        # H3.1.3: o que definiu o nível ("achado crítico: TEP", "nenhum sinal"...)
+    achado_critico: Optional[str]
     resultado: dict
 
 
@@ -48,6 +53,18 @@ def montar_classificacao(extracao, score) -> Classificacao:
         score_confianca_classificacao=score,
     )
 
+def _valor(x):
+    return x.value if hasattr(x, "vallue") else x
+
+def _com_nivel(extracao, nivel: str):
+    """Cópia da extração com o nível final (sem revalidar o campo)."""
+    if extracao is None or _valor(getattr(extracao, "nivel_prioridade", None)) == nivel:
+        return extracao
+    try:
+        return extracao.model_copy(update={"nivel_prioridade": nivel})
+    except AttributeError:
+        extracao.nivel_prioridade = nivel
+        return extracao
 
 def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor=None):
     """'extrator', 'classificador' e 'leitor' podem ser trocados por versões falsas nos
@@ -99,6 +116,21 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             return {"problemas": [], "score": 0.0}
         extracao, problemas, score = validar(s["extracao"], s["texto"])
         return {"extracao": extracao, "problemas": problemas, "score": score}
+    
+    def n_avaliar_urgencia(s: Estado):
+        """H3.1.1/H3.1.2/H3.1.3: SEMPRE roda antes de decidir (também com erro, score baixo
+        ou ilegível). Só grava o nível/sinal; quem escolhe o destino é `decidir`.
+        """
+        e = s.get("extracao")
+        aval = avaliar_urgencia(
+            s.get("texto", ""), s.get("canal_origem"),
+            _valor(getattr(e, "nivel_prioridade", None)) if e is not None else None,
+            carregar_regras(config.ARQUIVO_REGRAS), confirmador)
+        nivel = _valor(aval.nivel)
+        return {"nivel_prioridade": nivel, "sinal_prioridade": aval.sinal,
+                "achado_critico": aval.achado, "extracao": _com_nivel(e, nivel)}
+ 
+
 
     def n_classificar(s: Estado):
         # T3: grava a classificação no estado; se falhar, segue sem ela
