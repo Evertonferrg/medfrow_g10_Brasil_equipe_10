@@ -49,7 +49,6 @@ COPY --chown=nonroot:nonroot app/ /app/app/
 COPY --chown=nonroot:nonroot ui/ /app/ui/
 COPY --chown=nonroot:nonroot config/ /app/config/
 COPY --chown=nonroot:nonroot .streamlit/ /app/.streamlit/
-COPY --chown=nonroot:nonroot scripts/ /app/scripts/
 
 USER nonroot
 
