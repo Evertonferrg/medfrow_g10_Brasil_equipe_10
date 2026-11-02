@@ -1,11 +1,14 @@
 import logging
 import os
+from collections.abc import Mapping
+from typing import Any
 
 from . import config, storage
 from .schemas import (
     ArmazenamentoOCI,
     Classificacao,
     DecisaoRoteamento,
+    Destino,
     Notificacao,
     ResultadoTriagem,
 )
@@ -14,8 +17,8 @@ PASTA_URGENTES = "processados/urgentes"
 PASTA_ROTINA = "processados/rotina"
 PASTA_REVISAO = "auditoria_humana"
 PASTAS = {
-    "Fila_Emergencia_Medica": PASTA_URGENTES,
-    "Fila_Revisao_Humana": PASTA_REVISAO,
+    Destino.FILA_EMERGENCIA_MEDICA.value: PASTA_URGENTES,
+    Destino.FILA_REVISAO_HUMANA.value: PASTA_REVISAO,
 }
 PASTAS_RESULTADO = (PASTA_URGENTES, PASTA_ROTINA, PASTA_REVISAO)
 CAMPOS_FORA = {
@@ -29,26 +32,26 @@ CAMPOS_FORA = {
 logger = logging.getLogger(__name__)
 
 
-def montar_resposta(documento_id: str, estado: dict) -> ResultadoTriagem:
-    e = estado.get("extracao")
+def montar_resposta(documento_id: str, estado: Mapping[str, Any]) -> ResultadoTriagem:
+    extracao = estado.get("extracao")
     if "classificacao" in estado:
         classificacao = estado["classificacao"]
     else:
         classificacao = (
             Classificacao(
-                tipo_documento=e.tipo_documento,
-                especialidade=e.especialidade,
-                nivel_prioridade=e.nivel_prioridade,
+                tipo_documento=extracao.tipo_documento,
+                especialidade=extracao.especialidade,
+                nivel_prioridade=extracao.nivel_prioridade,
                 score_confianca_classificacao=estado.get("score", 0.0),
             )
-            if e
+            if extracao
             else None
         )
 
     decisao = estado.get("decisao_roteamento")
     if not isinstance(decisao, DecisaoRoteamento):
         decisao = DecisaoRoteamento(
-            destino_principal=estado["destino"],
+            destino_principal=estado.get("destino", Destino.FILA_REVISAO_HUMANA),
             requer_auditoria_humana=estado.get("requer_revisao", False),
             justificativa_roteamento=estado.get("justificativa", ""),
             regra_aplicada=estado.get("regra", "R-ROTEAMENTO"),
@@ -56,10 +59,10 @@ def montar_resposta(documento_id: str, estado: dict) -> ResultadoTriagem:
         )
 
     return ResultadoTriagem(
-        status="processado" if e else "erro_extracao",
+        status="processado" if extracao else "erro_extracao",
         documento_id=documento_id,
-        classificacao=classificacao,
-        dados_extraidos=e.model_dump(exclude=CAMPOS_FORA) if e else None,
+        classificacao=classificacao,  # nosso score, não o do LLM
+        dados_extraidos=extracao.model_dump(exclude=CAMPOS_FORA) if extracao else None,
         problemas=estado.get("problemas", []),
         decisao_roteamento=decisao,
     )
@@ -78,11 +81,11 @@ def falha_de_processamento(
         documento_id=documento_id,
         problemas=[motivo[:200]],
         decisao_roteamento=DecisaoRoteamento(
-            destino_principal="Fila_Revisao_Humana",
+            destino_principal=Destino.FILA_REVISAO_HUMANA,
             requer_auditoria_humana=True,
             justificativa_roteamento=(
                 justificativa
-                or "Enviado à revisão humana (regra R-REVISAO): falha de processamento."
+                or "Enviado à revisão humana (regra R-REVISAO): Falha de processamento: o resultado não pôde ser montado."
             ),
             regra_aplicada="R-REVISAO",
             notificacao_gerada=notificacao,

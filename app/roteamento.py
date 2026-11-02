@@ -3,7 +3,9 @@
 Precedência estrita do edital: urgência → revisão → tipo.
 Funções puras, determinísticas e sem chamadas a LLM.
 """
-from typing import Any, Dict, Optional, Tuple, Union
+
+from collections.abc import Mapping
+from typing import Any
 
 from . import config
 from .modelos.classificacao import TipoDocumento
@@ -11,6 +13,7 @@ from .modelos.destino import DecisaoRoteamento, Destino, Notificacao
 
 PADRAO = Destino.PRONTUARIO_ELETRONICO
 
+# tipo de documento -> (destino, id da regra, descrição da regra)
 ROTINA = {
     TipoDocumento.RECEITUARIO_MEDICO.value: (
         Destino.FARMACIA_HOSPITALAR,
@@ -42,19 +45,51 @@ def descricao_regra(regra: str) -> str:
     return REGRAS.get(regra, "")
 
 
-def decidir_destino(tipo: str, prioridade: str, requer_revisao: bool):
-    """Devolve (destino, regra). A ORDEM importa: segurança, urgência, rotina.
+def decidir_destino(
+    estado_ou_tipo: Mapping[str, Any] | str, *args, **kwargs
+) -> Destino:
+    """Função pura que devolve o destino aplicando estritamente a precedência:
+    urgência → revisão → tipo (H2.1.1 T2).
 
-    A descrição da regra sai de descricao_regra(regra).
+    Retorna uma instância de Destino (que também é str).
     """
-    if requer_revisao:
-        return "Fila_Revisao_Humana", "R-REVISAO"
-    if prioridade == "Urgente":
-        return "Fila_Emergencia_Medica", "R-URGENCIA"
-    if tipo in ROTINA:
-        destino, regra, _ = ROTINA[tipo]
-        return destino, regra
-    return PADRAO, REGRA_PRONTUARIO[0]
+    (
+        tipo,
+        score,
+        urgente,
+        tem_pendencia,
+        problemas,
+        erro,
+        _,
+        _,
+    ) = _extrair_atributos(estado_ou_tipo, *args, **kwargs)
+
+    limite = float(kwargs.get("limite_confianca") or config.limiar_confianca())
+    tipo_str = str(tipo) if tipo else ""
+
+    # Precedência de Segurança: Revisão humana caso haja erro, pendência,
+    # problemas de validação, score abaixo do limite ou tipo Desconhecido.
+    if (
+        tem_pendencia
+        or bool(erro)
+        or len(problemas) > 0
+        or score < limite
+        or tipo_str in ("Desconhecido", TipoDocumento.DESCONHECIDO.value)
+    ):
+        return Destino.FILA_REVISAO_HUMANA
+
+    # Precedência de Urgência: casos críticos sem pendência vão imediatamente para a emergência
+    if urgente:
+        return Destino.FILA_EMERGENCIA_MEDICA
+
+    # Precedência de Tipo: encaminhamento por tipo de documento clínico
+    if tipo_str == TipoDocumento.RECEITUARIO_MEDICO.value:
+        return Destino.FARMACIA_HOSPITALAR
+
+    if tipo_str == TipoDocumento.GUIA_PROCEDIMENTO.value:
+        return Destino.AUDITORIA_AUTORIZACOES
+
+    return Destino.PRONTUARIO_ELETRONICO
 
 
 def _motivos(motivo, problemas, erro, score) -> list:
@@ -78,44 +113,53 @@ def _motivos(motivo, problemas, erro, score) -> list:
 
 
 def justificativa(
-    tipo,
-    prioridade,
-    score,
-    destino,
-    regra,
-    achado=None,
-    problemas=None,
-    erro=None,
-    motivo=None,
-):
-    """Justificativa por MODELO DE TEXTO, sem LLM (H2.2.1 T2): nunca contradiz o destino.
-
-    Sempre uma frase só: tipo, prioridade e regra (rota) ou a(s) dúvida(s) (revisão).
-    """
-    if regra == "R-REVISAO":
-        detalhe = "; ".join(_motivos(motivo, problemas, erro, score))
-        return f"Enviado à revisão humana (regra R-REVISAO): {detalhe}."
-    if regra == "R-URGENCIA":
-        return (
-            f"{tipo} com prioridade Urgente (achado crítico: {achado}); regra R-URGENCIA: "
-            f"{descricao_regra(regra)} → {destino}."
+    tipo: str | None,
+    prioridade: str | None,
+    score: float,
+    destino: Destino | str,
+    regra: str,
+    achado: str | None = None,
+    problemas: list | None = None,
+    erro: str | None = None,
+) -> str:
+    """Gera a justificativa textual explicativa da rota decidida."""
+    destino_str = str(destino)
+    if regra == "R-REVISAO" or destino_str == Destino.FILA_REVISAO_HUMANA.value:
+        motivo = (
+            f"falha na extração automática ({erro[:80]})"
+            if erro
+            else "; ".join(problemas or []) or f"score baixo ({score})"
         )
-    descricao = descricao_regra(regra) or REGRA_PRONTUARIO[1]
+        return f"Enviado à revisão humana (regra R-REVISAO): {motivo}."
+
+    if regra == "R-URGENCIA" or destino_str == Destino.FILA_EMERGENCIA_MEDICA.value:
+        return (
+            f"{tipo or 'Documento'} com prioridade Urgente (achado crítico: {achado or 'urgência clínica'}); "
+            f"regra R-URGENCIA: urgência tem precedência sobre a rota de rotina → {destino_str}."
+        )
+
+    tipo_str = str(tipo) if tipo else ""
+    descricao = ROTINA[tipo_str][2] if tipo_str in ROTINA else REGRA_PRONTUARIO[1]
+    prio_str = prioridade or "Rotina"
     return (
-        f"{tipo} com prioridade {prioridade} e confiança {score}; "
-        f"regra {regra}: {descricao} → {destino}."
+        f"{tipo_str} com prioridade {prio_str} e confiança {score}; "
+        f"regra {regra}: {descricao} → {destino_str}."
     )
 
 
 gerar_justificativa = justificativa  # nome do card H2.2.1 T2
-REGRA_PRONTUARIO = ("R-PRONTUARIO", "laudos, altas e atestados de rotina seguem para o prontuário")
+
+REGRA_PRONTUARIO = (
+    "R-PRONTUARIO",
+    "laudos, altas e atestados de rotina seguem para o prontuário",
+)
 
 
 def _extrair_atributos(
-    estado_ou_tipo: Union[Dict[str, Any], str],
+    estado_ou_tipo: Mapping[str, Any] | str,
     *args,
     **kwargs,
-) -> Tuple[Optional[str], float, bool, bool, list, Optional[str], Optional[str], Optional[str]]:
+) -> tuple[str | None, float, bool, bool, list, str | None, str | None, str | None]:
     """Extrai (tipo, score, urgente, pendencia, problemas, erro, achado, paciente)
     seja de um dict de estado ou de argumentos posicionais/nomeados.
     """
@@ -143,15 +187,15 @@ def _extrair_atributos(
 
         # Urgência
         urgente = False
-        if s.get("urgencia") is True:
-            urgente = True
-        elif s.get("prioridade") in ("Urgente", "urgente"):
-            urgente = True
-        elif s.get("nivel_prioridade") in ("Urgente", "urgente"):
-            urgente = True
-        elif ext is not None and getattr(ext, "nivel_prioridade", None) == "Urgente":
-            urgente = True
-        elif cla is not None and getattr(cla, "nivel_prioridade", None) == "Urgente":
+        if (
+            s.get("urgencia") is True
+            or s.get("prioridade") in ("Urgente", "urgente")
+            or s.get("nivel_prioridade") in ("Urgente", "urgente")
+            or ext is not None
+            and getattr(ext, "nivel_prioridade", None) == "Urgente"
+            or cla is not None
+            and getattr(cla, "nivel_prioridade", None) == "Urgente"
+        ):
             urgente = True
 
         # Pendência / Revisão
@@ -160,9 +204,7 @@ def _extrair_atributos(
         pendencia_raw = s.get("pendencia") if "pendencia" in s else s.get("pendencias")
 
         tem_pendencia = False
-        if s.get("requer_revisao") is True:
-            tem_pendencia = True
-        elif bool(erro):
+        if s.get("requer_revisao") is True or bool(erro):
             tem_pendencia = True
         elif isinstance(pendencia_raw, bool):
             tem_pendencia = pendencia_raw
@@ -209,9 +251,17 @@ def _extrair_atributos(
         score = kwargs.get("score", 1.0)
     else:
         score = args[0] if len(args) > 0 else kwargs.get("score", 1.0)
-        urgente_arg = args[1] if len(args) > 1 else kwargs.get("urgencia", kwargs.get("urgente", False))
+        urgente_arg = (
+            args[1]
+            if len(args) > 1
+            else kwargs.get("urgencia", kwargs.get("urgente", False))
+        )
         urgente = (urgente_arg is True) or (urgente_arg == "Urgente")
-        pendencia_arg = args[2] if len(args) > 2 else kwargs.get("pendencia", kwargs.get("pendencias", False))
+        pendencia_arg = (
+            args[2]
+            if len(args) > 2
+            else kwargs.get("pendencia", kwargs.get("pendencias", False))
+        )
         if isinstance(pendencia_arg, bool):
             tem_pendencia = pendencia_arg
         else:
@@ -222,91 +272,20 @@ def _extrair_atributos(
     achado = kwargs.get("achado", tipo)
     paciente_nome = kwargs.get("paciente")
 
-    return tipo, float(score), urgente, tem_pendencia, problemas, erro, achado, paciente_nome
-
-
-def decidir_destino(estado_ou_tipo: Union[Dict[str, Any], str], *args, **kwargs) -> Destino:
-    """Função pura que devolve o destino aplicando estritamente a precedência:
-    urgência → revisão → tipo (H2.1.1 T2).
-
-    Retorna uma instância de Destino (que também é str).
-    """
-    (
+    return (
         tipo,
-        score,
+        float(score),
         urgente,
         tem_pendencia,
         problemas,
         erro,
-        _,
-        _,
-    ) = _extrair_atributos(estado_ou_tipo, *args, **kwargs)
-
-    limite = float(kwargs.get("limite_confianca") or config.limiar_confianca())
-    tipo_str = str(tipo) if tipo else ""
-
-    # Precedência de Segurança: Revisão humana caso haja erro, pendência,
-    # problemas de validação, score abaixo do limite ou tipo Desconhecido.
-    if (
-        tem_pendencia
-        or bool(erro)
-        or len(problemas) > 0
-        or score < limite
-        or tipo_str in ("Desconhecido", TipoDocumento.DESCONHECIDO.value)
-    ):
-        return Destino.FILA_REVISAO_HUMANA
-
-    # Precedência de Urgência: casos críticos sem pendência vão imediatamente para a emergência
-    if urgente:
-        return Destino.FILA_EMERGENCIA_MEDICA
-
-    # Precedência de Tipo: encaminhamento por tipo de documento clínico
-    if tipo_str == TipoDocumento.RECEITUARIO_MEDICO.value:
-        return Destino.FARMACIA_HOSPITALAR
-
-    if tipo_str == TipoDocumento.GUIA_PROCEDIMENTO.value:
-        return Destino.AUDITORIA_AUTORIZACOES
-
-    return Destino.PRONTUARIO_ELETRONICO
-
-
-def justificativa(
-    tipo: Optional[str],
-    prioridade: Optional[str],
-    score: float,
-    destino: Union[Destino, str],
-    regra: str,
-    achado: Optional[str] = None,
-    problemas: Optional[list] = None,
-    erro: Optional[str] = None,
-) -> str:
-    """Gera a justificativa textual explicativa da rota decidida."""
-    destino_str = str(destino)
-    if regra == "R-REVISAO" or destino_str == Destino.FILA_REVISAO_HUMANA.value:
-        motivo = (
-            f"falha na extração automática ({erro[:80]})"
-            if erro
-            else "; ".join(problemas or []) or f"score baixo ({score})"
-        )
-        return f"Enviado à revisão humana (regra R-REVISAO): {motivo}."
-
-    if regra == "R-URGENCIA" or destino_str == Destino.FILA_EMERGENCIA_MEDICA.value:
-        return (
-            f"{tipo or 'Documento'} com prioridade Urgente (achado crítico: {achado or 'urgência clínica'}); "
-            f"regra R-URGENCIA: urgência tem precedência sobre a rota de rotina → {destino_str}."
-        )
-
-    tipo_str = str(tipo) if tipo else ""
-    descricao = ROTINA[tipo_str][2] if tipo_str in ROTINA else REGRA_PRONTUARIO[1]
-    prio_str = prioridade or "Rotina"
-    return (
-        f"{tipo_str} com prioridade {prio_str} e confiança {score}; "
-        f"regra {regra}: {descricao} → {destino_str}."
+        achado,
+        paciente_nome,
     )
 
 
 def criar_decisao_roteamento(
-    estado_ou_tipo: Union[Dict[str, Any], str],
+    estado_ou_tipo: Mapping[str, Any] | str,
     *args,
     **kwargs,
 ) -> DecisaoRoteamento:
@@ -315,7 +294,7 @@ def criar_decisao_roteamento(
         tipo,
         score,
         urgente,
-        tem_pendencia,
+        _tem_pendencia,
         problemas,
         erro,
         achado,

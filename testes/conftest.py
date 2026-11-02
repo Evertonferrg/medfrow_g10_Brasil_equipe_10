@@ -34,16 +34,16 @@ def storage_isolado(tmp_path, monkeypatch):
 
 
 def extracao(**kw) -> Extracao:
-    base = dict(
-        tipo_documento="Laudo de Exame de Imagem",
-        especialidade="Radiologia / Pneumologia",
-        nivel_prioridade="Urgente",
-        score_confianca_classificacao=0.99,
-        paciente=Paciente(nome="Carlos Eduardo Mendes", idade=52),
-        medico_solicitante=Medico(nome="Dra. Renata Silveira", crm="CRM-SP 145892"),
-        diagnostico_principal="Tromboembolismo Pulmonar Agudo (TEP)",
-        cid_sugerido="I26.9",
-    )
+    base = {
+        "tipo_documento": "Laudo de Exame de Imagem",
+        "especialidade": "Radiologia / Pneumologia",
+        "nivel_prioridade": "Urgente",
+        "score_confianca_classificacao": 0.99,
+        "paciente": Paciente(nome="Carlos Eduardo Mendes", idade=52),
+        "medico_solicitante": Medico(nome="Dra. Renata Silveira", crm="CRM-SP 145892"),
+        "diagnostico_principal": "Tromboembolismo Pulmonar Agudo (TEP)",
+        "cid_sugerido": "I26.9",
+    }
     base.update(kw)
     return Extracao(**base)
 

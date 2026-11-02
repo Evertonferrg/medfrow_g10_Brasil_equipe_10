@@ -3,8 +3,10 @@
 O enum Destino é a FONTE ÚNICA dos destinos de roteamento previstos
 no edital e em config/regras.json.
 """
+
 from enum import Enum
-from typing import Optional, Literal
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -43,5 +45,5 @@ class DecisaoRoteamento(BaseModel):
     destino_principal: Destino
     requer_auditoria_humana: bool
     justificativa_roteamento: str
-    regra_aplicada: Optional[str] = None
-    notificacao_gerada: Optional[Notificacao] = None
+    regra_aplicada: str
+    notificacao_gerada: Notificacao | None = None

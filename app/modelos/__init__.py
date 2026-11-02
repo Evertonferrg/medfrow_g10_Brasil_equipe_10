@@ -5,20 +5,19 @@ from .classificacao import (
     TipoDocumentoLiteral,
 )
 from .destino import (
+    DecisaoRoteamento,
     Destino,
     DestinoLiteral,
-    DecisaoRoteamento,
     Notificacao,
 )
 
 __all__ = [
     "Classificacao",
+    "DecisaoRoteamento",
+    "Destino",
+    "DestinoLiteral",
+    "Notificacao",
     "Prioridade",
     "TipoDocumento",
     "TipoDocumentoLiteral",
-    "Destino",
-    "DestinoLiteral",
-    "DecisaoRoteamento",
-    "Notificacao",
 ]
-

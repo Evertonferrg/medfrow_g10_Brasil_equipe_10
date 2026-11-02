@@ -40,7 +40,20 @@ lock: ## Gera requirements.txt com hashes para o Linux do container
 		-o requirements.txt
 
 # ------------------------------------------------------------------------------
-#  2. Qualidade de código
+#  2. Execução de código
+# ------------------------------------------------------------------------------
+api: ## Inicia a API FastAPI (porta 8000)
+	uv run uvicorn app.api.main:app --reload --port 8000
+
+ui: ## Inicia o frontend Streamlit (porta 8501)
+	uv run streamlit run ui/Home.py
+
+dev: ## Inicia tanto a API quanto o Streamlit simultaneamente
+	@trap 'kill 0' EXIT; uv run uvicorn app.api.main:app --reload --port 8000 & uv run streamlit run ui/Home.py
+
+
+# ------------------------------------------------------------------------------
+#  3. Qualidade de código
 # ------------------------------------------------------------------------------
 lint: ## Lint e checagem de formatação (ruff)
 	uv run ruff check .
@@ -49,18 +62,8 @@ lint: ## Lint e checagem de formatação (ruff)
 test: ## Testes unitários (contratos JSON e nós do LangGraph)
 	uv run pytest -v
 
-api: ## Inicia a API FastAPI (porta 8000)
-	uv run uvicorn app.main:app --reload --port 8000
-
-ui: ## Inicia o frontend Streamlit (porta 8501)
-	uv run streamlit run ui/Home.py
-
-dev: ## Inicia tanto a API quanto o Streamlit simultaneamente
-	@trap 'kill 0' EXIT; uv run uvicorn app.main:app --reload --port 8000 & uv run streamlit run ui/Home.py
-
-
 # ------------------------------------------------------------------------------
-#  3. Container
+#  4. Container
 # ------------------------------------------------------------------------------
 build: ## Build da imagem com Podman/Docker
 	$(ENGINE) build \
@@ -73,6 +76,6 @@ scan: ## Trivy (config + vulnerabilidades + segredos)
 		--severity LOW,MEDIUM,HIGH,CRITICAL $(IMAGE_NAME):$(IMAGE_TAG)
 
 # ------------------------------------------------------------------------------
-#  4. Pipeline local
+#  5. Pipeline local
 # ------------------------------------------------------------------------------
 ci-local: lint test build scan
