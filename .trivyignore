@@ -1,0 +1,4 @@
+# Falsos positivos no SDK da OCI (docstrings e rotas da API multicloud).
+# O MediFlow não usa AWS nem Azure.
+aws-secret-access-key
+azure-sas-token

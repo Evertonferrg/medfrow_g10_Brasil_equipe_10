@@ -3,9 +3,11 @@
 # ==============================================================================
 #
 #  Uso rápido:
-#    make lock       →  depois de adicionar/alterar pacotes em requirements.in
-#    make ci-local   →  antes de todo git push
+#    make dev        →  Inicia tanto Backend quantro Frontend
+#    make ci-local   →  Roda toda as verificações antes de todo git push
 #    make help       →  lista todos os comandos disponíveis
+#
+#  Guia completo: ./docs/03-makefile/03-makefile.md
 #
 #  Engine de container: usa Podman se instalado; caso contrário, Docker.
 #
@@ -20,7 +22,7 @@ IMAGE_TAG      := dev
 PYTHON_VERSION := 3.13
 
 .DEFAULT_GOAL := help
-.PHONY: help lock lint test build scan ci-local
+.PHONY: help lock api ui dev lint test build scan ci-local
 
 # ------------------------------------------------------------------------------
 #  Ajuda
@@ -51,7 +53,6 @@ ui: ## Inicia o frontend Streamlit (porta 8501)
 dev: ## Inicia tanto a API quanto o Streamlit simultaneamente
 	@trap 'kill 0' EXIT; uv run uvicorn app.api.main:app --reload --port 8000 & uv run streamlit run ui/Home.py
 
-
 # ------------------------------------------------------------------------------
 #  3. Qualidade de código
 # ------------------------------------------------------------------------------
@@ -66,11 +67,12 @@ test: ## Testes unitários (contratos JSON e nós do LangGraph)
 #  4. Container
 # ------------------------------------------------------------------------------
 build: ## Build da imagem com Podman/Docker
+	@test -n "$(ENGINE)" || { echo "Erro: nenhum engine de container encontrado. Instale Podman ou Docker."; exit 1; }
 	$(ENGINE) build \
 		--build-arg PYTHON_VERSION=$(PYTHON_VERSION) \
 		-t $(IMAGE_NAME):$(IMAGE_TAG) .
 
-scan: ## Trivy (config + vulnerabilidades + segredos)
+scan: ## Trivy (config + vulnerabilidades + segredos); lê o .trivyignore
 	trivy config --exit-code 1 --severity MEDIUM,HIGH,CRITICAL .
 	trivy image --exit-code 1 --scanners vuln,secret \
 		--severity LOW,MEDIUM,HIGH,CRITICAL $(IMAGE_NAME):$(IMAGE_TAG)
@@ -78,4 +80,4 @@ scan: ## Trivy (config + vulnerabilidades + segredos)
 # ------------------------------------------------------------------------------
 #  5. Pipeline local
 # ------------------------------------------------------------------------------
-ci-local: lint test build scan
+ci-local: lint test build scan ## Roda todas as verificações antes do push
