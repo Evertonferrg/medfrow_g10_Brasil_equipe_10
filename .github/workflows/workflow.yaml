@@ -141,7 +141,6 @@ jobs:
       # e o gate padrão (condições só sobre código novo) não avalia nada.
       # Este passo reprova o pipeline com base nas issues exportadas.
       - name: Enforce Quality Gate
-        continue-on-error: true
         run: |
           COVERAGE=$(curl -s -H "Authorization: Bearer $SONAR_TOKEN" \
             "localhost:9000/api/measures/component?component=mediflow&metricKeys=coverage" \
@@ -178,7 +177,6 @@ jobs:
 
       - name: Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
-        continue-on-error: true
         with:
           scan-type: 'fs'
           scan-ref: '.'
