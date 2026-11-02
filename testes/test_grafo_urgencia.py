@@ -2,9 +2,10 @@
 from types import SimpleNamespace as NS
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.grafo import triar
+from app.schemas import MedicoSolicitante
 from app.urgencia import fazer_confirmador
 
 NIVEIS = {"Urgente", "Prioritário", "Rotina"}
@@ -21,6 +22,15 @@ class Ext(BaseModel):
     score_confianca_classificacao: float = 0.95
     diagnostico_principal: str | None = None
     paciente: Paciente = Paciente()
+    # campos que o validar da main lê (iguais aos do Extracao real, em app/schemas.py)
+    medico_solicitante: MedicoSolicitante = Field(default_factory=MedicoSolicitante)
+    cid_sugerido: str | None = None
+    origem_cid: str | None = None
+    cid_origem: str | None = None
+    medicamentos: list = Field(default_factory=list)
+    exames: list = Field(default_factory=list)
+    evidencias: list = Field(default_factory=list)
+    inconsistencias: list = Field(default_factory=list)
 
 
 def extrator(**kw):

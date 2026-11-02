@@ -33,7 +33,7 @@ class TipoDocumento(str, Enum):
 # que não temos; ver bloco "Não testado sem chave" do PR).
 TipoDocumentoLiteral = Literal[tuple(m.value for m in TipoDocumento)]
 
-Prioridade = Literal["Urgente", "Rotina"]
+Prioridade = Literal["Urgente", "Prioritário", "Rotina"]
 
 
 class Classificacao(BaseModel):

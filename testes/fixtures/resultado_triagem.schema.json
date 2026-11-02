@@ -51,6 +51,7 @@
         "nivel_prioridade": {
           "enum": [
             "Urgente",
+            "Prioritário",
             "Rotina"
           ],
           "title": "Nivel Prioridade",
