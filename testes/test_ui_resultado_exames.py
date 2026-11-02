@@ -94,3 +94,40 @@ def test_a_pagina_da_equipe_continua_mostrando_tipo_e_destino(api):
         "Tipo do documento",
         "Especialidade provável",
     }
+
+
+def test_guia_de_rotina_exibe_destino_auditoria_autorizacoes_e_dados(api):
+    api["resposta"] = {
+        "status": "processado",
+        "documento_id": "GUIA-UI-001",
+        "problemas": [],
+        "classificacao": {
+            "tipo_documento": "Guia de Solicitação de Procedimento",
+            "especialidade": "Ortopedia",
+            "nivel_prioridade": "Rotina",
+            "score_confianca_classificacao": 0.95,
+        },
+        "decisao_roteamento": {
+            "destino_principal": "Auditoria_Autorizacoes",
+            "requer_auditoria_humana": False,
+            "justificativa_roteamento": "Guia de Solicitação de Procedimento → Auditoria_Autorizacoes.",
+            "regra_aplicada": "R-GUIA",
+        },
+        "dados_extraidos": {
+            "medico_solicitante": {"nome": "Dra. Ana Torres", "crm": "100002-RJ"},
+            "diagnostico_principal": "Lumbago com ciatica",
+            "cid_sugerido": "M54.5",
+            "cid_origem": "escrito",
+            "exames_solicitados": [
+                {"nome": "Ressonancia de joelho", "codigo_tuss": "40801020"}
+            ],
+        },
+    }
+    at = buscar()
+    assert not at.exception
+    assert any("Destino: Auditoria_Autorizacoes" in s.value for s in at.success)
+    assert any(s.value == "Exames e procedimentos" for s in at.subheader)
+    assert tabelas(at)[0] == [
+        {"Exame": "Ressonancia de joelho", "Código TUSS": "40801020"}
+    ]
+

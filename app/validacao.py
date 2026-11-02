@@ -274,6 +274,7 @@ def _validar_exames(extracao: Extracao, texto_s: str):
             pen += PENALIDADES["tuss_nao_encontrado"]
             e.codigo_tuss = None
     extracao.exames = [e for e, _ in achados]
+    extracao.exames_solicitados = list(extracao.exames)
     return problemas, pen
 
 
@@ -335,6 +336,7 @@ def validar(extracao: Extracao, texto: str):
         cids_validos = carregar_cids_validos()
         if CID_REGEX.match(cid) and cid in cids_validos:
             extracao.cid_sugerido = cid
+            extracao.cid = cid
             texto_lower = texto.lower()
             escrito = (
                 cid.lower() in texto_lower
@@ -347,6 +349,7 @@ def validar(extracao: Extracao, texto: str):
             problemas.append(f"CID inválido: '{extracao.cid_sugerido}'")
             pen += PENALIDADES["cid_invalido"]
             extracao.cid_sugerido = None
+            extracao.cid = None
             extracao.origem_cid = None
             extracao.cid_origem = None
 

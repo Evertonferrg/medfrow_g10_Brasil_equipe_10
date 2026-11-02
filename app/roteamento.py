@@ -25,6 +25,11 @@ ROTINA = {
         "R-GUIA",
         "guias de rotina seguem para a auditoria de autorizações",
     ),
+    "Guia": (
+        Destino.AUDITORIA_AUTORIZACOES,
+        "R-GUIA",
+        "guias de rotina seguem para a auditoria de autorizações",
+    ),
 }
 REGRA_PRONTUARIO = (
     "R-PRONTUARIO",
@@ -86,7 +91,13 @@ def decidir_destino(
     if tipo_str == TipoDocumento.RECEITUARIO_MEDICO.value:
         return Destino.FARMACIA_HOSPITALAR
 
-    if tipo_str == TipoDocumento.GUIA_PROCEDIMENTO.value:
+    if tipo_str in (
+        TipoDocumento.GUIA_PROCEDIMENTO.value,
+        "Guia de Solicitação de Procedimento",
+        "Guia de Solicitacao de Procedimento",
+        "Guia",
+        "guia",
+    ):
         return Destino.AUDITORIA_AUTORIZACOES
 
     return Destino.PRONTUARIO_ELETRONICO
