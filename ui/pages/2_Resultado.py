@@ -62,8 +62,8 @@ def mostrar_medicamentos(dados, tipo_documento=None):
 
 
 def mostrar_exames(dados):
-    """H1.3.5 T5: exames e procedimentos, com o código TUSS ao lado."""
-    itens = (dados or {}).get("exames") or []
+    """H1.3.5 T5 / H2.1.2: exames e procedimentos, com o código TUSS ao lado."""
+    itens = (dados or {}).get("exames") or (dados or {}).get("exames_solicitados") or []
     if not itens:
         return
     st.subheader("Exames e procedimentos")
@@ -171,8 +171,8 @@ if buscar and doc_id.strip():
                 )
 
             diag = dados.get("diagnostico_principal")
-            cid = dados.get("cid_sugerido")
-            cid_origem = dados.get("cid_origem")
+            cid = dados.get("cid_sugerido") or dados.get("cid")
+            cid_origem = dados.get("cid_origem") or dados.get("origem_cid")
             if diag or cid:
                 st.markdown(f"**Diagnóstico:** {diag or '—'}")
                 st.markdown(

@@ -104,15 +104,30 @@ class Extracao(BaseModel):
     medico_solicitante: MedicoSolicitante = Field(default_factory=MedicoSolicitante)
     diagnostico_principal: str | None = None
     cid_sugerido: str | None = None
+    cid: str | None = None  # alias mantido para compatibilidade (H2.1.2 T2)
     origem_cid: Literal["escrito", "sugerido"] | None = None  # H1.3.3 T1
     cid_origem: str | None = None  # alias mantido para compatibilidade
     medicamentos: list[Medicamento] = Field(default_factory=list)
     exames: list[Exame] = Field(default_factory=list)
+    exames_solicitados: list[Exame] = Field(default_factory=list)  # alias H2.1.2 T2
     evidencias: list[Evidencia] = Field(default_factory=list)
     inconsistencias: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _sincronizar_origem_cid(self):
+    def _sincronizar_campos(self):
+        # Sincroniza CID
+        if self.cid is None and self.cid_sugerido is not None:
+            self.cid = self.cid_sugerido
+        elif self.cid_sugerido is None and self.cid is not None:
+            self.cid_sugerido = self.cid
+
+        # Sincroniza exames e exames_solicitados
+        if not self.exames and self.exames_solicitados:
+            self.exames = list(self.exames_solicitados)
+        elif not self.exames_solicitados and self.exames:
+            self.exames_solicitados = list(self.exames)
+
+        # Sincroniza origem do CID
         if self.origem_cid is None and self.cid_origem in ("escrito", "sugerido"):
             self.origem_cid = self.cid_origem
         elif self.origem_cid is None and self.cid_origem == "documento":
