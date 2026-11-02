@@ -2,6 +2,7 @@ import pytest
 
 from app import storage
 from app.grafo import triar
+from app.modelos import Destino
 from app.roteamento import decidir_destino
 from app.schemas import Evidencia, Exame, Medicamento, Medico
 from app.validacao import normalizar_crm, validar
@@ -19,37 +20,37 @@ from testes.conftest import (
 @pytest.mark.parametrize(
     "tipo,prio,rev,esperado",
     [
-        ("Receituário Médico", "Rotina", False, ("Farmacia_Hospitalar", "R-RECEITA")),
+        ("Receituário Médico", "Rotina", False, Destino.FARMACIA_HOSPITALAR),
         (
             "Guia de Solicitação de Procedimento",
             "Rotina",
             False,
-            ("Auditoria_Autorizacoes", "R-GUIA"),
+            Destino.AUDITORIA_AUTORIZACOES,
         ),
         (
             "Laudo de Exame de Imagem",
             "Rotina",
             False,
-            ("Prontuario_Eletronico", "R-PRONTUARIO"),
+            Destino.PRONTUARIO_ELETRONICO,
         ),
         (
             "Relatório de Alta",
             "Rotina",
             False,
-            ("Prontuario_Eletronico", "R-PRONTUARIO"),
+            Destino.PRONTUARIO_ELETRONICO,
         ),
-        ("Atestado Médico", "Rotina", False, ("Prontuario_Eletronico", "R-PRONTUARIO")),
+        ("Atestado Médico", "Rotina", False, Destino.PRONTUARIO_ELETRONICO),
         (
             "Receituário Médico",
             "Urgente",
             False,
-            ("Fila_Emergencia_Medica", "R-URGENCIA"),
+            Destino.FILA_EMERGENCIA_MEDICA,
         ),  # urgência vence rotina
         (
             "Receituário Médico",
             "Urgente",
             True,
-            ("Fila_Revisao_Humana", "R-REVISAO"),
+            Destino.FILA_REVISAO_HUMANA,
         ),  # revisão vence tudo
     ],
 )

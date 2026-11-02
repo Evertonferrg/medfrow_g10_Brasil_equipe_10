@@ -1,10 +1,10 @@
 import json
 
-"""T4 — tela de resultado: consulta GET /documentos/{documento_id} e mostra
+_ = """T4 — tela de resultado: consulta GET /documentos/{documento_id} e mostra
 o tipo identificado, o score de confiança ao lado do tipo e a especialidade provável ao analista.
 """
 
-"""H2.1.1 T5 — Tela de resultado: consulta GET /documentos/{documento_id} e exibe
+_ = """H2.1.1 T5 — Tela de resultado: consulta GET /documentos/{documento_id} e exibe
 o destino de roteamento em destaque, acima dos dados extraídos clínicos.
 """
 import os
@@ -24,8 +24,6 @@ from componentes.classificacao import (  # noqa: F401
     exibir_classificacao,
     formatar_confianca,
 )
-from componentes.diagnostico import bloco_diagnostico
-from componentes.medico import bloco_medico
 
 try:
     from componentes.paciente import bloco_paciente
@@ -142,6 +140,8 @@ if buscar and doc_id.strip():
             d.metric("Confiança", cl.get("score_confianca_classificacao", "—"))
         else:
             st.warning("Sem classificação: o documento foi para revisão humana.")
+        decisao = res.get("decisao_roteamento") or {}
+        mostrar_destino(decisao)
 
         # Dados Extraídos (H1.3.1, H1.3.4, H1.3.5)
         dados = res.get("dados_extraidos") or {}
@@ -160,26 +160,29 @@ if buscar and doc_id.strip():
             with col_medico:
                 st.subheader("Médico solicitante")
                 med = dados.get("medico_solicitante") or {}
-                st.text_input("Nome", value=med.get("nome") or "—", disabled=True, key="medico_nome")
-                st.text_input("CRM", value=med.get("crm") or "—", disabled=True, key="medico_crm")
+                st.text_input(
+                    "Nome",
+                    value=med.get("nome") or "—",
+                    disabled=True,
+                    key="medico_nome",
+                )
+                st.text_input(
+                    "CRM", value=med.get("crm") or "—", disabled=True, key="medico_crm"
+                )
 
             diag = dados.get("diagnostico_principal")
             cid = dados.get("cid_sugerido")
             cid_origem = dados.get("cid_origem")
             if diag or cid:
-                st.markdown(f"**Diagnóstico:** {diag or '—'}  |  **CID:** {cid or '—'} ({cid_origem or 'não especificado'})")
+                st.markdown(f"**Diagnóstico:** {diag or '—'}")
+                st.markdown(
+                    f"**CID:** {cid or '—'} ({cid_origem or 'não especificado'})"
+                )
 
-            # Medicamentos estruturados (H1.3.4 / H2.1.1)
-            medicamentos = dados.get("medicamentos")
-            if medicamentos:
-                st.subheader("💊 Medicamentos para Dispensação")
-                st.table(medicamentos)
-
-            # Exames estruturados (H1.3.5)
-            exames = dados.get("exames")
-            if exames:
-                st.subheader("🧪 Exames / Procedimentos")
-                st.table(exames)
+        # Medicamentos estruturados (H1.3.4 / H2.1.1)
+        tipo_documento = (cl or {}).get("tipo_documento")
+        mostrar_medicamentos(dados, tipo_documento)
+        mostrar_exames(dados)
 
         # Problemas identificados / pontos de atenção
         problemas = res.get("problemas") or []

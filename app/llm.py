@@ -126,6 +126,6 @@ def ler_imagem(imagens: list[bytes]) -> tuple[str, Legibilidade]:
     )
     if resposta is None:
         raise RuntimeError("Gemini não conseguiu ler a imagem")
-        
+
     leitura = LeituraImagem.model_validate_json(resposta.text)
     return leitura.texto, leitura.legibilidade
