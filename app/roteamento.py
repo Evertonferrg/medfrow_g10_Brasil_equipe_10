@@ -30,6 +30,67 @@ ROTINA = {
         "R-GUIA",
         "guias de rotina seguem para a auditoria de autorizações",
     ),
+    # H2.1.3 T1: laudos de exame, relatórios de alta e atestados -> Prontuario_Eletronico
+    TipoDocumento.LAUDO_IMAGEM.value: (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    TipoDocumento.LAUDO_LABORATORIAL.value: (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    "Laudo de Exame": (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    "Laudo": (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    TipoDocumento.RELATORIO_ALTA.value: (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    "Relatório de Alta/Internação": (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    "Relatório de Internação": (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    "Relatorio de Alta": (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    "Alta": (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    TipoDocumento.ATESTADO_MEDICO.value: (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    "Atestado Medico": (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
+    "Atestado": (
+        Destino.PRONTUARIO_ELETRONICO,
+        "R-PRONTUARIO",
+        "laudos, altas e atestados de rotina seguem para o prontuário",
+    ),
 }
 REGRA_PRONTUARIO = (
     "R-PRONTUARIO",
@@ -99,6 +160,40 @@ def decidir_destino(
         "guia",
     ):
         return Destino.AUDITORIA_AUTORIZACOES
+
+    # H2.1.3 T1: Laudo de Exame, Relatório de Alta/Internação e Atestado Médico -> Prontuario_Eletronico
+    if tipo_str in (
+        TipoDocumento.LAUDO_IMAGEM.value,
+        TipoDocumento.LAUDO_LABORATORIAL.value,
+        "Laudo de Exame de Imagem",
+        "Laudo Laboratorial",
+        "Laudo de Exame",
+        "Laudo",
+        "laudo",
+    ):
+        return Destino.PRONTUARIO_ELETRONICO
+
+    if tipo_str in (
+        TipoDocumento.RELATORIO_ALTA.value,
+        "Relatório de Alta",
+        "Relatorio de Alta",
+        "Relatório de Alta/Internação",
+        "Relatorio de Alta/Internacao",
+        "Relatório de Internação",
+        "Relatorio de Internacao",
+        "Alta",
+        "alta",
+    ):
+        return Destino.PRONTUARIO_ELETRONICO
+
+    if tipo_str in (
+        TipoDocumento.ATESTADO_MEDICO.value,
+        "Atestado Médico",
+        "Atestado Medico",
+        "Atestado",
+        "atestado",
+    ):
+        return Destino.PRONTUARIO_ELETRONICO
 
     return Destino.PRONTUARIO_ELETRONICO
 
@@ -261,17 +356,34 @@ def _extrair_atributos(
         tem_pendencia = requer_revisao_arg
         score = kwargs.get("score", 1.0)
     else:
-        score = args[0] if len(args) > 0 else kwargs.get("score", 1.0)
+        score = (
+            args[0]
+            if len(args) > 0
+            else kwargs.get("score", kwargs.get("score_confianca_classificacao", 1.0))
+        )
         urgente_arg = (
             args[1]
             if len(args) > 1
-            else kwargs.get("urgencia", kwargs.get("urgente", False))
+            else (
+                kwargs.get("urgencia")
+                if "urgencia" in kwargs
+                else kwargs.get(
+                    "urgente",
+                    kwargs.get("prioridade", kwargs.get("nivel_prioridade", False)),
+                )
+            )
         )
-        urgente = (urgente_arg is True) or (urgente_arg == "Urgente")
+        urgente = (urgente_arg is True) or (urgente_arg in ("Urgente", "urgente"))
         pendencia_arg = (
             args[2]
             if len(args) > 2
-            else kwargs.get("pendencia", kwargs.get("pendencias", False))
+            else kwargs.get(
+                "pendencia",
+                kwargs.get(
+                    "pendencias",
+                    kwargs.get("requer_revisao", kwargs.get("revisao", False)),
+                ),
+            )
         )
         if isinstance(pendencia_arg, bool):
             tem_pendencia = pendencia_arg
@@ -337,6 +449,10 @@ def criar_decisao_roteamento(
         notificacao = None
     elif destino == Destino.AUDITORIA_AUTORIZACOES:
         regra = "R-GUIA"
+        requer_auditoria = False
+        notificacao = None
+    elif destino == Destino.PRONTUARIO_ELETRONICO:
+        regra = "R-PRONTUARIO"
         requer_auditoria = False
         notificacao = None
     else:
