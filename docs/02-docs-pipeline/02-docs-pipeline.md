@@ -106,13 +106,13 @@ Exemplo de vulnerabilidades encontradas:
 
 No exemplo, 11 vulnerabilidades foram encontradas, todas de gravidade alta. O job `trivy-fs` falhou, impedindo o merge do pull request até que essas vulnerabilidades sejam resolvidas.
 
-Para nossa sorte, apenas duas dependências precisavam ser atualizadas para que o job `trivy-fs` passe com sucesso. No caso, foi só atualizar o `pyasn1` para 0.6.5 e o `pypdf` para 6.21.4 no `requirements.txt` (**NÃO use o `´pyproject.toml` neste projeto específico**), fazer commit e push.
+Para nossa sorte, apenas duas dependências precisavam ser atualizadas para que o job `trivy-fs` passe com sucesso. No caso, foi só atualizar o `pyasn1` para 0.6.5 e o `pypdf` para 6.21.4 no `requirements.txt` (**NÃO use o `pyproject.toml` neste projeto específico**), fazer commit e push.
 
 A pipeline roda de novo automaticamente.
 
 ### E se não houver correção?
 
-Se a coluna “Fixed Version” vier vazia, vale citar e pedir justificativa no PR.
+Se a coluna “Fixed Version” vier vazia, vale citar e pedir suporte no PR.
 
 ## Dica
 
