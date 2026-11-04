@@ -69,7 +69,9 @@ def montar_resposta(documento_id: str, estado: Mapping[str, Any]) -> ResultadoTr
     if dados_extraidos is not None:
         if "exames" in dados_extraidos and "exames_solicitados" not in dados_extraidos:
             dados_extraidos["exames_solicitados"] = dados_extraidos["exames"]
-        elif "exames_solicitados" in dados_extraidos and "exames" not in dados_extraidos:
+        elif (
+            "exames_solicitados" in dados_extraidos and "exames" not in dados_extraidos
+        ):
             dados_extraidos["exames"] = dados_extraidos["exames_solicitados"]
         if "cid_sugerido" in dados_extraidos and "cid" not in dados_extraidos:
             dados_extraidos["cid"] = dados_extraidos["cid_sugerido"]

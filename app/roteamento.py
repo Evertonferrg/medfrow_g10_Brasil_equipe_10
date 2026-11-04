@@ -73,13 +73,19 @@ def decidir_destino(
     tipo_str = str(tipo) if tipo else ""
 
     # Precedência de Segurança: Revisão humana caso haja erro, pendência,
-    # problemas de validação, score abaixo do limite ou tipo Desconhecido.
+    # problemas de validação, score abaixo do limite ou tipo Desconhecido / Não identificado.
     if (
         tem_pendencia
         or bool(erro)
         or len(problemas) > 0
         or score < limite
-        or tipo_str in ("Desconhecido", TipoDocumento.DESCONHECIDO.value)
+        or tipo_str
+        in (
+            "Desconhecido",
+            TipoDocumento.DESCONHECIDO.value,
+            "Não identificado",
+            TipoDocumento.NAO_IDENTIFICADO.value,
+        )
     ):
         return Destino.FILA_REVISAO_HUMANA
 
@@ -313,6 +319,12 @@ def criar_decisao_roteamento(
     ) = _extrair_atributos(estado_ou_tipo, *args, **kwargs)
 
     destino = decidir_destino(estado_ou_tipo, *args, **kwargs)
+    fora_das_categorias = str(tipo or "") in (
+        "Não identificado",
+        TipoDocumento.NAO_IDENTIFICADO.value,
+    )
+    if fora_das_categorias and "documento fora das categorias" not in problemas:
+        problemas = ["documento fora das categorias", *problemas]
 
     if destino == Destino.FILA_EMERGENCIA_MEDICA:
         regra = "R-URGENCIA"
@@ -326,7 +338,7 @@ def criar_decisao_roteamento(
         regra = "R-REVISAO"
         requer_auditoria = True
         notificacao = None
-        if urgente:
+        if urgente and not fora_das_categorias:
             notificacao = Notificacao(
                 canal="Alerta_Plantao_Medico",
                 mensagem="Possível urgência com dados ambíguos: revisar com prioridade.",

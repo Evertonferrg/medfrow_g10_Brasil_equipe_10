@@ -130,4 +130,3 @@ def test_guia_de_rotina_exibe_destino_auditoria_autorizacoes_e_dados(api):
     assert tabelas(at)[0] == [
         {"Exame": "Ressonancia de joelho", "Código TUSS": "40801020"}
     ]
-

@@ -282,15 +282,17 @@ def validar(extracao: Extracao, texto: str):
     """Devolve (extracao_corrigida, lista_de_problemas, score_final)."""
     problemas, pen = [], 0.0
     texto_s = _simplificar(texto)
+    fora_das_categorias = extracao.tipo_documento == "Não identificado"
 
     # 1) CRM: normaliza e confere o número no texto (nunca um valor "plausível")
     bruto = extracao.medico_solicitante.crm
     crm = normalizar_crm(bruto)
     erro_crm = None
     if not bruto:
-        erro_crm = "CRM do solicitante não encontrado"
-        problemas.append(erro_crm)
-        pen += PENALIDADES["crm_ausente"]
+        if not fora_das_categorias:
+            erro_crm = "CRM do solicitante não encontrado"
+            problemas.append(erro_crm)
+            pen += PENALIDADES["crm_ausente"]
     elif not crm:
         erro_crm = f"CRM em formato inválido: '{bruto}'"
         problemas.append(erro_crm)
@@ -305,8 +307,9 @@ def validar(extracao: Extracao, texto: str):
     # 2) Paciente e médico: o nome existe no texto?
     nome = extracao.paciente.nome
     if not nome:
-        problemas.append("Nome do paciente ausente")
-        pen += PENALIDADES["paciente_ausente"]
+        if not fora_das_categorias:
+            problemas.append("Nome do paciente ausente")
+            pen += PENALIDADES["paciente_ausente"]
     elif not _nome_aparece_no_texto(nome, texto):
         problemas.append(f"Nome '{nome}' não encontrado no texto original")
         pen += PENALIDADES["nome_nao_encontrado"]
@@ -316,7 +319,10 @@ def validar(extracao: Extracao, texto: str):
         pen += PENALIDADES["nome_nao_encontrado"]
 
     # 3) Tipo e inconsistências apontadas pelo LLM
-    if extracao.tipo_documento == "Desconhecido":
+    if fora_das_categorias:
+        problemas.insert(0, "documento fora das categorias")
+        pen += PENALIDADES["tipo_desconhecido"]
+    elif extracao.tipo_documento == "Desconhecido":
         problemas.append("Tipo de documento não identificado")
         pen += PENALIDADES["tipo_desconhecido"]
     for item in extracao.inconsistencias:
@@ -380,11 +386,13 @@ def motivo_revisao(
 ) -> str:
     """Motivo registrado no estado quando o documento não é roteado sozinho.
 
-    A ordem espelha a decisão do grafo: falha de extração, baixa confiança,
-    depois os problemas de validação.
+    A ordem espelha a decisão do grafo: falha de extração, documento fora das
+    categorias, baixa confiança, depois os problemas de validação.
     """
     if erro:
         return f"falha na extração automática ({erro[:80]})"
+    if "documento fora das categorias" in (problemas or []):
+        return "documento fora das categorias"
     if score < limite:
         motivo = "baixa confiança na classificação"
         if problemas:

@@ -7,7 +7,7 @@ from . import config
 from . import roteamento as rt
 from .arquivos import extensao_por_assinatura
 from .llm import extrair, ler_imagem
-from .modelos import Classificacao, Destino
+from .modelos import Classificacao, Destino, TipoDocumento
 from .modelos.destino import DecisaoRoteamento, Notificacao
 from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
 from .resposta import falha_de_processamento, montar_resposta
@@ -125,6 +125,14 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             logger.exception("Falha na classificação automática")
             return {"classificacao": None}
 
+    def _eh_fora_das_categorias(s: Estado) -> bool:
+        cl = s.get("classificacao")
+        ext = s.get("extracao")
+        tipo = getattr(cl, "tipo_documento", None) or getattr(
+            ext, "tipo_documento", None
+        )
+        return str(tipo or "") == TipoDocumento.NAO_IDENTIFICADO.value
+
     def n_decidir(s: Estado):
         """H2.1.1 T3: nó decidir que chama a função pura de roteamento
         aplicando precedência urgência → revisão → tipo.
@@ -135,10 +143,16 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             else config.limite_confianca()
         )
         decisao = rt.criar_decisao_roteamento(s, limite_confianca=limite)
+        motivo = (
+            "documento fora das categorias"
+            if _eh_fora_das_categorias(s)
+            else s.get("motivo_revisao")
+        )
         return {
             "destino": str(decisao.destino_principal),
             "regra": decisao.regra_aplicada,
             "requer_revisao": decisao.requer_auditoria_humana,
+            "motivo_revisao": motivo if decisao.requer_auditoria_humana else None,
             "justificativa": decisao.justificativa_roteamento,
             "notificacao": decisao.notificacao_gerada.model_dump()
             if decisao.notificacao_gerada
@@ -155,9 +169,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 "destino": str(decisao.destino_principal),
                 "regra": decisao.regra_aplicada,
                 "requer_revisao": decisao.requer_auditoria_humana,
-                "motivo_revisao": s.get("motivo_revisao")
-                if decisao.requer_auditoria_humana
-                else None,
+                "motivo_revisao": None,
                 "justificativa": decisao.justificativa_roteamento,
                 "notificacao": (
                     decisao.notificacao_gerada.model_dump()
@@ -165,6 +177,44 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                     else None
                 ),
             }
+
+    def n_enviar_revisao(s: Estado):
+        """H1.2.3 T2: envia documentos fora das categorias ou com pendências para revisão humana."""
+        decisao = s.get("decisao_roteamento")
+        motivo = (
+            "documento fora das categorias"
+            if _eh_fora_das_categorias(s)
+            else s.get("motivo_revisao")
+        )
+        if decisao is not None:
+            return {
+                "destino": str(Destino.FILA_REVISAO_HUMANA),
+                "regra": decisao.regra_aplicada,
+                "requer_revisao": True,
+                "motivo_revisao": motivo,
+                "justificativa": decisao.justificativa_roteamento,
+                "notificacao": (
+                    decisao.notificacao_gerada.model_dump()
+                    if decisao.notificacao_gerada
+                    else None
+                ),
+            }
+        return {
+            "destino": str(Destino.FILA_REVISAO_HUMANA),
+            "regra": "R-REVISAO",
+            "requer_revisao": True,
+            "motivo_revisao": motivo,
+        }
+
+    def _aresta_decisao(s: Estado) -> str:
+        """H1.2.3 T2: tipo 'Não identificado' (ou qualquer revisão) leva sempre a enviar_revisao."""
+        if (
+            _eh_fora_das_categorias(s)
+            or s.get("requer_revisao")
+            or s.get("destino") == Destino.FILA_REVISAO_HUMANA.value
+        ):
+            return "enviar_revisao"
+        return "rotear"
 
     def n_montar_resultado(s: Estado):
         """H2.3.1 T2: último nó. Monta e valida o ResultadoTriagem.
@@ -197,6 +247,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         ("classificar", n_classificar),
         ("decidir", n_decidir),
         ("rotear", n_rotear),
+        ("enviar_revisao", n_enviar_revisao),
         ("montar_resultado", n_montar_resultado),
     ]:
         g.add_node(nome, fn)
@@ -211,8 +262,13 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
     g.add_edge("extrair", "validar")
     g.add_edge("validar", "classificar")
     g.add_edge("classificar", "decidir")
-    g.add_edge("decidir", "rotear")
+    g.add_conditional_edges(
+        "decidir",
+        _aresta_decisao,
+        {"rotear": "rotear", "enviar_revisao": "enviar_revisao"},
+    )
     g.add_edge("rotear", "montar_resultado")
+    g.add_edge("enviar_revisao", "montar_resultado")
     g.add_edge("montar_resultado", END)
     return g.compile()
 

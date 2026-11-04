@@ -79,6 +79,11 @@ if enviar:
         b.metric("Confiança", score_txt)
         c.metric("Especialidade", cl.get("especialidade") or "—")
         e.metric("Prioridade", cl["nivel_prioridade"])
+        if cl.get("tipo_documento") == "Não identificado":
+            st.warning(
+                "Documento fora das categorias clínicas (Não identificado): "
+                "o documento foi separado para revisão humana."
+            )
     dados = res.get("dados_extraidos") or {}
     if dados:
         a, b = st.columns(2)

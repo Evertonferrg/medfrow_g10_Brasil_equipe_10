@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 
 class TipoDocumento(str, Enum):
-    """As 6 categorias clínicas do edital + 'Desconhecido' (dúvida → revisão humana)."""
+    """As 6 categorias clínicas do edital + 'Não identificado' / 'Desconhecido' (revisão humana)."""
 
     RECEITUARIO_MEDICO = "Receituário Médico"
     LAUDO_IMAGEM = "Laudo de Exame de Imagem"
@@ -21,6 +21,7 @@ class TipoDocumento(str, Enum):
     GUIA_PROCEDIMENTO = "Guia de Solicitação de Procedimento"
     RELATORIO_ALTA = "Relatório de Alta"
     ATESTADO_MEDICO = "Atestado Médico"
+    NAO_IDENTIFICADO = "Não identificado"
     DESCONHECIDO = "Desconhecido"
 
     def __str__(self) -> str:
