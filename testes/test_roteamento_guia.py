@@ -247,10 +247,15 @@ def test_guia_de_rotina_com_confianca_acima_do_limite_vai_para_auditoria_autoriz
     resultado = montar_resposta("DOC-GUIA-001", estado)
 
     assert resultado.status == "processado"
-    assert resultado.decisao_roteamento.destino_principal == Destino.AUDITORIA_AUTORIZACOES
+    assert (
+        resultado.decisao_roteamento.destino_principal == Destino.AUDITORIA_AUTORIZACOES
+    )
     assert resultado.decisao_roteamento.requer_auditoria_humana is False
     assert resultado.decisao_roteamento.regra_aplicada == "R-GUIA"
-    assert "Auditoria_Autorizacoes" in resultado.decisao_roteamento.justificativa_roteamento
+    assert (
+        "Auditoria_Autorizacoes"
+        in resultado.decisao_roteamento.justificativa_roteamento
+    )
 
     # 3) Conferência dos dados clínicos que seguem com a guia (T2)
     assert resultado.dados_extraidos is not None
@@ -294,7 +299,9 @@ def test_guia_com_urgencia_nao_vai_para_auditoria_autorizacoes():
     assert estado["notificacao"]["canal"] == "Alerta_Plantao_Medico"
 
     resultado = montar_resposta("DOC-GUIA-URG-001", estado)
-    assert resultado.decisao_roteamento.destino_principal == Destino.FILA_EMERGENCIA_MEDICA
+    assert (
+        resultado.decisao_roteamento.destino_principal == Destino.FILA_EMERGENCIA_MEDICA
+    )
     assert resultado.decisao_roteamento.regra_aplicada == "R-URGENCIA"
 
 
@@ -389,5 +396,7 @@ def test_guia_roteada_via_api_entrega_destino_e_dados_completos():
     resp_get = cliente.get("/documentos/GUIA-AUDIT-2026-001")
     assert resp_get.status_code == 200
     dados_get = resp_get.json()
-    assert dados_get["decisao_roteamento"]["destino_principal"] == "Auditoria_Autorizacoes"
+    assert (
+        dados_get["decisao_roteamento"]["destino_principal"] == "Auditoria_Autorizacoes"
+    )
     assert len(dados_get["dados_extraidos"]["exames_solicitados"]) == 2
