@@ -145,7 +145,7 @@
       "type": "object"
     },
     "TipoDocumento": {
-      "description": "As 6 categorias clínicas do edital + 'Desconhecido' (dúvida → revisão humana).",
+      "description": "As 6 categorias clínicas do edital + 'Não identificado' / 'Desconhecido' (revisão humana).",
       "enum": [
         "Receituário Médico",
         "Laudo de Exame de Imagem",
@@ -153,6 +153,7 @@
         "Guia de Solicitação de Procedimento",
         "Relatório de Alta",
         "Atestado Médico",
+        "Não identificado",
         "Desconhecido"
       ],
       "title": "TipoDocumento",

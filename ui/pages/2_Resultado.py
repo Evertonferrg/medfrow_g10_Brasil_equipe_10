@@ -76,6 +76,15 @@ def mostrar_exames(dados):
     )
 
 
+def mostrar_aviso_fora_das_categorias(cl):
+    """H1.2.3 T3: avisa na tela quando o documento está fora das categorias clínicas."""
+    if (cl or {}).get("tipo_documento") == "Não identificado":
+        st.warning(
+            "Documento fora das categorias clínicas (Não identificado): "
+            "o documento foi separado para revisão humana."
+        )
+
+
 def mostrar_destino(decisao):
     """H2.2.1 T4: o destino em destaque e, logo abaixo, a justificativa e a regra aplicada."""
     destino = decisao.get("destino_principal", "-")
@@ -138,6 +147,7 @@ if buscar and doc_id.strip():
             c, d = st.columns(2)
             c.metric("Prioridade", cl.get("nivel_prioridade") or "—")
             d.metric("Confiança", cl.get("score_confianca_classificacao", "—"))
+            mostrar_aviso_fora_das_categorias(cl)
         else:
             st.warning("Sem classificação: o documento foi para revisão humana.")
         decisao = res.get("decisao_roteamento") or {}
