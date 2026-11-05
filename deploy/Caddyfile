@@ -1,0 +1,11 @@
+mediflow-oci.duckdns.org {
+	# Porta 80 fechada: só o desafio TLS-ALPN-01 (pela 443) tem como funcionar.
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+
+	# WebSocket incluído (o reverse_proxy do Caddy repassa sem configuração extra).
+	reverse_proxy mediflow:8000
+}

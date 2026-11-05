@@ -1,0 +1,4 @@
+# Rede interna do MediFlow. O DNS do Podman resolve os containers pelo nome (o Caddy chama "mediflow:8000").
+# Os containers usam Network=mediflow.network; o systemd cria a rede antes de subir os dois.
+
+[Network]

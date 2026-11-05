@@ -1,0 +1,24 @@
+# Modelo: o mediflow-sync.sh troca __TAG__ pelo SHA do commit da main e grava em
+# ~/.config/containers/systemd/mediflow.container. Gera o mediflow.service.
+
+[Unit]
+Description=MediFlow (app)
+
+[Container]
+# Sem ContainerName, o Quadlet chama o container de "systemd-mediflow" e o Caddy não acha "mediflow".
+ContainerName=mediflow
+Image=iad.ocir.io/idzac8al3ypr/mediflow:__TAG__
+Network=mediflow.network
+# Sem PublishPort: a app escuta na 8000 só dentro da rede mediflow. Quem expõe é o Caddy.
+
+# Fallback em disco do app/storage.py: fora do container, para sobreviver a cada deploy.
+# :U ajusta o dono do volume para o usuário da imagem (Wolfi costuma rodar como nonroot).
+Environment=STORAGE_LOCAL_DIR=/dados
+Volume=mediflow-dados.volume:/dados:U
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target
