@@ -123,6 +123,10 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         # H4.1.2 T2/T3: lista todas as faltas de uma vez
         faltas = campos_faltantes(extracao.tipo_documento, extracao.model_dump())
         if faltas:
+            # "problemas" já aparece no JSON e na fila (ResultadoTriagem.problemas)
+            saida["problemas"] = list(problemas) + [
+                f for f in faltas if f not in problemas
+            ]
             saida["motivos_revisao"] = faltas
             saida["motivo_revisao"] = "; ".join(faltas)
         return saida
@@ -164,7 +168,20 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         )
         decisao = rt.criar_decisao_roteamento(s, limite_confianca=limite)
         motivos = _motivos(s)
-        # H4.1.2: qualquer motivo (ex.: campo faltante) força a revisão
+        # H4.1.2: qualquer motivo (ex.: campo faltante) força a revisão, inclusive
+        # na decisão que vai para o JSON (a notificação, se houver, é mantida)
+        if motivos and decisao.destino_principal != Destino.FILA_REVISAO_HUMANA:
+            decisao = decisao.model_copy(
+                update={
+                    "destino_principal": Destino.FILA_REVISAO_HUMANA,
+                    "requer_auditoria_humana": True,
+                    "regra_aplicada": "R-REVISAO",
+                    "justificativa_roteamento": (
+                        "Enviado à revisão humana (regra R-REVISAO): "
+                        + "; ".join(motivos)
+                    ),
+                }
+            )
         requer = decisao.requer_auditoria_humana or bool(motivos)
         return {
             "destino": str(decisao.destino_principal),
