@@ -1,0 +1,21 @@
+# Proxy HTTPS na frente do MediFlow. Gera o caddy.service.
+
+[Unit]
+Description=Caddy (HTTPS para o MediFlow)
+
+[Container]
+ContainerName=caddy
+Image=docker.io/library/caddy:latest
+Network=mediflow.network
+# Única porta exposta da VM (além do SSH). A 80 fica fechada.
+PublishPort=443:443
+Volume=caddy-data.volume:/data
+# O sync copia o Caddyfile para cá. :Z é para o SELinux do Oracle Linux deixar o container ler.
+Volume=%h/.config/mediflow/Caddyfile:/etc/caddy/Caddyfile:ro,Z
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target
