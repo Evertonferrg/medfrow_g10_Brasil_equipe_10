@@ -6,7 +6,7 @@ Description=MediFlow (app)
 
 [Container]
 # Sem ContainerName, o Quadlet chama o container de "systemd-mediflow" e o Caddy não acha "mediflow".
-ContainerName=mediflow
+ContainerName=mediflow-app
 Image=iad.ocir.io/idzac8al3ypr/mediflow:__TAG__
 Network=mediflow.network
 # Sem PublishPort: a app escuta na 8000 só dentro da rede mediflow. Quem expõe é o Caddy.

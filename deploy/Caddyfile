@@ -7,5 +7,5 @@ mediflow-oci.duckdns.org {
 	}
 
 	# WebSocket incluído (o reverse_proxy do Caddy repassa sem configuração extra).
-	reverse_proxy mediflow:8000
+	reverse_proxy mediflow-app:8000
 }
