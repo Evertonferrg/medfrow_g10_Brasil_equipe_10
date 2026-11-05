@@ -13,8 +13,11 @@ from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
 from .resposta import falha_de_processamento, montar_resposta
 from .schemas import Extracao
 from .validacao import validar
+from .validacao_obrigatorios import campos_faltantes  # H4.1.2 T2
 
 logger = logging.getLogger(__name__)
+
+FORA_DAS_CATEGORIAS = "documento fora das categorias"
 
 
 # Dicionário compartilhado entre os nós do LangGraph
@@ -33,7 +36,8 @@ class Estado(TypedDict, total=False):
     destino: Destino
     regra: str  # id da regra aplicada (R-URGENCIA, R-RECEITA...)
     requer_revisao: bool
-    motivo_revisao: str | None
+    motivo_revisao: str | None  # motivos unidos por "; " (compatibilidade)
+    motivos_revisao: list[str]  # H4.1.2 T3: um item por motivo
     justificativa: str
     notificacao: Notificacao | None
     tipo_arquivo: str  # "TEXTO", "PDF" ou "Imagem"
@@ -95,6 +99,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 "ilegivel": True,
                 "extracao": None,
                 "score": 0.0,
+                "motivos_revisao": ["ilegível"],  # H4.1.5 T1
                 "motivo_revisao": "ilegível",
                 "problemas": [f"ilegível: {motivo}"],
                 "limite_confianca": limite,
@@ -111,10 +116,16 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             return {"extracao": None, "erro": f"Falha na extração automática: {e}"}
 
     def n_validar(s: Estado):
-        if s.get("erro"):
+        if s.get("erro") or s.get("extracao") is None:
             return {"problemas": [], "score": 0.0}
         extracao, problemas, score = validar(s["extracao"], s["texto"])
-        return {"extracao": extracao, "problemas": problemas, "score": score}
+        saida = {"extracao": extracao, "problemas": problemas, "score": score}
+        # H4.1.2 T2/T3: lista todas as faltas de uma vez
+        faltas = campos_faltantes(extracao.tipo_documento, extracao.model_dump())
+        if faltas:
+            saida["motivos_revisao"] = faltas
+            saida["motivo_revisao"] = "; ".join(faltas)
+        return saida
 
     def n_classificar(s: Estado):
         if s.get("erro") or s.get("extracao") is None:
@@ -133,6 +144,15 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         )
         return str(tipo or "") == TipoDocumento.NAO_IDENTIFICADO.value
 
+    def _motivos(s: Estado) -> list[str]:
+        """H4.1.2 T3: reúne todos os motivos de revisão do estado."""
+        motivos = list(s.get("motivos_revisao") or [])
+        if not motivos and s.get("motivo_revisao"):
+            motivos = [s["motivo_revisao"]]
+        if _eh_fora_das_categorias(s) and FORA_DAS_CATEGORIAS not in motivos:
+            motivos.append(FORA_DAS_CATEGORIAS)
+        return motivos
+
     def n_decidir(s: Estado):
         """H2.1.1 T3: nó decidir que chama a função pura de roteamento
         aplicando precedência urgência → revisão → tipo.
@@ -143,16 +163,15 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             else config.limite_confianca()
         )
         decisao = rt.criar_decisao_roteamento(s, limite_confianca=limite)
-        motivo = (
-            "documento fora das categorias"
-            if _eh_fora_das_categorias(s)
-            else s.get("motivo_revisao")
-        )
+        motivos = _motivos(s)
+        # H4.1.2: qualquer motivo (ex.: campo faltante) força a revisão
+        requer = decisao.requer_auditoria_humana or bool(motivos)
         return {
             "destino": str(decisao.destino_principal),
             "regra": decisao.regra_aplicada,
-            "requer_revisao": decisao.requer_auditoria_humana,
-            "motivo_revisao": motivo if decisao.requer_auditoria_humana else None,
+            "requer_revisao": requer,
+            "motivos_revisao": motivos if requer else [],
+            "motivo_revisao": "; ".join(motivos) if requer and motivos else None,
             "justificativa": decisao.justificativa_roteamento,
             "notificacao": decisao.notificacao_gerada.model_dump()
             if decisao.notificacao_gerada
@@ -169,6 +188,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 "destino": str(decisao.destino_principal),
                 "regra": decisao.regra_aplicada,
                 "requer_revisao": decisao.requer_auditoria_humana,
+                "motivos_revisao": [],
                 "motivo_revisao": None,
                 "justificativa": decisao.justificativa_roteamento,
                 "notificacao": (
@@ -181,16 +201,14 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
     def n_enviar_revisao(s: Estado):
         """H1.2.3 T2: envia documentos fora das categorias ou com pendências para revisão humana."""
         decisao = s.get("decisao_roteamento")
-        motivo = (
-            "documento fora das categorias"
-            if _eh_fora_das_categorias(s)
-            else s.get("motivo_revisao")
-        )
+        motivos = _motivos(s)
+        motivo = "; ".join(motivos) if motivos else None
         if decisao is not None:
             return {
                 "destino": str(Destino.FILA_REVISAO_HUMANA),
                 "regra": decisao.regra_aplicada,
                 "requer_revisao": True,
+                "motivos_revisao": motivos,
                 "motivo_revisao": motivo,
                 "justificativa": decisao.justificativa_roteamento,
                 "notificacao": (
@@ -203,6 +221,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             "destino": str(Destino.FILA_REVISAO_HUMANA),
             "regra": "R-REVISAO",
             "requer_revisao": True,
+            "motivos_revisao": motivos,
             "motivo_revisao": motivo,
         }
 
@@ -211,6 +230,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         if (
             _eh_fora_das_categorias(s)
             or s.get("requer_revisao")
+            or s.get("motivos_revisao")  # H4.1.2
             or s.get("destino") == Destino.FILA_REVISAO_HUMANA.value
         ):
             return "enviar_revisao"
@@ -232,6 +252,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 "destino": str(Destino.FILA_REVISAO_HUMANA),
                 "regra": "R-REVISAO",
                 "requer_revisao": True,
+                "motivos_revisao": ["falha de processamento"],
                 "motivo_revisao": "falha de processamento",
                 "classificacao": None,
                 "notificacao": None,
