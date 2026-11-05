@@ -6,6 +6,14 @@ mediflow-oci.duckdns.org {
 		}
 	}
 
-	# WebSocket incluído (o reverse_proxy do Caddy repassa sem configuração extra).
-	reverse_proxy mediflow-app:8000
+	# Da API, só o que precisa aparecer de fora. O resto fica na rede interna (a UI chama por lá).
+	@api path /health /docs /docs/* /openapi.json
+	handle @api {
+		reverse_proxy mediflow-app:8000
+	}
+
+	# Todo o resto é a UI. O WebSocket do Streamlit passa sem configuração extra.
+	handle {
+		reverse_proxy mediflow-ui:8501
+	}
 }

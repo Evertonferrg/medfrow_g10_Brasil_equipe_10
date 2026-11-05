@@ -5,7 +5,8 @@
 Description=MediFlow (app)
 
 [Container]
-# Sem ContainerName, o Quadlet chama o container de "systemd-mediflow" e o Caddy não acha "mediflow".
+# Nome que o Caddy usa. Não pode ser "mediflow": é o hostname da VM, e o /etc/hosts copiado do host
+# faria o nome apontar para a própria VM em vez do container.
 ContainerName=mediflow-app
 Image=iad.ocir.io/idzac8al3ypr/mediflow:__TAG__
 Network=mediflow.network

@@ -38,15 +38,18 @@ CADDY_MUDOU=0
 instalar deploy/Caddyfile "$CONF_DIR/Caddyfile" && CADDY_MUDOU=1
 for f in deploy/quadlet/*; do
   nome=$(basename "$f")
-  [ "$nome" = mediflow.container ] && continue
+  # Modelos com __TAG__ (app e UI) recebem o SHA; o resto é copiado como está.
+  if grep -q '__TAG__' "$f"; then
+    sed "s|__TAG__|$SHA|" "$f" > "$QUADLET_DIR/$nome"
+    continue
+  fi
   if instalar "$f" "$QUADLET_DIR/$nome" && [ "$nome" = caddy.container ]; then
     CADDY_MUDOU=1
   fi
 done
-sed "s|__TAG__|$SHA|" deploy/quadlet/mediflow.container > "$QUADLET_DIR/mediflow.container"
 
 systemctl --user daemon-reload
-systemctl --user restart mediflow
+systemctl --user restart mediflow mediflow-ui
 if [ "$CADDY_MUDOU" = 1 ]; then
   systemctl --user restart caddy
 else
