@@ -15,6 +15,13 @@ Environment=API_URL=http://mediflow-app:8000
 Entrypoint=python3
 Exec=-m streamlit run ui/Home.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false
 
+# Precisa ser explícito: o healthcheck herdado da imagem (se houver) testa a 8000, que aqui não existe.
+HealthCmd=python3 -c "import urllib.request as u; u.urlopen('http://localhost:8501/_stcore/health', timeout=3)"
+HealthInterval=30s
+HealthRetries=3
+HealthStartPeriod=30s
+HealthOnFailure=kill
+
 [Service]
 Restart=always
 TimeoutStartSec=300

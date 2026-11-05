@@ -15,7 +15,17 @@ Network=mediflow.network
 # Fallback em disco do app/storage.py: fora do container, para sobreviver a cada deploy.
 # :U ajusta o dono do volume para o usuário da imagem (Wolfi costuma rodar como nonroot).
 Environment=STORAGE_LOCAL_DIR=/dados
+# Environment=OCI_NAMESPACE=idzac8al3ypr # descomentar quando o código mudar.
+# Environment=OCI_AUTH=instance_principal # descomentar quando o código mudar.
 Volume=mediflow-dados.volume:/dados:U
+
+# Healthcheck explícito (a imagem não tem curl/wget; o python3 tem). Travou 3 vezes seguidas:
+# o Podman mata o container e o Restart=always do systemd sobe de novo.
+HealthCmd=python3 -c "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=3)"
+HealthInterval=30s
+HealthRetries=3
+HealthStartPeriod=20s
+HealthOnFailure=kill
 
 [Service]
 Restart=always

@@ -61,10 +61,17 @@ def _salvar_local(caminho: str, dados: bytes, sobrescrever: bool = True):
 def _cliente_oci():
     import oci  # só é exigido quando o OCI é usado
 
-    cfg = oci.config.from_file(
-        os.path.expanduser(os.getenv("OCI_CONFIG_FILE", "~/.oci/config"))
-    )
-    return oci.object_storage.ObjectStorageClient(cfg)
+    if os.getenv("OCI_AUTH") == "instance_principal":
+        signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
+        return oci.object_storage.ObjectStorageClient(
+            config={"region": signer.region},
+            signer=signer,
+        )
+    else:
+        cfg = oci.config.from_file(
+            os.path.expanduser(os.getenv("OCI_CONFIG_FILE", "~/.oci/config"))
+        )
+        return oci.object_storage.ObjectStorageClient(cfg)
 
 
 def _salvar_oci(

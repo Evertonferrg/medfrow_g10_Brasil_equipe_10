@@ -25,7 +25,17 @@ if ! podman pull -q "$IMAGE:$SHA" >/dev/null 2>&1; then
   exit 0
 fi
 
+SCRIPT=$REPO/deploy/mediflow-sync.sh
+ANTES=$(sha256sum "$SCRIPT")
 git merge -q --ff-only origin/main
+
+# O bash já abriu esta versão do script antes do merge. Se o commit mudou o script,
+# roda a versão nova (uma vez só) para ela fazer o deploy deste mesmo SHA.
+if [ -z "${MEDIFLOW_REEXEC:-}" ] && [ "$ANTES" != "$(sha256sum "$SCRIPT")" ]; then
+  echo "mediflow-sync.sh mudou neste commit; executando a versão nova"
+  MEDIFLOW_REEXEC=1 exec /bin/bash "$SCRIPT"
+fi
+
 mkdir -p "$QUADLET_DIR" "$CONF_DIR"
 
 # Copia um arquivo só se mudou; devolve 0 quando mudou.
