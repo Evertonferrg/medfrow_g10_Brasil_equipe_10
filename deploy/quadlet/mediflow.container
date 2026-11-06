@@ -15,8 +15,8 @@ Network=mediflow.network
 # Fallback em disco do app/storage.py: fora do container, para sobreviver a cada deploy.
 # :U ajusta o dono do volume para o usuário da imagem (Wolfi costuma rodar como nonroot).
 Environment=STORAGE_LOCAL_DIR=/dados
-# Environment=OCI_NAMESPACE=idzac8al3ypr # descomentar quando o código mudar.
-# Environment=OCI_AUTH=instance_principal # descomentar quando o código mudar.
+Environment=OCI_NAMESPACE=idzac8al3ypr
+Environment=OCI_AUTH=instance_principal
 Volume=mediflow-dados.volume:/dados:U
 
 # Healthcheck explícito (a imagem não tem curl/wget; o python3 tem). Travou 3 vezes seguidas:
