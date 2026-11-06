@@ -6,7 +6,9 @@ Não guarda dados pessoais: só id, status, horário e um detalhe curto opcional
 
 from __future__ import annotations
 
+import functools
 import json
+import logging
 import os
 import re
 import threading
@@ -16,6 +18,7 @@ from pathlib import Path
 
 from app.status import StatusDocumento
 
+logger = logging.getLogger(__name__)
 _ID_VALIDO = re.compile(r"^[A-Za-z0-9_-]{1,100}$")  # bloqueia path traversal
 
 
@@ -64,3 +67,47 @@ class ServicoEventos:
     def status_atual(self, documento_id: str) -> StatusDocumento | None:
         eventos = self.listar(documento_id)
         return StatusDocumento(eventos[-1]["status"]) if eventos else None
+
+    def listar_por_status(self, status: StatusDocumento) -> list[tuple[str, str]]:
+        """Documentos cujo ÚLTIMO evento é `status`: [(documento_id, horário do 1º evento)].
+
+        O 1º evento (recebido) é a chegada do documento; serve de horário de chegada na fila.
+        """
+        alvo = StatusDocumento(status).value
+        achados = []
+        for caminho in sorted(self._pasta.glob("*.json")):
+            try:
+                eventos = json.loads(caminho.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue  # arquivo ilegível não derruba a listagem
+            if eventos and eventos[-1].get("status") == alvo:
+                achados.append((caminho.stem, eventos[0]["em"]))
+        return achados
+
+
+@functools.cache
+def _servico(pasta: str) -> ServicoEventos:
+    return ServicoEventos(pasta)
+
+
+def servico_padrao() -> ServicoEventos:
+    """Instância compartilhada (main.py, resposta.py e a fila usam a mesma pasta)."""
+    return _servico(os.getenv("EVENTOS_DIR", "eventos"))
+
+
+def registrar_desfecho(documento_id: str, resultado) -> None:
+    """Chamar em arquivar(), depois de salvar o resultado: revisão humana ou processado.
+
+    Falha ao registrar o evento não derruba o processamento (o resultado já foi salvo).
+    """
+    destino = resultado.decisao_roteamento.destino_principal
+    destino = str(getattr(destino, "value", destino))
+    status = (
+        StatusDocumento.EM_AUDITORIA_HUMANA
+        if destino == "Fila_Revisao_Humana"
+        else StatusDocumento.PROCESSADO
+    )
+    try:
+        servico_padrao().registrar(documento_id, status)
+    except (OSError, ValueError):
+        logger.exception("Não foi possível registrar o evento de status")

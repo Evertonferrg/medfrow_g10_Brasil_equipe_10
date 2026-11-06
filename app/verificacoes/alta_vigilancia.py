@@ -9,7 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CONFIG_PADRAO = Path(__file__).resolve().parents[2] / "config" / "alta_vigilancia.json"
-_DOSE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(mcg|µg|mg|g|ml|u\.?i\.?|un)(?![a-z])", re.IGNORECASE)
+_DOSE = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(mcg|µg|mg|g|ml|u\.?i\.?|un)(?![a-z])", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
