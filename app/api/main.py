@@ -8,11 +8,14 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app import storage
+from app.api.ligacao_fila import ligar_fila_revisao
 from app.api.tempo import MedirTempoMiddleware, configurar_log
 from app.arquivos import extensao_por_assinatura
+from app.eventos import servico_padrao
 from app.resposta import carregar_resultado
 from app.schemas import DocumentoEntrada, ResultadoTriagem, validar_id
 from app.servico import processar
+from app.status import StatusDocumento
 from app.storage import ObjetoJaExisteError
 
 logger = logging.getLogger(__name__)
@@ -100,6 +103,10 @@ def criar_app(extrator=None) -> FastAPI:
                 status_code=409,
                 content={"detail": f"documento_id já recebido: {documento_id}"},
             )
+        try:  # H2.3.2: o 1º evento é a chegada (horário usado pela fila de revisão)
+            servico_padrao().registrar(documento_id, StatusDocumento.RECEBIDO)
+        except (OSError, ValueError):
+            logger.exception("Não foi possível registrar o evento de status")
         return salvo["caminho_objeto"], None
 
     def _processar_original(
@@ -207,6 +214,7 @@ def criar_app(extrator=None) -> FastAPI:
     def health():
         return {"status": "ok"}
 
+    ligar_fila_revisao(app)  # H4.2.1: GET /filas/revisao
     return app
 
 

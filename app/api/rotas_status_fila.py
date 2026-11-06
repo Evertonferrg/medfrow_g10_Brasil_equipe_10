@@ -1,10 +1,7 @@
 """H2.3.2 T4 (GET /documentos/{id}), H4.2.1 T1 e H4.2.2 T1 (GET /filas/revisao).
 
-Ligue no main.py:
-    app.include_router(rotas_status_fila.router)
-    app.dependency_overrides[get_eventos] = lambda: servico_eventos
-    app.dependency_overrides[get_indice_revisao] = lambda: indice_em_memoria
-    app.dependency_overrides[get_resultados] = lambda: armazenamento
+A fila é ligada por app.api.ligacao_fila.ligar_fila_revisao(app).
+O `router` de /documentos/{id} não está registrado: o main.py já tem essa rota (H2.3.1).
 """
 
 from __future__ import annotations
@@ -16,7 +13,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.eventos import ServicoEventos
 from app.fila import ordenar_fila
 
-router = APIRouter()
+router = (
+    APIRouter()
+)  # GET /documentos/{id} com status (H2.3.2): ainda não registrado no app
+router_fila = APIRouter()  # GET /filas/revisao
 
 
 def get_eventos() -> ServicoEventos:
@@ -55,7 +55,7 @@ def consultar_documento(
     }
 
 
-@router.get("/filas/revisao")
+@router_fila.get("/filas/revisao")
 def fila_revisao(indice: IndiceDep):
     casos = ordenar_fila(indice.listar_casos_revisao())
     return [

@@ -34,7 +34,7 @@ class IndiceDuble:
 
 def _cliente(casos):
     app = FastAPI()
-    app.include_router(r.router)
+    app.include_router(r.router_fila)
     app.dependency_overrides[r.get_indice_revisao] = lambda: IndiceDuble(casos)
     return TestClient(app)
 

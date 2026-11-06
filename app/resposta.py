@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from . import config, storage
+from .eventos import registrar_desfecho
 from .schemas import (
     ArmazenamentoOCI,
     Classificacao,
@@ -159,6 +160,7 @@ def arquivar(documento_id: str, estado: dict) -> dict:
             logger.exception(...)
             resultado = falha_de_processamento(documento_id, str(ex))
     resultado.armazenamento_oci = salvar_resultado(documento_id, resultado)
+    registrar_desfecho(documento_id, resultado)
     return resultado.model_dump(mode="json")
 
 
