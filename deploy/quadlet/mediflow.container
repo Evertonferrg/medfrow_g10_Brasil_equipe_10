@@ -14,10 +14,14 @@ Network=mediflow.network
 
 # Fallback em disco do app/storage.py: fora do container, para sobreviver a cada deploy.
 # :U ajusta o dono do volume para o usuário da imagem (Wolfi costuma rodar como nonroot).
-Environment=STORAGE_LOCAL_DIR=/dados
+# Environment=STORAGE_LOCAL_DIR=/dados
 Environment=OCI_NAMESPACE=idzac8al3ypr
 Environment=OCI_AUTH=instance_principal
-Volume=mediflow-dados.volume:/dados:U
+# Volume=mediflow-dados.volume:/dados:U
+
+# Chave do Gemini (extração automática). O secret precisa existir na VM ANTES deste arquivo chegar,
+# senão o container não sobe:  podman secret create gemini_api_key -
+Secret=gemini_api_key,type=env,target=GEMINI_API_KEY
 
 # Healthcheck explícito (a imagem não tem curl/wget; o python3 tem). Travou 3 vezes seguidas:
 # o Podman mata o container e o Restart=always do systemd sobe de novo.
