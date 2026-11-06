@@ -82,3 +82,8 @@ def pdf_sem_texto() -> bytes:
     c.showPage()
     c.save()
     return buf.getvalue()
+
+
+@pytest.fixture(autouse=True)
+def _eventos_em_tmp(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVENTOS_DIR", str(tmp_path / "eventos"))

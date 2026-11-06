@@ -20,3 +20,5 @@ venv/
 .env
 storage_local/
 debug.log
+
+eventos/

@@ -28,8 +28,7 @@ class ServicoEventos:
         pasta: Path | str = "eventos",
         relogio: Callable[[], datetime] | None = None,
     ):
-        self._pasta = Path(pasta)
-        self._pasta.mkdir(parents=True, exist_ok=True)
+        self._pasta = Path(pasta)  # a pasta é criada no 1º registro, não ao importar o app
         self._relogio = relogio or (lambda: datetime.now(UTC))
         self._lock = threading.Lock()
 
@@ -55,6 +54,7 @@ class ServicoEventos:
         if detalhe:
             evento["detalhe"] = detalhe
         with self._lock:
+            self._pasta.mkdir(parents=True, exist_ok=True)
             eventos = self.listar(documento_id)
             eventos.append(evento)
             tmp = caminho.with_suffix(".tmp")
