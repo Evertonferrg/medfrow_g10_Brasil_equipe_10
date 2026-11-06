@@ -122,6 +122,14 @@ def test_http_fora_do_local_mostra_aviso(monkeypatch):
     assert any("HTTPS" in w.value for w in abrir().warning)
 
 
+def test_http_em_rede_interna_do_container_nao_mostra_aviso(monkeypatch):
+    # Nome de container na rede do Podman: host sem ponto, tráfego interno.
+    monkeypatch.setenv("API_URL", "http://mediflow-app:8000")
+    at = abrir()
+    assert not at.exception
+    assert not any("HTTPS" in w.value for w in at.warning)
+
+
 def test_url_invalida_bloqueia_a_tela(monkeypatch):
     monkeypatch.setenv("API_URL", "ftp://x")
     at = abrir()

@@ -51,8 +51,8 @@ ui: ## Inicia o frontend Streamlit (porta 8501)
 	uv run streamlit run ui/Home.py
 
 dev: ## Inicia tanto a API quanto o Streamlit simultaneamente
-	@trap 'kill 0' EXIT; uv run uvicorn app.api.main:app --reload --port 8000 & uv run streamlit run ui/Home.py
-
+	@trap 'kill 0' EXIT; uv run uvicorn app.api.main:app --reload --port 8000 & uv run python -m streamlit run ui/Home.py
+	
 # ------------------------------------------------------------------------------
 #  3. Qualidade de código
 # ------------------------------------------------------------------------------

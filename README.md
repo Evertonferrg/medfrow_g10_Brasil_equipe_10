@@ -1,350 +1,348 @@
 # MediFlow 🏥
-### Agente Inteligente para Triagem, Extração e Roteamento de Documentos
+### Agente Inteligente para Triagem, Extração e Roteamento de Documentos Clínicos
 
-![Status](https://img.shields.io/badge/status-em%20desenvolvimento-orange)
-![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
-![React](https://img.shields.io/badge/React-TypeScript-61DAFB?logo=react&logoColor=black)
+![Status](https://img.shields.io/badge/status-MVP-green)
+![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-agente-1C3C3C)
+![Streamlit](https://img.shields.io/badge/Streamlit-UI-FF4B4B?logo=streamlit&logoColor=white)
 ![Oracle Cloud](https://img.shields.io/badge/Cloud-Oracle%20Cloud%20Infrastructure-F80000?logo=oracle&logoColor=white)
 
-**MediFlow** é um projeto de automação inteligente para o processamento de documentos clínicos e administrativos. A solução propõe utilizar Inteligência Artificial, agentes autônomos e fluxos de decisão para classificar documentos, extrair informações relevantes, identificar inconsistências e direcionar cada solicitação ao fluxo adequado.
+**MediFlow** é um agente de IA que recebe documentos clínicos (texto, PDF ou imagem), classifica o tipo de documento, extrai os dados relevantes, confere o que foi extraído contra o texto original e decide para qual setor o documento deve ir. Casos ambíguos, incompletos ou ilegíveis vão para revisão humana.
 
-Desenvolvido no contexto de um hackathon da **Alura + Oracle Next Education (ONE)**, o projeto tem como objetivo explorar a aplicação prática de agentes de IA em processos que exigem organização, rastreabilidade e supervisão humana.
+Desenvolvido no hackathon **Alura + Oracle Next Education (ONE)**.
 
-> **Status do projeto:** fase inicial de desenvolvimento e definição da arquitetura.
+> **Status:** MVP funcional, com API, agente LangGraph, interface Streamlit, testes automatizados, pipeline de CI/CD e deploy na OCI. Demonstração: [mediflow-oci.duckdns.org](https://mediflow-oci.duckdns.org). As pendências estão na seção [Roadmap](#-13-roadmap).
 
 ---
 
 ## 🎯 1. Problema e motivação
 
-O processamento de documentos clínicos e administrativos pode envolver tarefas repetitivas, como leitura, classificação, extração de dados, conferência de informações e encaminhamento para diferentes setores.
+A triagem de documentos clínicos e administrativos envolve tarefas repetitivas: ler, classificar, extrair dados, conferir e encaminhar para o setor certo. Feita só à mão, ela gera gargalos, retrabalho e pouca rastreabilidade.
 
-Quando essas atividades dependem exclusivamente de processos manuais, podem surgir gargalos operacionais, retrabalho e dificuldades de rastreabilidade.
+O MediFlow automatiza essa triagem inicial e mantém a revisão humana sempre que houver dúvida. **A IA organiza e encaminha; ela não faz diagnóstico nem decide conduta clínica.**
 
-O MediFlow propõe automatizar parte desse processo por meio de um agente de IA capaz de analisar documentos, estruturar informações e recomendar encaminhamentos, mantendo a revisão humana nos casos ambíguos, inconsistentes ou que exijam avaliação especializada.
+## ⚙️ 2. O que o MVP faz
 
-## 💡 2. Objetivos do projeto
-
-- Automatizar a triagem inicial de documentos clínicos e administrativos.
-- Classificar documentos conforme sua categoria.
-- Extrair informações relevantes e organizá-las em estruturas padronizadas.
-- Validar campos obrigatórios e identificar possíveis inconsistências.
-- Aplicar regras de decisão para definir o encaminhamento adequado.
-- Direcionar casos ambíguos ou inconsistentes para revisão humana.
-- Registrar o histórico de processamento e das decisões tomadas.
-- Utilizar a Oracle Cloud Infrastructure (OCI) para armazenamento de documentos.
-
-## ⚙️ 3. Funcionalidades previstas
-
-| Funcionalidade | Descrição |
+| Funcionalidade | Como funciona |
 |---|---|
-| Recepção de documentos | Entrada de arquivos PDF, imagens e textos. |
-| Classificação inteligente | Identificação da categoria documental. |
-| Extração de informações | Estruturação dos dados identificados no documento. |
-| Validação de dados | Verificação de campos obrigatórios, formatos e inconsistências. |
-| Motor de decisão | Aplicação de regras para determinar o próximo fluxo. |
-| Roteamento inteligente | Direcionamento conforme a categoria e as regras definidas. |
-| Revisão humana | Encaminhamento de casos ambíguos ou que necessitem de conferência. |
-| Histórico de processamento | Registro dos estados e resultados da triagem. |
-| Armazenamento em nuvem | Persistência dos documentos no OCI Object Storage. |
+| Recepção | Texto (JSON), PDF digital, PDF escaneado, JPG ou PNG. O formato é detectado pelos bytes iniciais do arquivo, não pelo nome nem pelo MIME. Limites: 10 MB por arquivo e 200.000 caracteres por texto. |
+| Original preservado | O original é gravado em `recebidos/` **antes** de qualquer processamento e nunca é sobrescrito. Um ID repetido é recusado com `409`. |
+| Leitura | PDF com texto: extração direta (pypdf/PyMuPDF). PDF escaneado ou imagem: transcrição pela visão do Gemini, com verificação de legibilidade. |
+| Classificação e extração | Gemini com saída em JSON forçada por schema (Pydantic). O prompt proíbe inventar dados e trata o documento como dado, não como instrução. |
+| Validação | Cada campo extraído é conferido contra o texto original (paciente, CRM, medicamentos, posologia, exames, código TUSS, CID-10). O score de confiança é **recalculado** com penalidades; o score do LLM não é usado diretamente. |
+| Roteamento | Regras determinísticas, sem LLM (veja a seção 3). |
+| Revisão humana | Score abaixo do limite, problemas de validação, campo obrigatório faltando, documento ilegível ou fora das categorias → `Fila_Revisao_Humana`, com os motivos listados. |
+| Resultado | JSON validado contra o contrato antes de ser entregue. Se sair fora do formato, nenhuma resposta parcial é entregue: o documento vai para revisão com o motivo "falha de processamento". |
 
-### Categorias de documentos consideradas
+## 🗂️ 3. Categorias, destinos e regras
 
-- Prescrições médicas.
-- Resultados de exames laboratoriais e de imagem.
-- Solicitações de autorização.
-- Relatórios de alta.
-- Atestados e outros documentos clínicos ou administrativos.
+**Categorias** (fonte única: `app/modelos/classificacao.py`):
 
-A classificação definitiva, as regras de encaminhamento e os campos extraídos serão refinados durante a implementação.
+- Receituário Médico
+- Laudo de Exame de Imagem
+- Laudo Laboratorial
+- Guia de Solicitação de Procedimento
+- Relatório de Alta
+- Atestado Médico
+- Não identificado: documento fora das categorias clínicas (ex.: nota fiscal, contrato)
+- Desconhecido: sem conteúdo clínico reconhecível
 
-## 🧠 4. Arquitetura proposta
+As duas últimas são válvulas de segurança e sempre vão para revisão humana.
 
-A arquitetura será modular, separando interface, API, processamento inteligente, persistência e infraestrutura.
+**Regras de roteamento** (`app/roteamento.py`), avaliadas nesta ordem:
 
-```text
-                    ┌─────────────────────┐
-                    │       Frontend      │
-                    │   React + TypeScript│
-                    └──────────┬──────────┘
-                               │ HTTPS / REST
-                    ┌──────────▼──────────┐
-                    │       Backend       │
-                    │   Python + FastAPI  │
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │    Orquestrador IA  │
-                    │      LangGraph      │
-                    └──────────┬──────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              │                │                │
-       ┌──────▼─────┐  ┌───────▼──────┐  ┌─────▼────────┐
-       │ Classificar│  │ Extrair dados│  │ Validar e    │
-       │ documento  │  │ estruturados │  │ decidir      │
-       └────────────┘  └──────────────┘  └─────┬────────┘
-                                               │
-                                    ┌──────────▼─────────┐
-                                    │ Fluxo condicional  │
-                                    └──────────┬─────────┘
-                                               │
-                             ┌─────────────────┼──────────────┐
-                             │                 │              │
-                      ┌──────▼─────┐   ┌───────▼──────┐ ┌─────▼─────┐
-                      │ Processar  │   │ Priorizar    │ │ Revisão   │
-                      │ normalmente│   │ atendimento  │ │ humana    │
-                      └────────────┘   └──────────────┘ └───────────┘
+| Ordem | Regra | Condição | Destino |
+|---|---|---|---|
+| 1 | `R-REVISAO` | Score < limite, problema de validação, campo faltante, erro, ilegível, "Não identificado" ou "Desconhecido" | `Fila_Revisao_Humana` |
+| 2 | `R-URGENCIA` | Prioridade "Urgente" | `Fila_Emergencia_Medica` + notificação `Alerta_Plantao_Medico` |
+| 3 | `R-RECEITA` | Receituário Médico | `Farmacia_Hospitalar` |
+| 3 | `R-GUIA` | Guia de Solicitação de Procedimento | `Auditoria_Autorizacoes` |
+| 3 | `R-PRONTUARIO` | Laudos, Relatório de Alta, Atestado | `Prontuario_Eletronico` |
 
-                  Persistência e infraestrutura
-                  ┌─────────────────────────────┐
-                  │ PostgreSQL + OCI Object     │
-                  │ Storage                     │
-                  └─────────────────────────────┘
+Um documento urgente com dados ambíguos vai para revisão humana, mas leva a notificação "Possível urgência com dados ambíguos: revisar com prioridade". Assim a urgência não se perde e um dado duvidoso não chega direto à emergência.
+
+O limite de confiança padrão é **0.80**. Ele pode ser alterado em `config/regras.json` ou pela variável `LIMIAR_CONFIANCA`, que tem precedência.
+
+## 🧠 4. Arquitetura
+
+UI e API são um **monolito**: a mesma imagem de container roda a API (FastAPI) e, num segundo container, a interface (Streamlit).
+
+```mermaid
+flowchart LR
+    U[Usuário] -->|HTTPS 443| C[Caddy]
+    C -->|/| UI[Streamlit :8501]
+    C -->|/health, /docs| API
+    UI -->|rede interna| API[FastAPI :8000]
+    API --> G[Agente LangGraph]
+    G -->|leitura, classificação, extração| GEM[Google Gemini]
+    API --> OS[(OCI Object Storage)]
+    API -.->|fallback| D[(Disco local)]
 ```
 
-O diagrama representa a arquitetura planejada. Os componentes serão implementados e integrados progressivamente.
+Se a OCI não estiver configurada ou falhar, o armazenamento cai automaticamente para o disco (`storage_local/`) e o campo `armazenamento_oci.local` mostra onde o resultado foi gravado.
 
-## 🛠️ 5. Tecnologias previstas
+### Fluxo do agente (LangGraph)
 
-| Camada | Tecnologia | Responsabilidade |
-|---|---|---|
-| Frontend | React + TypeScript + Vite | Interface de triagem e auditoria. |
-| Backend | Python + FastAPI | API REST e regras de negócio. |
-| Orquestração | LangGraph | Coordenação dos nós e decisões do agente. |
-| Inteligência Artificial | LLM multimodal ou modelo compatível | Classificação e extração de informações. |
-| Validação | Pydantic | Validação e estruturação dos dados. |
-| OCR | Ferramenta compatível com Python | Extração de texto de documentos digitalizados. |
-| Banco de dados | PostgreSQL | Metadados, resultados, estados e histórico. |
-| Armazenamento | OCI Object Storage | Documentos originais e arquivos processados. |
-| Infraestrutura | Oracle Cloud Infrastructure | Serviços de nuvem e armazenamento. |
-| Testes | pytest e ferramentas de teste do frontend | Validação do comportamento da aplicação. |
+Grafo definido em `app/grafo.py`:
 
-A escolha definitiva do provedor de LLM e da ferramenta de OCR dependerá dos requisitos técnicos, da disponibilidade e dos limites de custo do projeto.
+```mermaid
+flowchart TD
+    A[ler_entrada] -->|legível| B[extrair]
+    A -->|ilegível| E[decidir]
+    B --> C[validar]
+    C --> D[classificar]
+    D --> E
+    E -->|sem pendências| F[rotear]
+    E -->|revisão necessária| G[enviar_revisao]
+    F --> H[montar_resultado]
+    G --> H
+    H --> I([fim])
+```
+
+| Nó | Responsabilidade |
+|---|---|
+| `ler_entrada` | Detecta o formato, extrai o texto ou transcreve a imagem e verifica a legibilidade. Documento ilegível pula direto para `decidir`. |
+| `extrair` | Chama o Gemini e devolve a extração no schema `Extracao`. |
+| `validar` | Confere a extração contra o texto, recalcula o score e lista os campos obrigatórios faltantes. |
+| `classificar` | Monta a classificação mostrada ao analista, com o score recalculado. |
+| `decidir` | Aplica as regras da seção 3. |
+| `rotear` / `enviar_revisao` | Registra o destino, a regra aplicada, a justificativa e a notificação. |
+| `montar_resultado` | Monta e valida o `ResultadoTriagem`. Se falhar, envia o documento para revisão. |
+
+## 🛠️ 5. Tecnologias
+
+| Camada | Tecnologia |
+|---|---|
+| Interface | Streamlit |
+| API | Python 3.13 + FastAPI |
+| Agente | LangGraph |
+| IA | Google Gemini (`google-genai`), com modelo principal e modelo de fallback configuráveis |
+| Leitura de PDF | pypdf / PyMuPDF (sem OCR local; documentos escaneados usam a visão do Gemini) |
+| Contratos | Pydantic |
+| Armazenamento | OCI Object Storage, com fallback em disco |
+| Dependências | uv, `requirements.txt` com hashes |
+| Qualidade | pytest + cobertura, ruff, SonarQube, Trivy |
+| Container | Imagem Wolfi (Chainguard), Podman ou Docker |
+| CI/CD | GitHub Actions → OCI Container Registry (OCIR) |
+| Infraestrutura | Terraform (OCI Compute Always Free), Podman Quadlets, Caddy |
 
 ## 🔄 6. Fluxo de processamento
 
-1. **Recepção:** o usuário envia um documento pela interface ou API.
-2. **Armazenamento inicial:** o arquivo é registrado e armazenado de forma privada.
-3. **Preparação:** o sistema extrai o texto, utilizando OCR quando necessário.
-4. **Classificação:** o agente identifica a categoria do documento.
-5. **Extração:** as informações relevantes são organizadas em um formato estruturado.
-6. **Validação:** o sistema verifica o formato, os campos obrigatórios e as inconsistências detectáveis.
-7. **Decisão:** o fluxo condicional aplica as regras de encaminhamento.
-8. **Encaminhamento:** o documento segue para o fluxo correspondente ou para revisão humana.
-9. **Persistência:** o resultado e o histórico são registrados para consulta e auditoria.
+1. **Recepção:** o documento chega pela UI ou pela API, e o ID e o formato são validados.
+2. **Original:** o arquivo é gravado em `recebidos/` antes de qualquer outra coisa.
+3. **Processamento:** o agente lê o original gravado, não o upload em memória, e percorre o grafo da seção 4.
+4. **Resultado:** o JSON é validado contra o contrato.
+5. **Arquivamento:** o resultado é gravado na pasta do destino (seção 8) e fica disponível em `GET /triagem/{id}`.
 
-**Importante:** a IA auxilia na triagem e na organização das informações. Ela não substitui a avaliação de profissionais de saúde nem deve decidir autonomamente sobre diagnósticos ou condutas clínicas.
+Por padrão o envio é assíncrono: a API responde `202` e processa em segundo plano. Com `?aguardar=true`, a resposta já traz o resultado (`200`).
 
-## 📦 7. Estrutura inicial do repositório
+## 📦 7. Estrutura do repositório
 
 ```text
-mediflow/
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── services/
-│   │   ├── hooks/
-│   │   └── types/
-│   └── package.json
-│
-├── backend/
-│   ├── app/
-│   │   ├── api/
-│   │   ├── core/
-│   │   ├── models/
-│   │   ├── schemas/
-│   │   ├── repositories/
-│   │   ├── services/
-│   │   └── main.py
-│   └── requirements.txt
-│
-├── ia/
-│   ├── nodes/
-│   ├── prompts/
-│   ├── schemas.py
-│   ├── state.py
-│   └── graph.py
-│
-├── infra/
-│   └── docker-compose.yml
-│
-├── tests/
-├── .env.example
-├── .gitignore
-└── README.md
+.
+├── app/                    # API, agente e regras
+│   ├── api/main.py         # rotas FastAPI
+│   ├── grafo.py            # grafo LangGraph
+│   ├── llm.py              # chamadas ao Gemini
+│   ├── validacao*.py       # conferência dos dados extraídos
+│   ├── roteamento.py       # regras de decisão
+│   ├── storage.py          # OCI Object Storage + fallback em disco
+│   ├── schemas.py          # contratos de entrada e saída
+│   └── modelos/            # enums de categoria e destino
+├── ui/                     # Streamlit (Home, Enviar, Resultado)
+├── config/                 # regras.json, cid10.csv
+├── testes/                 # pytest + fixtures sintéticas e schema do resultado
+├── deploy/                 # Quadlets, Caddyfile e script de GitOps
+├── infra/terraform/compute/# VM Always Free na OCI
+├── docs/                   # guias de setup da OCI, pipeline e Makefile
+├── .github/workflows/      # CI/CD
+├── Dockerfile
+├── Makefile
+└── .env.example
 ```
 
-A estrutura será ajustada conforme os componentes forem implementados.
+## ☁️ 8. Infraestrutura na OCI
 
-## ☁️ 8. Estratégia de infraestrutura na OCI
+### Object Storage
 
-O projeto será desenvolvido inicialmente no ambiente local, utilizando o VS Code. A integração com a nuvem ocorrerá de forma gradual.
-
-### OCI Object Storage
-
-Responsável pelo armazenamento dos documentos originais e dos resultados estruturados.
-
-Organização lógica sugerida:
+Bucket privado (padrão `mediflow-documentos-clinicos`, configurável com `OCI_BUCKET`). Os nomes abaixo são prefixos de objetos:
 
 ```text
-mediflow-documentos/
-├── recebidos/
-├── processados/
-├── auditoria-humana/
-└── erros/
+recebidos/              # originais (.txt, .pdf, .jpg, .png), nunca sobrescritos
+processados/rotina/     # resultados JSON de rotina
+processados/urgentes/   # resultados JSON de Fila_Emergencia_Medica
+auditoria_humana/       # resultados JSON de Fila_Revisao_Humana
 ```
 
-Os nomes acima representam prefixos de objetos no bucket, não diretórios físicos.
+A OCI só é usada quando `OCI_NAMESPACE` está definido. A autenticação é feita por *instance principal* na VM (`OCI_AUTH=instance_principal`) ou pelo arquivo do OCI CLI (`OCI_CONFIG_FILE`). Para o setup inicial, veja [`docs/01-oci-setup`](docs/01-oci-setup/01-oci-setup.md).
 
-### PostgreSQL
+### CI/CD
 
-Responsável pelos dados operacionais da aplicação, incluindo:
+Workflow em `.github/workflows/workflow.yaml`, disparado em push e PR para `main` e `develop`:
 
-- Identificadores dos documentos.
-- Categoria e estado do processamento.
-- Referências aos objetos armazenados.
-- Resultados estruturados da triagem.
-- Histórico de revisões e decisões.
+1. Testes com cobertura.
+2. SonarQube (reprova com issues de severidade BLOCKER ou HIGH) e Trivy no sistema de arquivos.
+3. Build da imagem arm64, verificação da base Wolfi, smoke test em `/health` e Trivy na imagem.
+4. **Só em push na `main`:** push para o OCIR com a tag igual ao SHA do commit.
 
-A forma de hospedagem será definida após a verificação dos recursos disponíveis no Always Free da OCI.
+Detalhes em [`docs/02-docs-pipeline`](docs/02-docs-pipeline/02-docs-pipeline.md).
 
-### Estratégia de custos
+### Deploy (GitOps)
 
-- Priorizar recursos elegíveis ao OCI Always Free.
-- Desenvolver e testar localmente antes da publicação.
-- Evitar recursos de infraestrutura desnecessários.
-- Monitorar os limites de armazenamento, processamento e requisições.
-- Avaliar separadamente os custos e as cotas do provedor de IA.
+- **VM:** `VM.Standard.A1.Flex` (Always Free), Oracle Linux 9, criada por Terraform em [`infra/terraform/compute`](infra/terraform/compute/README.md).
+- **GitOps:** um timer na VM (`mediflow-sync`) vigia a `main`. Quando a imagem daquele commit já existe no OCIR, ele aplica os Quadlets de `deploy/` e reinicia os serviços. Ninguém faz deploy manual.
+- **Containers:** rodam com Podman rootless. A API e a UI ficam só na rede interna; o Caddy é o único exposto, na porta 443, com certificado TLS automático em [`mediflow-oci.duckdns.org`](https://mediflow-oci.duckdns.org). A porta 80 fica fechada.
+- **Segredos:** a chave do Gemini fica num *Podman secret* na VM. A deploy key e o token do OCIR ficam no OCI Vault.
 
-A utilização do Always Free não garante que todos os serviços, modelos ou configurações sejam gratuitos.
+### Custos
 
-## 🔌 9. API REST planejada
+Toda a infraestrutura usa recursos Always Free da OCI. A API do Gemini é cobrada à parte, conforme a cota e o plano da chave usada.
 
-Os seguintes endpoints são propostas iniciais e ainda precisam ser implementados.
+## 🔌 9. API
 
-| Método | Endpoint | Objetivo |
+Documentação interativa em `/docs` (OpenAPI).
+
+| Método | Rota | Descrição |
 |---|---|---|
-| `POST` | `/api/v1/documents` | Receber um documento. |
-| `GET` | `/api/v1/documents` | Listar documentos. |
-| `GET` | `/api/v1/documents/{id}` | Consultar um documento e seu resultado. |
-| `GET` | `/api/v1/documents/{id}/status` | Consultar o estado do processamento. |
-| `GET` | `/api/v1/audits/pending` | Listar casos pendentes de revisão. |
-| `POST` | `/api/v1/audits/{id}/decision` | Registrar uma decisão de auditoria. |
-| `GET` | `/api/v1/dashboard` | Consultar indicadores operacionais. |
+| `POST` | `/triagem` | Envia texto em JSON: `documento_id`, `documento_texto`, `canal_origem` |
+| `POST` | `/triagem/pdf` | Envia PDF (multipart: `documento_id`, `canal_origem`, `arquivo`) |
+| `POST` | `/triagem/arquivo` | Envia PDF, JPG ou PNG (multipart, mesmos campos) |
+| `GET` | `/triagem/{id}` | Consulta o resultado |
+| `GET` | `/documentos/{id}` | Consulta o resultado (mesmo formato, validação de ID mais restrita) |
+| `GET` | `/health` | Verificação de saúde |
 
-## 🧾 10. Exemplo de saída estruturada
+Os `POST` aceitam `?aguardar=true` para receber o resultado na mesma chamada.
 
-O agente deverá produzir resultados em JSON, validados antes de serem persistidos.
+Códigos de resposta: `200` resultado, `202` recebido ou processando, `404` não encontrado, `409` ID já recebido, `413` arquivo acima de 10 MB, `422` ID, formato ou campo inválido.
+
+```bash
+curl -X POST "http://localhost:8000/triagem?aguardar=true" \
+  -H "Content-Type: application/json" \
+  -d '{"documento_id":"DOC-001","canal_origem":"Ambulatorio","documento_texto":"RECEITUARIO. Paciente: Maria Souza..."}'
+```
+
+## 🧾 10. Exemplo de saída
+
+Laudo sintético com achado crítico (dados fictícios). O formato completo está em [`testes/fixtures/resultado_triagem.schema.json`](testes/fixtures/resultado_triagem.schema.json).
 
 ```json
 {
-  "document_id": "DOC-001",
-  "status": "pending_review",
-  "classification": {
-    "document_type": "solicitacao_autorizacao",
-    "confidence": 0.91
+  "status": "processado",
+  "documento_id": "DOC-TEP-001",
+  "classificacao": {
+    "tipo_documento": "Laudo de Exame de Imagem",
+    "especialidade": "Radiologia / Pneumologia",
+    "nivel_prioridade": "Urgente",
+    "score_confianca_classificacao": 0.95
   },
-  "extracted_data": {
-    "patient_reference": null,
-    "professional_registration": null,
-    "diagnosis_code": null
+  "dados_extraidos": {
+    "paciente": { "nome": "Carlos Eduardo Mendes", "idade": 52, "data_nascimento": null },
+    "medico_solicitante": { "nome": "Dra. Renata Silveira", "crm": "145892-SP" },
+    "diagnostico_principal": "Tromboembolismo Pulmonar Agudo (TEP)",
+    "cid_sugerido": "I26.9",
+    "origem_cid": "sugerido",
+    "medicamentos": [],
+    "exames": [{ "nome": "Tomografia de Torax com contraste", "codigo_tuss": null }],
+    "evidencias": [
+      { "campo": "diagnostico_principal", "trecho": "Quadro compativel com Tromboembolismo Pulmonar Agudo" }
+    ]
   },
-  "routing": {
-    "destination": "auditoria",
-    "requires_human_review": true,
-    "reason": "Validacao humana pendente"
+  "problemas": [],
+  "decisao_roteamento": {
+    "destino_principal": "Fila_Emergencia_Medica",
+    "requer_auditoria_humana": false,
+    "justificativa_roteamento": "Laudo de Exame de Imagem com prioridade Urgente (achado crítico: Tromboembolismo Pulmonar Agudo (TEP)); regra R-URGENCIA: urgência tem precedência sobre a rota de rotina → Fila_Emergencia_Medica.",
+    "regra_aplicada": "R-URGENCIA",
+    "notificacao_gerada": {
+      "canal": "Alerta_Plantao_Medico",
+      "mensagem": "ALERTA URGENTE: Tromboembolismo Pulmonar Agudo (TEP) paciente Carlos Eduardo Mendes."
+    }
+  },
+  "armazenamento_oci": {
+    "bucket": "mediflow-documentos-clinicos",
+    "caminho_objeto": "processados/urgentes/DOC-TEP-001.json",
+    "status_backup": "sucesso",
+    "local": "oci",
+    "urgente": true
   }
 }
 ```
 
-Este exemplo é ilustrativo. Os campos, estados, categorias e critérios de validação serão definidos durante a implementação. A confiança retornada pelo modelo não representa, por si só, uma medida clínica validada.
+Para manter compatibilidade, `dados_extraidos` também traz os campos-espelho `cid`, `cid_origem` e `exames_solicitados`, omitidos acima. O score de confiança é uma medida do processo de extração e validação, **não** uma medida clínica validada.
 
-## 🧪 11. Cenários de demonstração do MVP
+## 🧪 11. Cenários de demonstração
 
-O projeto deverá demonstrar pelo menos três cenários:
+| Cenário | Exemplo | Resultado esperado |
+|---|---|---|
+| Rotina | Receita legível e completa | `R-RECEITA` → `Farmacia_Hospitalar` |
+| Urgente | Laudo com achado crítico (ex.: TEP) | `R-URGENCIA` → `Fila_Emergencia_Medica` + alerta ao plantão |
+| Ambíguo | Imagem borrada, campo faltante ou documento não clínico | `R-REVISAO` → `Fila_Revisao_Humana`, com os motivos listados |
 
-**Caso 1 — Documento rotineiro**
-
-- Documento fictício com campos legíveis.
-- Classificação e extração estruturada.
-- Validação dos campos e encaminhamento conforme as regras configuradas.
-
-**Caso 2 — Documento prioritário**
-
-- Documento sintético contendo uma condição definida pelas regras de prioridade do sistema.
-- Identificação do caso para encaminhamento prioritário.
-- Registro do motivo e do resultado.
-
-**Caso 3 — Documento ambíguo ou inconsistente**
-
-- Documento fictício com campos ausentes, conflitantes ou ilegíveis.
-- Identificação da necessidade de revisão.
-- Encaminhamento para auditoria humana e registro da decisão posterior.
-
-Os cenários demonstram o comportamento do fluxo de automação, não a validação clínica do agente.
+As amostras sintéticas estão em `testes/fixtures/`. Os testes usam um LLM falso e armazenamento temporário, então **não precisam de chave do Gemini nem de conta na OCI**.
 
 ## 🔐 12. Segurança e privacidade
 
-Como o sistema trata informações potencialmente sensíveis, segurança e privacidade devem ser consideradas desde a primeira versão.
+**O que já está implementado**
 
-- Utilizar documentos fictícios nos testes e nas demonstrações.
-- Manter os buckets privados e restringir as permissões de acesso.
-- Armazenar credenciais em variáveis de ambiente ou mecanismos seguros de gestão de segredos.
-- Não versionar arquivos `.env`, chaves ou credenciais no Git.
-- Validar arquivos recebidos, tipos permitidos e limites de tamanho.
-- Implementar autenticação e autorização antes de disponibilizar a aplicação a usuários.
-- Registrar as ações relevantes de processamento e auditoria.
-- Evitar armazenar informações pessoais desnecessárias em logs.
-- Considerar os requisitos aplicáveis da LGPD e as políticas de proteção de dados.
+- O documento é tratado como dado, não como instrução: há defesa contra *prompt injection* no prompt.
+- O formato é validado pelos bytes do arquivo, há limites de tamanho e o ID é validado contra *path traversal*.
+- Os originais são imutáveis (escrita condicional).
+- O bucket é privado, acessado por *instance principal* (sem chave de API na VM).
+- A imagem é mínima (Wolfi), roda sem root e passa por Trivy e SonarQube na CI/CD. Os containers rodam com Podman rootless.
+- Só a porta 443 fica exposta, com TLS.
+- Segredos ficam fora do Git (`.env` no `.gitignore`, Podman secret e OCI Vault).
 
-## 🚀 13. Roadmap de desenvolvimento
+**Limitações conhecidas**
 
-- [ ] Definir a estrutura inicial do repositório.
-- [ ] Criar a API com FastAPI.
-- [ ] Definir os schemas de entrada e saída com Pydantic.
-- [ ] Implementar o primeiro fluxo de processamento de texto.
-- [ ] Construir a classificação e extração com IA.
-- [ ] Implementar as decisões condicionais com LangGraph.
-- [ ] Criar o fluxo de revisão humana.
-- [ ] Configurar o PostgreSQL e o histórico de processamento.
-- [ ] Criar o bucket privado no OCI Object Storage.
-- [ ] Integrar a aplicação à OCI.
-- [ ] Desenvolver a interface React.
-- [ ] Criar testes automatizados para os três cenários.
-- [ ] Documentar a instalação e a execução.
-- [ ] Preparar a demonstração final do MVP.
+- ⚠️ **Não há autenticação.** A instância de demonstração é pública: **envie somente documentos fictícios.**
+- ⚠️ **Os documentos são enviados à API do Google Gemini**, ou seja, saem da OCI. Antes de qualquer uso com dados reais, é preciso avaliar a LGPD, o contrato e o plano de dados do provedor.
+- A decisão do auditor humano ainda não é registrada pela interface.
+
+## 🚀 13. Roadmap
+
+- [x] API FastAPI com envio de texto, PDF e imagem
+- [x] Contratos de entrada e saída com Pydantic
+- [x] Agente LangGraph com decisões condicionais
+- [x] Classificação e extração com Gemini, com validação contra o texto
+- [x] Regras de roteamento e envio para revisão humana
+- [x] Armazenamento no OCI Object Storage com fallback em disco
+- [x] Interface Streamlit
+- [x] Testes automatizados dos três cenários
+- [x] CI/CD com quality gates e deploy GitOps na OCI
+- [ ] Registro da decisão do auditor na interface
+- [ ] Listagem das filas por destino
+- [ ] Painel de indicadores
+- [ ] Autenticação e autorização (fora do escopo do hackathon)
 
 ## ▶️ 14. Como executar
 
-As instruções completas de instalação serão adicionadas conforme a estrutura inicial e as dependências forem definidas.
+**Pré-requisitos:** [uv](https://docs.astral.sh/uv/), Python 3.13 e uma chave da API do Gemini. Podman ou Docker só são necessários para o container.
 
-A execução prevista será dividida em três partes:
+```bash
+cp .env.example .env      # preencha GEMINI_API_KEY
+make dev                  # API em :8000 e UI em :8501
+```
 
-1. Inicialização do ambiente e banco de dados.
-2. Execução do backend e do módulo de IA.
-3. Execução do frontend e integração com a API.
+| Comando | O que faz |
+|---|---|
+| `make api` / `make ui` | Sobe só a API ou só a UI |
+| `make test` | Testes (não precisa de chave nem de OCI) |
+| `make lint` | ruff |
+| `make build` | Build da imagem |
+| `make scan` | Trivy |
+| `make ci-local` | lint + test + build + scan, antes do push |
 
-As configurações locais ficarão documentadas em `.env.example`, sem credenciais reais.
+Sem `OCI_NAMESPACE` no `.env`, tudo é gravado em `storage_local/`. Guia completo em [`docs/03-makefile`](docs/03-makefile/03-makefile.md).
 
 ## 👥 15. Contribuição
 
-Contribuições podem incluir melhorias na classificação, validação de dados, orquestração do agente, interface, testes e integração com a OCI.
+1. Crie uma branch por história de usuário.
+2. Cada commit deve conter só o que a história pede.
+3. Inclua testes para o que mudar e rode `make ci-local` antes do push.
+4. Nunca inclua documentos clínicos reais nem segredos no repositório.
+5. Descreva as mudanças no pull request.
 
-Antes de contribuir:
+---
 
-1. Leia a documentação do projeto.
-2. Crie uma branch para a funcionalidade.
-3. Implemente testes para as alterações relevantes.
-4. Não inclua documentos clínicos reais ou segredos no repositório.
-5. Descreva as mudanças realizadas no pull request.
-
-## 📌 16. Considerações finais
-
-O MediFlow busca demonstrar como agentes de Inteligência Artificial podem apoiar a automação de fluxos documentais por meio de classificação, extração estruturada, validação, roteamento condicional e supervisão humana.
-
-A proposta combina engenharia de software, agentes de IA e infraestrutura em nuvem para construir uma solução modular, rastreável e preparada para evolução.
-
-**Projeto acadêmico em desenvolvimento — Alura + Oracle Next Education (ONE).**
-
+**Projeto do hackathon Alura + Oracle Next Education (ONE).**
