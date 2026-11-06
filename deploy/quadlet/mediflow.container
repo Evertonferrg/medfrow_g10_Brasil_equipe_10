@@ -21,6 +21,7 @@ Environment=OCI_AUTH=instance_principal
 
 # Chave do Gemini (extração automática). O secret precisa existir na VM ANTES deste arquivo chegar,
 # senão o container não sobe:  podman secret create gemini_api_key -
+Environment=GEMINI_MODEL=gemini-2.5-flash
 Secret=gemini_api_key,type=env,target=GEMINI_API_KEY
 
 # Healthcheck explícito (a imagem não tem curl/wget; o python3 tem). Travou 3 vezes seguidas:
