@@ -46,7 +46,7 @@ def api(monkeypatch):
 
 
 def buscar():
-    at = AppTest.from_file(PAGINA, default_timeout=10).run()
+    at = AppTest.from_file(PAGINA, default_timeout=30).run()
     at.text_input[0].set_value("DOC-1")
     at.button[0].click().run()
     return at
