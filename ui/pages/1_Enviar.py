@@ -171,7 +171,7 @@ if not url_valida(URL):
     st.stop()
 if sem_https_fora_do_local(URL):
     st.warning(
-        "Este aplicativo é uma prova de conceito. Não envie dados reais."
+        "A API não usa HTTPS: os dados trafegam sem criptografia. Não envie dados reais."
     )
 
 canais = carregar_canais()
