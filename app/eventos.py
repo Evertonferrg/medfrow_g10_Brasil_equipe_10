@@ -28,7 +28,9 @@ class ServicoEventos:
         pasta: Path | str = "eventos",
         relogio: Callable[[], datetime] | None = None,
     ):
-        self._pasta = Path(pasta)  # a pasta é criada no 1º registro, não ao importar o app
+        self._pasta = Path(
+            pasta
+        )  # a pasta é criada no 1º registro, não ao importar o app
         self._relogio = relogio or (lambda: datetime.now(UTC))
         self._lock = threading.Lock()
 
@@ -111,3 +113,21 @@ def registrar_desfecho(documento_id: str, resultado) -> None:
         servico_padrao().registrar(documento_id, status)
     except (OSError, ValueError):
         logger.exception("Não foi possível registrar o evento de status")
+
+
+def status_do_documento(documento_id: str, resultado: dict | None = None) -> str | None:
+    """Status do ciclo de vida do documento (recebido, processando, processado ou
+    em_auditoria_humana). Vem dos eventos; sem evento (documento antigo), é deduzido
+    do resultado salvo. Devolve None se não houver nenhum dos dois."""
+    try:
+        atual = servico_padrao().status_atual(documento_id)
+    except (OSError, ValueError):
+        atual = None
+    if atual:
+        return atual.value
+    if resultado:
+        destino = (resultado.get("decisao_roteamento") or {}).get("destino_principal")
+        if destino == "Fila_Revisao_Humana":
+            return StatusDocumento.EM_AUDITORIA_HUMANA.value
+        return StatusDocumento.PROCESSADO.value
+    return None
