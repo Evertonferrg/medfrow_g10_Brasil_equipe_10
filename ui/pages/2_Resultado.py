@@ -24,6 +24,7 @@ from componentes.classificacao import (  # noqa: F401
     exibir_classificacao,
     formatar_confianca,
 )
+from componentes.fila import ROTULO_STATUS  # H2.3.2 T5
 
 try:
     from componentes.paciente import bloco_paciente
@@ -138,6 +139,13 @@ if buscar and doc_id.strip():
         st.error(r.json().get("detail", r.text))
     else:
         res = r.json()
+        status_doc = res.get(
+            "status_documento"
+        )  # H2.3.2 T5: estágio do documento em destaque
+        if status_doc:
+            st.subheader(
+                f"Status do documento: {ROTULO_STATUS.get(status_doc, status_doc)}"
+            )
         st.caption(f"**Status:** {res.get('status', '-')}")
         cl = res.get("classificacao")
         if cl:
