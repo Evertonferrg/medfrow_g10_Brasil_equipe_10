@@ -10,6 +10,7 @@ from ui.componentes.fila import minutos_de_espera, texto_dose_destacada, texto_e
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="Fila de revisão", layout="wide")
+
 st.title("Fila de revisão")
 
 
