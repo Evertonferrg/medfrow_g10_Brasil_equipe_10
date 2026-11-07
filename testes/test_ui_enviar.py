@@ -132,6 +132,8 @@ def test_url_invalida_bloqueia_a_tela(monkeypatch):
     "status,detalhe",
     [
         (409, "documento_id já recebido: DOC-TESTE1"),
+        (413, "Arquivo acima do limite de 10 MB."),
+        (415, "Formato não aceito. Envie PDF, JPG ou PNG."),
         (422, "documento vazio"),
     ],
 )

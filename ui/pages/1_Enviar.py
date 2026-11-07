@@ -9,10 +9,31 @@ import streamlit as st
 
 ARQUIVO_REGRAS = Path(__file__).resolve().parents[2] / "config" / "regras.json"
 TIPO_ARQUIVO_TEXTO = "TEXTO"
-TIPOS_ARQUIVO = ["pdf", "jpg", "jpeg", "png"]  # H1.1.3 T6
 FORMATO_DOCUMENTO = ["Texto", "Arquivo"]
 MAX_TEXTO = 200_000  # mesmo limite do servidor (app/schemas.py)
-MAX_ARQUIVO = 10 * 1024 * 1024  # mesmo limite da rota /triagem/arquivo
+MAPA_EXTENSOES_UPLOADER = {"PDF": ["pdf"], "JPG": ["jpg", "jpeg"], "PNG": ["png"]}
+
+
+def carregar_limites() -> tuple[int, list[str]]:
+    """Carrega limite de tamanho e formatos aceitos de config/regras.json (H1.1.4 T1)."""
+    try:
+        dados = json.loads(ARQUIVO_REGRAS.read_text(encoding="utf-8"))
+        max_mb = int(dados.get("tamanho_maximo_mb", 10))
+        formatos = [
+            str(f).upper() for f in dados.get("formatos_aceitos", ["PDF", "JPG", "PNG"])
+        ]
+        return max_mb, formatos
+    except (OSError, KeyError, TypeError, ValueError):
+        return 10, ["PDF", "JPG", "PNG"]
+
+
+TAMANHO_MAXIMO_MB, FORMATOS_ACEITOS = carregar_limites()
+TIPOS_ARQUIVO = [
+    ext
+    for fmt in FORMATOS_ACEITOS
+    for ext in MAPA_EXTENSOES_UPLOADER.get(fmt, [fmt.lower()])
+]  # H1.1.3 T6 / H1.1.4 T1
+MAX_ARQUIVO = TAMANHO_MAXIMO_MB * 1024 * 1024  # mesmo limite da rota /triagem/arquivo
 TIMEOUT = (3.05, 15)  # (conexão, leitura) em segundos
 HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
 
@@ -133,7 +154,10 @@ def _enviar() -> None:
     elif arquivo is None and len(texto) > MAX_TEXTO:
         ss["_resultado"] = (False, f"documento acima de {MAX_TEXTO} caracteres")
     elif arquivo is not None and arquivo.size > MAX_ARQUIVO:
-        ss["_resultado"] = (False, "arquivo acima de 10 MB")
+        ss["_resultado"] = (
+            False,
+            f"Arquivo acima do limite de {TAMANHO_MAXIMO_MB} MB.",
+        )
     elif not ss.get("confirmo_sintetico"):
         ss["_resultado"] = (
             False,
@@ -226,7 +250,7 @@ with st.form("envio"):
             "Foto, scan ou PDF",
             type=TIPOS_ARQUIVO,
             key=f"arquivo_{n_upload}",
-            max_upload_size=10,
+            max_upload_size=TAMANHO_MAXIMO_MB,
         )
         if arquivo is not None:
             if (arquivo.type or "").startswith("image/"):
