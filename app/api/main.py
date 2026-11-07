@@ -11,7 +11,7 @@ from app import storage
 from app.api.ligacao_fila import ligar_fila_revisao
 from app.api.tempo import MedirTempoMiddleware, configurar_log
 from app.arquivos import extensao_por_assinatura
-from app.eventos import servico_padrao
+from app.eventos import servico_padrao, status_do_documento
 from app.resposta import carregar_resultado
 from app.schemas import DocumentoEntrada, ResultadoTriagem, validar_id
 from app.servico import processar
@@ -62,6 +62,7 @@ def _responder_consulta(documento_id: str):
             content={"detail": "resultado armazenado fora do formato combinado"},
         )
     if resultado is not None:
+        resultado["status_documento"] = status_do_documento(documento_id, resultado)
         return JSONResponse(status_code=200, content=resultado)
     if _recebido(documento_id):
         return JSONResponse(
