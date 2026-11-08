@@ -172,7 +172,8 @@ CAMINHO_LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 if CAMINHO_LOGO.exists():
     st.logo(str(CAMINHO_LOGO), size="large")
 
-st.markdown("""
+st.markdown(
+    """
 <style>
     [data-testid="stLogo"] {
         height: 3.5rem !important;
@@ -183,7 +184,9 @@ st.markdown("""
         width: auto !important;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.markdown("<div style='height: 35vh;'></div>", unsafe_allow_html=True)
