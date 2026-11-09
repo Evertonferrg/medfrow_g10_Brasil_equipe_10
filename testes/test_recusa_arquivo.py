@@ -205,7 +205,7 @@ def test_streamlit_exibe_erro_no_envio_de_arquivo_recusado_pelo_servidor(monkeyp
     monkeypatch.delenv("API_URL", raising=False)
     monkeypatch.setattr(requests, "post", _falso_post)
 
-    pagina = str(RAIZ / "ui" / "pages" / "1_Enviar.py")
+    pagina = str(RAIZ / "ui" / "pages" / "1_Documentos.py")
     at = AppTest.from_file(pagina, default_timeout=10).run()
     at.session_state["arquivo_0"] = _ArquivoFalso()
     at.text_input(key="documento_id").set_value("DOC-UI-415")
@@ -234,7 +234,7 @@ def test_streamlit_bloqueia_arquivo_acima_do_limite_localmente(monkeypatch):
     monkeypatch.delenv("API_URL", raising=False)
     monkeypatch.setattr(requests, "post", lambda url, **kw: chamadas.append(url))
 
-    pagina = str(RAIZ / "ui" / "pages" / "1_Enviar.py")
+    pagina = str(RAIZ / "ui" / "pages" / "1_Documentos.py")
     at = AppTest.from_file(pagina, default_timeout=10).run()
     at.session_state["arquivo_0"] = _ArquivoGrande()
     at.text_input(key="documento_id").set_value("DOC-UI-413")
