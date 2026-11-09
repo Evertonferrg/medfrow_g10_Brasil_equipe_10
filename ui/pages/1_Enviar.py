@@ -49,8 +49,17 @@ def url_valida(url: str) -> bool:
 
 
 def sem_https_fora_do_local(url: str) -> bool:
+    """True só quando o tráfego sai da rede local e vai sem criptografia.
+
+    Considera local: localhost, 127.0.0.1, ::1 e qualquer host SEM ponto no nome —
+    este último cobre os nomes de container na rede interna (ex.: http://mediflow-app:8000),
+    onde o tráfego não sai da máquina e o aviso seria falso.
+    """
     p = urlparse(url)
-    return p.scheme == "http" and p.hostname not in HOSTS_LOCAIS
+    if p.scheme != "http":
+        return False
+    host = p.hostname or ""
+    return host not in HOSTS_LOCAIS and "." in host
 
 
 def carregar_canais() -> list[str]:

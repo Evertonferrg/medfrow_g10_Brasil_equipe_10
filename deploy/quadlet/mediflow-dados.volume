@@ -1,0 +1,4 @@
+# Disco do fallback do app/storage.py (STORAGE_LOCAL_DIR=/dados no mediflow.container).
+# Sobrevive a reinícios e a novos deploys da imagem.
+
+[Volume]

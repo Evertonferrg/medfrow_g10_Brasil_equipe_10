@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ "main", "develop" ]
 
+env:
+  OCI_REGISTRY: iad.ocir.io
+  OCI_REPOSITORY: mediflow
+  OCI_TENANCY_NAMESPACE: ${{ vars.OCI_TENANCY_NAMESPACE }}
 
 jobs:
   # ----------------------------------------------------
@@ -185,10 +189,11 @@ jobs:
           ignore-unfixed: 'true'
 
   # ----------------------------------------------------
-  # 4. BUILD DOCKER IMAGE & TRIVY IMAGE SCAN
+  # 4. BUILD DOCKER IMAGE, TRIVY IMAGE SCAN & PUSH TO OCIR
   # ----------------------------------------------------
   build-and-scan-image:
-    runs-on: ubuntu-latest
+    # arm64: a VM de produção é VM.Standard.A1.Flex (Ampere)
+    runs-on: ubuntu-24.04-arm
     needs: [sonarqube, trivy-fs]
     steps:
       - name: Checkout Code
@@ -230,3 +235,21 @@ jobs:
           exit-code: '1'
           severity: 'CRITICAL,HIGH,MEDIUM'
           ignore-unfixed: 'true'
+
+      # Publica só em push na main, depois de todos os gates.
+      # Vai para o OCIR a mesma imagem que passou no smoke test e no Trivy; tag = SHA completo do commit
+      - name: Log in to Oracle Cloud OCIR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d
+        with:
+          registry: ${{ env.OCI_REGISTRY }}
+          username: ${{ secrets.OCI_USERNAME }}
+          password: ${{ secrets.OCI_AUTH_TOKEN }}
+
+      - name: Push Docker Image to OCIR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          IMAGE: ${{ env.OCI_REGISTRY }}/${{ env.OCI_TENANCY_NAMESPACE }}/${{ env.OCI_REPOSITORY }}:${{ github.sha }}
+        run: |
+          docker tag mediflow-app:latest "$IMAGE"
+          docker push "$IMAGE"

@@ -4,11 +4,13 @@ from collections.abc import Mapping
 from typing import Any
 
 from . import config, storage
+from .eventos import registrar_desfecho
 from .schemas import (
     ArmazenamentoOCI,
     Classificacao,
     DecisaoRoteamento,
     Destino,
+    Extracao,
     Notificacao,
     ResultadoTriagem,
 )
@@ -77,6 +79,14 @@ def montar_resposta(documento_id: str, estado: Mapping[str, Any]) -> ResultadoTr
             dados_extraidos["cid"] = dados_extraidos["cid_sugerido"]
         elif "cid" in dados_extraidos and "cid_sugerido" not in dados_extraidos:
             dados_extraidos["cid_sugerido"] = dados_extraidos["cid"]
+
+    # H4.1.5 T2: documento ilegível nunca sai com campo preenchido
+    if estado.get("ilegivel"):
+        dados_extraidos = {
+            campo: "não encontrado"
+            for campo in Extracao.model_fields
+            if campo not in CAMPOS_FORA
+        }
 
     return ResultadoTriagem(
         status="processado" if extracao else "erro_extracao",
@@ -150,6 +160,7 @@ def arquivar(documento_id: str, estado: dict) -> dict:
             logger.exception(...)
             resultado = falha_de_processamento(documento_id, str(ex))
     resultado.armazenamento_oci = salvar_resultado(documento_id, resultado)
+    registrar_desfecho(documento_id, resultado)
     return resultado.model_dump(mode="json")
 
 

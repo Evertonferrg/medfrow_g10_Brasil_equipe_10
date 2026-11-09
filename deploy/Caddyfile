@@ -1,0 +1,19 @@
+mediflow-oci.duckdns.org {
+	# Porta 80 fechada: só o desafio TLS-ALPN-01 (pela 443) tem como funcionar.
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+
+	# Da API, só o que precisa aparecer de fora. O resto fica na rede interna (a UI chama por lá).
+	@api path /health /docs /docs/* /openapi.json
+	handle @api {
+		reverse_proxy mediflow-app:8000
+	}
+
+	# Todo o resto é a UI. O WebSocket do Streamlit passa sem configuração extra.
+	handle {
+		reverse_proxy mediflow-ui:8501
+	}
+}

@@ -1,0 +1,40 @@
+# Modelo: o mediflow-sync.sh troca __TAG__ pelo SHA do commit da main e grava em
+# ~/.config/containers/systemd/mediflow.container. Gera o mediflow.service.
+
+[Unit]
+Description=MediFlow (app)
+
+[Container]
+# Nome que o Caddy usa. Não pode ser "mediflow": é o hostname da VM, e o /etc/hosts copiado do host
+# faria o nome apontar para a própria VM em vez do container.
+ContainerName=mediflow-app
+Image=iad.ocir.io/idzac8al3ypr/mediflow:__TAG__
+Network=mediflow.network
+# Sem PublishPort: a app escuta na 8000 só dentro da rede mediflow. Quem expõe é o Caddy.
+
+# Fallback em disco do app/storage.py: fora do container, para sobreviver a cada deploy.
+# :U ajusta o dono do volume para o usuário da imagem (Wolfi costuma rodar como nonroot).
+# Environment=STORAGE_LOCAL_DIR=/dados
+Environment=OCI_NAMESPACE=idzac8al3ypr
+Environment=OCI_AUTH=instance_principal
+# Volume=mediflow-dados.volume:/dados:U
+
+# Chave do Gemini (extração automática). O secret precisa existir na VM ANTES deste arquivo chegar,
+# senão o container não sobe:  podman secret create gemini_api_key -
+Environment=GEMINI_MODEL=gemini-2.5-flash
+Secret=gemini_api_key,type=env,target=GEMINI_API_KEY
+
+# Healthcheck explícito (a imagem não tem curl/wget; o python3 tem). Travou 3 vezes seguidas:
+# o Podman mata o container e o Restart=always do systemd sobe de novo.
+HealthCmd=python3 -c "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=3)"
+HealthInterval=30s
+HealthRetries=3
+HealthStartPeriod=20s
+HealthOnFailure=kill
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,4 @@
+# /data do Caddy: certificado e conta do Let's Encrypt.
+# Sem ele, cada restart pediria um certificado novo e poderia bater no limite de emissão.
+
+[Volume]

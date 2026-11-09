@@ -1,0 +1,30 @@
+# Modelo: o mediflow-sync.sh troca __TAG__ pelo mesmo SHA da app (mesma imagem, outro processo).
+# Gera o mediflow-ui.service.
+
+[Unit]
+Description=MediFlow (UI Streamlit)
+
+[Container]
+# Nome que o Caddy usa. Não pode ser "mediflow" (hostname da VM).
+ContainerName=mediflow-ui
+Image=iad.ocir.io/idzac8al3ypr/mediflow:__TAG__
+Network=mediflow.network
+# A UI chama a API pelo servidor (requests), não pelo navegador: o endereço interno basta.
+Environment=API_URL=http://mediflow-app:8000
+# Entrypoint explícito: a imagem sobe a API por padrão; aqui o mesmo /app roda o Streamlit.
+Entrypoint=python3
+Exec=-m streamlit run ui/Home.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false
+
+# Precisa ser explícito: o healthcheck herdado da imagem (se houver) testa a 8000, que aqui não existe.
+HealthCmd=python3 -c "import urllib.request as u; u.urlopen('http://localhost:8501/_stcore/health', timeout=3)"
+HealthInterval=30s
+HealthRetries=3
+HealthStartPeriod=30s
+HealthOnFailure=kill
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

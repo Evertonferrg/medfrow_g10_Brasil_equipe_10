@@ -1,0 +1,14 @@
+{
+  "aviso": "Lista de partida baseada nas classes do ISMP Brasil (medicamentos potencialmente perigosos). Confira com a lista oficial. As faixas de dose abaixo são FICTÍCIAS, só para teste: substitua por valores validados por um profissional de saúde antes de qualquer uso real.",
+  "classes": {
+    "opioides": ["morfina", "fentanil", "metadona", "oxicodona", "tramadol"],
+    "anticoagulantes": ["heparina", "enoxaparina", "varfarina", "rivaroxabana"],
+    "insulinas": ["insulina"],
+    "quimioterapicos": ["metotrexato", "ciclofosfamida", "cisplatina", "vincristina"]
+  },
+  "faixas_dose": {
+    "morfina":      {"max": 100, "unidade": "mg", "validado_clinicamente": false, "ficticia": true},
+    "metotrexato":  {"max": 50,  "unidade": "mg", "validado_clinicamente": false, "ficticia": true},
+    "insulina":     {"max": 100, "unidade": "ui", "validado_clinicamente": false, "ficticia": true}
+  }
+}

@@ -341,12 +341,13 @@ def test_laudo_sem_achado_critico_vai_para_prontuario_eletronico():
     resultado = montar_resposta("DOC-LAUDO-001", estado)
 
     assert resultado.status == "processado"
-    assert resultado.decisao_roteamento.destino_principal == Destino.PRONTUARIO_ELETRONICO
+    assert (
+        resultado.decisao_roteamento.destino_principal == Destino.PRONTUARIO_ELETRONICO
+    )
     assert resultado.decisao_roteamento.requer_auditoria_humana is False
     assert resultado.decisao_roteamento.regra_aplicada == "R-PRONTUARIO"
     assert (
-        "Prontuario_Eletronico"
-        in resultado.decisao_roteamento.justificativa_roteamento
+        "Prontuario_Eletronico" in resultado.decisao_roteamento.justificativa_roteamento
     )
 
 
@@ -399,7 +400,9 @@ def test_relatorio_de_alta_vai_para_prontuario_eletronico():
     assert estado["regra"] == "R-PRONTUARIO"
 
     resultado = montar_resposta("DOC-ALTA-001", estado)
-    assert resultado.decisao_roteamento.destino_principal == Destino.PRONTUARIO_ELETRONICO
+    assert (
+        resultado.decisao_roteamento.destino_principal == Destino.PRONTUARIO_ELETRONICO
+    )
     assert resultado.decisao_roteamento.requer_auditoria_humana is False
     assert resultado.decisao_roteamento.regra_aplicada == "R-PRONTUARIO"
 
@@ -430,7 +433,9 @@ def test_atestado_medico_vai_para_prontuario_eletronico():
     assert estado["regra"] == "R-PRONTUARIO"
 
     resultado = montar_resposta("DOC-ATEST-001", estado)
-    assert resultado.decisao_roteamento.destino_principal == Destino.PRONTUARIO_ELETRONICO
+    assert (
+        resultado.decisao_roteamento.destino_principal == Destino.PRONTUARIO_ELETRONICO
+    )
     assert resultado.decisao_roteamento.requer_auditoria_humana is False
     assert resultado.decisao_roteamento.regra_aplicada == "R-PRONTUARIO"
 
@@ -468,7 +473,9 @@ def test_laudo_com_prioridade_urgente_injetada_segue_para_emergencia():
     assert estado["notificacao"]["canal"] == "Alerta_Plantao_Medico"
 
     resultado = montar_resposta("DOC-TEP-001", estado)
-    assert resultado.decisao_roteamento.destino_principal == Destino.FILA_EMERGENCIA_MEDICA
+    assert (
+        resultado.decisao_roteamento.destino_principal == Destino.FILA_EMERGENCIA_MEDICA
+    )
     assert resultado.decisao_roteamento.regra_aplicada == "R-URGENCIA"
     assert resultado.decisao_roteamento.requer_auditoria_humana is False
 
@@ -536,13 +543,18 @@ def test_laudo_rotina_via_api_vai_para_prontuario_e_armazena_em_rotina():
     assert dados["decisao_roteamento"]["destino_principal"] == "Prontuario_Eletronico"
     assert dados["decisao_roteamento"]["requer_auditoria_humana"] is False
     assert dados["decisao_roteamento"]["regra_aplicada"] == "R-PRONTUARIO"
-    assert dados["armazenamento_oci"]["caminho_objeto"].startswith("processados/rotina/")
+    assert dados["armazenamento_oci"]["caminho_objeto"].startswith(
+        "processados/rotina/"
+    )
     assert dados["armazenamento_oci"]["urgente"] is False
 
     # Persistência via GET /documentos/{id}
     resp_get = cliente.get("/documentos/LAUDO-ROTINA-2026-001")
     assert resp_get.status_code == 200
-    assert resp_get.json()["decisao_roteamento"]["destino_principal"] == "Prontuario_Eletronico"
+    assert (
+        resp_get.json()["decisao_roteamento"]["destino_principal"]
+        == "Prontuario_Eletronico"
+    )
 
 
 def test_relatorio_alta_via_api_vai_para_prontuario():
@@ -558,7 +570,10 @@ def test_relatorio_alta_via_api_vai_para_prontuario():
 
     resp = cliente.post("/triagem?aguardar=true", json=payload)
     assert resp.status_code == 200
-    assert resp.json()["decisao_roteamento"]["destino_principal"] == "Prontuario_Eletronico"
+    assert (
+        resp.json()["decisao_roteamento"]["destino_principal"]
+        == "Prontuario_Eletronico"
+    )
 
 
 def test_atestado_via_api_vai_para_prontuario():
@@ -574,7 +589,10 @@ def test_atestado_via_api_vai_para_prontuario():
 
     resp = cliente.post("/triagem?aguardar=true", json=payload)
     assert resp.status_code == 200
-    assert resp.json()["decisao_roteamento"]["destino_principal"] == "Prontuario_Eletronico"
+    assert (
+        resp.json()["decisao_roteamento"]["destino_principal"]
+        == "Prontuario_Eletronico"
+    )
 
 
 def test_laudo_urgente_via_api_vai_para_emergencia_nao_prontuario():
@@ -590,7 +608,12 @@ def test_laudo_urgente_via_api_vai_para_emergencia_nao_prontuario():
 
     resp = cliente.post("/triagem?aguardar=true", json=payload)
     assert resp.status_code == 200
-    assert resp.json()["decisao_roteamento"]["destino_principal"] == "Fila_Emergencia_Medica"
+    assert (
+        resp.json()["decisao_roteamento"]["destino_principal"]
+        == "Fila_Emergencia_Medica"
+    )
     assert resp.json()["decisao_roteamento"]["regra_aplicada"] == "R-URGENCIA"
     assert resp.json()["armazenamento_oci"]["urgente"] is True
-    assert resp.json()["armazenamento_oci"]["caminho_objeto"].startswith("processados/urgentes/")
+    assert resp.json()["armazenamento_oci"]["caminho_objeto"].startswith(
+        "processados/urgentes/"
+    )

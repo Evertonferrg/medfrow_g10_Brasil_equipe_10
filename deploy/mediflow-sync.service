@@ -1,0 +1,7 @@
+[Unit]
+Description=MediFlow GitOps: sincroniza a main e implanta a imagem do OCIR
+
+[Service]
+Type=oneshot
+# Chamado pelo bash para não depender do bit de execução no Git.
+ExecStart=/bin/bash %h/mediflow/deploy/mediflow-sync.sh
