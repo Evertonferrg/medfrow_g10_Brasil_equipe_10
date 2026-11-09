@@ -10,13 +10,6 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-    [data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #E2E8F0;
-    }
-    .stApp {
-        background-color: #F8FAFD;
-    }
     [data-testid="stLogo"] {
         height: 3.5rem !important;
     }
