@@ -2,8 +2,11 @@
 [browser]
 gatherUsageStats = false
 
-[theme]
+[theme.light]
 primaryColor = "#2563EB"
 backgroundColor = "#F8FAFD"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#1E293B"
+
+[theme.dark]
+primaryColor = "#60A5FA"
