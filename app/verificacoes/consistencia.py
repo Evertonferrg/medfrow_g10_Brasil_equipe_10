@@ -53,7 +53,7 @@ def calcular_idade(nascimento: date, referencia: date) -> int:
     )
 
 
-# T2 ---------------------------------------------------------------
+# T2 -
 def conferir_idade(
     idade, data_nascimento, data_documento=None, hoje: date | None = None
 ) -> str | None:
@@ -74,7 +74,7 @@ def conferir_idade(
     return None
 
 
-# T3 ---------------------------------------------------------------
+# T3
 def _normalizar_cid(codigo: str) -> str:
     return codigo.strip().upper().replace(".", "")
 
@@ -109,7 +109,7 @@ def conferir_cid_diagnostico(
     return None
 
 
-# T4 ---------------------------------------------------------------
+# T4
 def converter_marcacao_crm(marcacao) -> str | None:
     """Converte a marcação de H1.3.2 (False ou 'invalido') em motivo."""
     if marcacao is False or (
@@ -120,7 +120,7 @@ def converter_marcacao_crm(marcacao) -> str | None:
     return None
 
 
-# chamada pelo nó `validar` --------------------------------------------
+# chamada pelo nó `validar`
 def verificar_consistencia(
     dados: dict,
     llm: LLMEstruturado,
