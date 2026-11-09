@@ -9,7 +9,7 @@ Image=docker.io/library/caddy:latest
 Network=mediflow.network
 # Única porta exposta da VM (além do SSH). A 80 fica fechada.
 PublishPort=443:443
-PublishPort=443:443/udp
+PublishPort=10.0.2.204:443:443/udp
 Volume=caddy-data.volume:/data
 # O sync copia o Caddyfile para cá. :Z é para o SELinux do Oracle Linux deixar o container ler.
 Volume=%h/.config/mediflow/Caddyfile:/etc/caddy/Caddyfile:ro,Z
