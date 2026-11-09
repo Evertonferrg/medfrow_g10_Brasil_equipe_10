@@ -2,6 +2,9 @@
 [browser]
 gatherUsageStats = false
 
+[server]
+maxUploadSize = 10
+
 [theme.light]
 primaryColor = "#2563EB"
 backgroundColor = "#F8FAFD"
