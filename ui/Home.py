@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import streamlit as st
 
 st.set_page_config(
@@ -35,4 +36,6 @@ with st.sidebar:
     st.caption("🚪 Sair")
 
 st.title("MediFlow HealthTech")
-st.write("Triagem inteligente de documentos clínicos. Selecione uma página no menu lateral à esquerda.")
+st.write(
+    "Triagem inteligente de documentos clínicos. Selecione uma página no menu lateral à esquerda."
+)
