@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from app import storage
+from app import config, storage
 from app.api.ligacao_fila import ligar_decisao, ligar_fila_revisao
 from app.api.tempo import MedirTempoMiddleware, configurar_log
 from app.arquivos import (
