@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import re
 import threading
 from collections.abc import Callable
@@ -25,6 +26,9 @@ from pydantic import ValidationError
 from app.decisao import AcaoAuditora, DecisaoAuditora
 from app.eventos import ServicoEventos, servico_padrao
 from app.status import StatusDocumento
+
+logger = logging.getLogger(__name__)
+
 
 # mesmas pastas de app/resposta.py
 PASTA_REVISAO = "auditoria_humana"
@@ -100,6 +104,8 @@ class Colaboradores:
     eventos: ServicoEventos
     calcular_destino: Callable[[dict], str | None]  # resultado -> destino ou None
     validar_correcoes: Callable[[dict, dict], tuple[dict, list[Alteracao]]]
+    # H4.4.4 T3 avisa o plantao quando o destino escolhido é a emergência (H3.3.1)
+    alerta_plantao: Callable[[dict], None] | None = None
 
 
 # ---------------------------------------------------------------- correções (H4.4.2 T2)
@@ -280,11 +286,28 @@ def decidir_caso(
             AcaoAuditora.REJEITAR: "rejeitado",
         }[acao]
         roteamento = resultado.setdefault("decisao_roteamento", {})
+        destino_calculado = None
+        if acao is AcaoAuditora.REDIRECIONAR:
+            try:  # só para a trilha: o que o roteamento teria escolhido
+                destino_calculado = colab.calcular_destino(resultado)
+            except DecisaoInvalida:
+                destino_calculado = None
         if destino:
             roteamento["destino_principal"] = destino
             roteamento["requer_auditoria_humana"] = False
             roteamento["regra_aplicada"] = REGRA_AUDITORA
-        roteamento["justificativa_roteamento"] = f"Revisão humana: {rotulo}."
+        if acao is AcaoAuditora.REJEITAR:  # H4.4.3: sem destino; o analista lê o motivo
+            roteamento["requer_auditoria_humana"] = False
+            roteamento["regra_aplicada"] = REGRA_AUDITORA
+            roteamento["justificativa_roteamento"] = (
+                f"Rejeitado pela auditora. Motivo: {decisao.motivo}"
+            )
+        elif acao is AcaoAuditora.REDIRECIONAR:  # H4.4.4
+            roteamento["justificativa_roteamento"] = (
+                f"Destino definido pela auditora: {destino}."
+            )
+        else:
+            roteamento["justificativa_roteamento"] = f"Revisão humana: {rotulo}."
 
         final = f"{_pasta_final(acao, destino)}/{documento_id}.json"
         colab.armazenamento.salvar(
@@ -304,6 +327,17 @@ def decidir_caso(
                 valor_novo=alt.novo,
                 detalhe="correção",
             )
+        if acao is AcaoAuditora.REDIRECIONAR:  # H4.4.4: a mudança aparece na trilha
+            colab.eventos.registrar_decisao(
+                documento_id,
+                StatusDocumento.EM_AUDITORIA_HUMANA,
+                autor_tipo="auditora",
+                autor_nome=decisao.auditora,
+                campo="destino",
+                valor_anterior=destino_calculado,
+                valor_novo=destino,
+                detalhe="destino definido pela auditora",
+            )
         colab.eventos.registrar_decisao(
             documento_id,
             StatusDocumento.REJEITADO
@@ -314,11 +348,25 @@ def decidir_caso(
             regra_aplicada=REGRA_AUDITORA,
             detalhe=f"{rotulo}" + (f": {decisao.motivo}" if decisao.motivo else ""),
         )
+        alertado = False
+
+        alerta = getattr(colab, "alertar_plantao", None) or getattr(
+            colab, "alerta_plantao", None
+        )
+
+        if destino == "Fila_Emergencia_Medica" and alerta:
+            try:  # o alerta não pode desfazer uma decisão já gravada
+                alerta(resultado)
+                alertado = True
+            except Exception:
+                logger.exception("Falha ao alertar o plantão")
+
         return {
             "documento_id": documento_id,
             "acao": acao.value,
             "destino": destino,
             "caminho": final,
+            "plantao_alertado": alertado,
         }
 
 
