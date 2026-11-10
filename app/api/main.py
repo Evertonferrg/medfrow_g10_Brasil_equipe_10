@@ -8,11 +8,12 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app import storage
-from app.api.ligacao_fila import ligar_fila_revisao
+from app.api.ligacao_fila import ligar_decisao, ligar_fila_revisao
 from app.api.tempo import MedirTempoMiddleware, configurar_log
 from app.arquivos import extensao_por_assinatura
 from app.eventos import servico_padrao, status_do_documento
 from app.resposta import carregar_resultado
+from app.revisao import colaboradores_padrao
 from app.schemas import DocumentoEntrada, ResultadoTriagem, validar_id
 from app.servico import processar
 from app.status import StatusDocumento
@@ -216,6 +217,7 @@ def criar_app(extrator=None) -> FastAPI:
         return {"status": "ok"}
 
     ligar_fila_revisao(app)  # H4.2.1: GET /filas/revisao
+    ligar_decisao(app, colaboradores_padrao())  # H4.4.1: POST /documentos/{id}/decisao
     return app
 
 

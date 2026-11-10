@@ -174,6 +174,35 @@ def existe(caminho: str) -> bool:
     return ler(caminho) is not None
 
 
+def _mover_local(origem: str, destino: str) -> None:
+    src, dst = _local(origem), _local(destino)
+    if not src.exists():
+        raise FileNotFoundError(origem)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(src, dst)  # renomeia, sem cópia
+
+
+def mover(origem: str, destino: str) -> None:
+    """H5.1.3 T1: troca o objeto de prefixo com rename_object, sem cópia intermediária."""
+    _seguro(origem)
+    _seguro(destino)
+    ns = os.getenv("OCI_NAMESPACE")
+    if ns:
+        try:
+            import oci  # só é exigido quando o OCI é usado
+
+            detalhes = oci.object_storage.models.RenameObjectDetails(
+                source_name=origem, new_name=destino
+            )
+            _cliente_oci().rename_object(ns, config.bucket(), detalhes)
+            return
+        except Exception:
+            logger.exception("Falha ao renomear no OCI; tentando o disco")
+            if not _local(origem).exists():
+                raise  # não há cópia local para mover: não esconde o erro
+    _mover_local(origem, destino)
+
+
 def listar(prefixo: str) -> list:
     nomes = set()
     ns = os.getenv("OCI_NAMESPACE")
@@ -193,3 +222,18 @@ def listar(prefixo: str) -> list:
             if p.is_file()
         )
     return sorted(n for n in nomes if n.startswith(prefixo))
+
+
+def apagar(caminho: str) -> None:
+    """Remove o objeto (OCI e disco). Não falha se ele não existir."""
+    _seguro(caminho)
+    ns = os.getenv("OCI_NAMESPACE")
+    if ns:
+        try:
+            _cliente_oci().delete_object(ns, config.bucket(), caminho)
+        except Exception as e:
+            if getattr(e, "status", None) != 404:
+                raise
+    local = _local(caminho)
+    if local.exists():
+        local.unlink()

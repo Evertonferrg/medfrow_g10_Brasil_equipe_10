@@ -8,3 +8,4 @@ class StatusDocumento(str, Enum):
     PROCESSANDO = "processando"
     PROCESSADO = "processado"
     EM_AUDITORIA_HUMANA = "em_auditoria_humana"
+    REJEITADO = "rejeitado"

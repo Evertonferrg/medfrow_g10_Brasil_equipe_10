@@ -1,12 +1,16 @@
-"""H2.3.2 T2 — ServicoEventos: log de eventos por documento em eventos/<id>.json.
+"""H2.3.2 T2 / H5.3.1 — ServicoEventos: log de eventos por documento em eventos/<id>.json.
 
-O status atual é o do último evento. Base de H5.2.2 e H5.3.1.
-Não guarda dados pessoais: só id, status, horário e um detalhe curto opcional.
+O status atual é o do último evento. Cada evento guarda o hash do anterior (cadeia):
+`verificar_cadeia` acusa evento alterado ou removido do meio. Não detecta quem
+recalcula a cadeia inteira nem o corte dos últimos eventos (não há assinatura nem
+âncora externa). Não usar retenção do bucket: ela impediria mover objetos.
+Guarda só id, status, horário, autor e, nas correções, o campo e os valores antes/depois.
 """
 
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
 import logging
 import os
@@ -20,6 +24,13 @@ from app.status import StatusDocumento
 
 logger = logging.getLogger(__name__)
 _ID_VALIDO = re.compile(r"^[A-Za-z0-9_-]{1,100}$")  # bloqueia path traversal
+AUTORES = ("agente", "auditora")
+
+
+def _hash_do_evento(evento: dict) -> str:
+    corpo = {k: v for k, v in evento.items() if k != "hash"}
+    texto = json.dumps(corpo, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
 
 
 class ServicoEventos:
@@ -46,7 +57,11 @@ class ServicoEventos:
         return json.loads(caminho.read_text(encoding="utf-8"))
 
     def registrar(
-        self, documento_id: str, status: StatusDocumento, detalhe: str | None = None
+        self,
+        documento_id: str,
+        status: StatusDocumento,
+        detalhe: str | None = None,
+        **extra,
     ) -> dict:
         caminho = self._caminho(documento_id)
         evento = {
@@ -55,9 +70,19 @@ class ServicoEventos:
         }
         if detalhe:
             evento["detalhe"] = detalhe
+        nulos_ok = extra.get("campo") is not None
+        evento.update(
+            {
+                k: v
+                for k, v in extra.items()
+                if v is not None or (nulos_ok and k in ("valor_anterior", "valor_novo"))
+            }
+        )
         with self._lock:
             self._pasta.mkdir(parents=True, exist_ok=True)
             eventos = self.listar(documento_id)
+            evento["hash_anterior"] = eventos[-1].get("hash", "") if eventos else ""
+            evento["hash"] = _hash_do_evento(evento)
             eventos.append(evento)
             tmp = caminho.with_suffix(".tmp")
             tmp.write_text(
@@ -65,6 +90,54 @@ class ServicoEventos:
             )
             os.replace(tmp, caminho)  # escrita atômica
         return evento
+
+    def registrar_decisao(
+        self,
+        documento_id: str,
+        status: StatusDocumento,
+        *,
+        autor_tipo: str,
+        autor_nome: str,
+        regra_aplicada: str | None = None,
+        campo: str | None = None,
+        valor_anterior=None,
+        valor_novo=None,
+        detalhe: str | None = None,
+    ) -> dict:
+        """H5.3.1 T1/T2: decisão do agente (com a regra) ou da auditora (com nome e valores)."""
+        if autor_tipo not in AUTORES:
+            raise ValueError("autor_tipo deve ser 'agente' ou 'auditora'")
+        return self.registrar(
+            documento_id,
+            status,
+            detalhe,
+            tipo="decisao",
+            autor_tipo=autor_tipo,
+            autor_nome=autor_nome,
+            regra_aplicada=regra_aplicada,
+            campo=campo,
+            valor_anterior=valor_anterior,
+            valor_novo=valor_novo,
+        )
+
+    def verificar_cadeia(self, documento_id: str) -> list[str]:
+        """H5.3.1 T3: lista de problemas da cadeia (vazia = íntegra). Eventos antigos,
+        sem hash, são aceitos só no começo da trilha."""
+        problemas = []
+        anterior = ""
+        for i, ev in enumerate(self.listar(documento_id)):
+            if "hash" not in ev:
+                if anterior:
+                    problemas.append(
+                        f"evento {i}: sem hash depois de evento verificável"
+                    )
+                continue
+            if ev.get("hash_anterior") != anterior:
+                problemas.append(f"evento {i}: não encadeia com o anterior")
+            if _hash_do_evento(ev) != ev["hash"]:
+                problemas.append(f"evento {i}: conteúdo alterado")
+            anterior = ev["hash"]
+        return problemas
 
     def status_atual(self, documento_id: str) -> StatusDocumento | None:
         eventos = self.listar(documento_id)
@@ -98,27 +171,37 @@ def servico_padrao() -> ServicoEventos:
 
 
 def registrar_desfecho(documento_id: str, resultado) -> None:
-    """Chamar em arquivar(), depois de salvar o resultado: revisão humana ou processado.
+    """Decisão automática (H5.3.1): autor "agente", com a regra aplicada e o destino.
 
-    Falha ao registrar o evento não derruba o processamento (o resultado já foi salvo).
+    Chamar em arquivar(), depois de salvar o resultado. Falha ao registrar o evento
+    não derruba o processamento (o resultado já foi salvo).
     """
-    destino = resultado.decisao_roteamento.destino_principal
-    destino = str(getattr(destino, "value", destino))
+    decisao = resultado.decisao_roteamento
+    destino = str(
+        getattr(decisao.destino_principal, "value", decisao.destino_principal)
+    )
     status = (
         StatusDocumento.EM_AUDITORIA_HUMANA
         if destino == "Fila_Revisao_Humana"
         else StatusDocumento.PROCESSADO
     )
     try:
-        servico_padrao().registrar(documento_id, status)
+        servico_padrao().registrar_decisao(
+            documento_id,
+            status,
+            autor_tipo="agente",
+            autor_nome="agente",
+            regra_aplicada=getattr(decisao, "regra_aplicada", None),
+            detalhe=f"destino: {destino}",
+        )
     except (OSError, ValueError):
         logger.exception("Não foi possível registrar o evento de status")
 
 
 def status_do_documento(documento_id: str, resultado: dict | None = None) -> str | None:
-    """Status do ciclo de vida do documento (recebido, processando, processado ou
-    em_auditoria_humana). Vem dos eventos; sem evento (documento antigo), é deduzido
-    do resultado salvo. Devolve None se não houver nenhum dos dois."""
+    """Status do ciclo de vida do documento (recebido, processando, processado,
+    em_auditoria_humana ou rejeitado). Vem dos eventos; sem evento (documento antigo),
+    é deduzido do resultado salvo. Devolve None se não houver nenhum dos dois."""
     try:
         atual = servico_padrao().status_atual(documento_id)
     except (OSError, ValueError):
