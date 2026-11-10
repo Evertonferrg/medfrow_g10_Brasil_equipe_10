@@ -8,15 +8,18 @@ import sys
 from pathlib import Path
 
 import pytest
+import requests
 from streamlit.testing.v1 import AppTest
 
 from app.grafo import triar
-from app.schemas import Paciente
-from testes.conftest import LAUDO_TEP, cliente_com, extracao, extrator_fixo
+from app.schemas import Medico, Paciente
+from testes.conftest import LAUDO_TEP, RECEITA, cliente_com, extracao, extrator_fixo
 
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "ui"))  # igual ao Streamlit em execução (pasta do script)
 from ui.componentes.paciente import resumo_paciente
+
+PAGINA_RESULTADO = str(RAIZ / "ui" / "pages" / "2_Triagem.py")
 
 MEDICO = "Solicitante: Dra. Renata Silveira CRM-SP 145892."  # bate com o médico de extracao()
 
@@ -141,3 +144,60 @@ def test_bloco_paciente_exibe_nome_e_data_como_texto_puro():
         "3 de abril de 1985",
     ]
     assert all(t.disabled for t in at.text_input)
+
+
+# ---- regressão: a 2ª busca na mesma sessão precisa trocar paciente e médico ----
+# (Bug 1: os campos mostravam o documento da consulta anterior, porque o valor
+# vinha só de value= e o session_state do widget antigo continuava valendo.)
+
+
+class _Resp:
+    """Resposta falsa do GET /documentos/{id} (mesmo formato das outras telas)."""
+
+    def __init__(self, corpo: dict):
+        self.status_code = 200
+        self.text = ""
+        self._corpo = corpo
+
+    def json(self) -> dict:
+        return self._corpo
+
+
+def _resposta_da_api(texto: str, ext, doc_id: str) -> dict:
+    """Gera o JSON da consulta montando pelo próprio grafo (extrator falso, sem rede)."""
+    return triar(texto, extrator_fixo(ext), documento_id=doc_id)["resultado"]
+
+
+def test_segunda_busca_na_mesma_sessao_mostra_o_documento_atual(monkeypatch):
+    ext_receita = extracao(
+        paciente=Paciente(nome="Maria Souza", idade=40),
+        medico_solicitante=Medico(nome="Dr. Paulo Lima", crm="CRM 99887 SP"),
+    )
+    payloads = {
+        "DOC-A": _resposta_da_api(LAUDO_TEP, extracao(), "DOC-A"),
+        "DOC-B": _resposta_da_api(RECEITA, ext_receita, "DOC-B"),
+    }
+    monkeypatch.setattr(
+        requests, "get", lambda url, **kw: _Resp(payloads[url.rsplit("/", 1)[-1]])
+    )
+
+    # o mesmo AppTest = a mesma sessão do Streamlit, como no navegador
+    at = AppTest.from_file(PAGINA_RESULTADO, default_timeout=30).run()
+
+    # 1ª busca: laudo de TEP (Carlos Eduardo Mendes / Dra. Renata Silveira)
+    at.text_input[0].set_value("DOC-A")
+    at.button[0].click().run()
+    assert not at.exception
+    assert at.text_input(key="paciente_Nome").value == "Carlos Eduardo Mendes"
+    assert at.text_input(key="paciente_Idade").value == "52 anos"
+    assert at.text_input(key="medico_nome").value == "Dra. Renata Silveira"
+    assert at.text_input(key="medico_crm").value == "145892-SP"
+
+    # 2ª busca: os campos precisam trocar por completo (era aqui que travava)
+    at.text_input[0].set_value("DOC-B")
+    at.button[0].click().run()
+    assert not at.exception
+    assert at.text_input(key="paciente_Nome").value == "Maria Souza"
+    assert at.text_input(key="paciente_Idade").value == "40 anos"
+    assert at.text_input(key="medico_nome").value == "Dr. Paulo Lima"
+    assert at.text_input(key="medico_crm").value == "99887-SP"

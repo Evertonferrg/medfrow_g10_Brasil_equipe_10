@@ -77,15 +77,6 @@ def mostrar_exames(dados):
     )
 
 
-def mostrar_aviso_fora_das_categorias(cl):
-    """H1.2.3 T3: avisa na tela quando o documento está fora das categorias clínicas."""
-    if (cl or {}).get("tipo_documento") == "Não identificado":
-        st.warning(
-            "Documento fora das categorias clínicas (Não identificado): "
-            "o documento foi separado para revisão humana."
-        )
-
-
 def mostrar_destino(decisao):
     """H2.2.1 T4: o destino em destaque e, logo abaixo, a justificativa e a regra aplicada."""
     destino = decisao.get("destino_principal", "-")
@@ -114,6 +105,33 @@ def botao_download(resultado):
 
 
 st.set_page_config(page_title="MediFlow — Resultado", page_icon="🔎", layout="wide")
+
+CAMINHO_LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
+if CAMINHO_LOGO.exists():
+    st.logo(str(CAMINHO_LOGO), size="large")
+
+st.markdown(
+    """
+<style>
+    [data-testid="stLogo"] {
+        height: 3.5rem !important;
+    }
+    [data-testid="stLogo"] img {
+        height: 3.5rem !important;
+        max-height: 3.5rem !important;
+        width: auto !important;
+    }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+with st.sidebar:
+    st.markdown("<div style='height: 35vh;'></div>", unsafe_allow_html=True)
+    st.divider()
+    st.caption("⚙️ Configurações")
+    st.caption("🚪 Sair")
+
 st.title("🔎 Resultado da triagem")
 
 with st.form("consulta"):
@@ -149,13 +167,10 @@ if buscar and doc_id.strip():
         st.caption(f"**Status:** {res.get('status', '-')}")
         cl = res.get("classificacao")
         if cl:
-            a, b = st.columns(2)
-            a.metric("Tipo do documento", cl.get("tipo_documento") or "—")
-            b.metric("Especialidade provável", cl.get("especialidade") or "—")
-            c, d = st.columns(2)
-            c.metric("Prioridade", cl.get("nivel_prioridade") or "—")
-            d.metric("Confiança", cl.get("score_confianca_classificacao", "—"))
-            mostrar_aviso_fora_das_categorias(cl)
+            # H1.2.2: usa o componente de classificação, que mostra o score
+            # formatado (ex.: "0.95") e, abaixo do limite, o aviso
+            # "⚠️ 0.60 (abaixo do limite)" com o banner de retenção.
+            exibir_classificacao(cl)
         else:
             st.warning("Sem classificação: o documento foi para revisão humana.")
         decisao = res.get("decisao_roteamento") or {}
@@ -178,15 +193,16 @@ if buscar and doc_id.strip():
             with col_medico:
                 st.subheader("Médico solicitante")
                 med = dados.get("medico_solicitante") or {}
-                st.text_input(
-                    "Nome",
-                    value=med.get("nome") or "—",
-                    disabled=True,
-                    key="medico_nome",
-                )
-                st.text_input(
-                    "CRM", value=med.get("crm") or "—", disabled=True, key="medico_crm"
-                )
+                # O valor vem SÓ do session_state, gravado ANTES de criar os
+                # widgets: é ele que manda quando a chave já existe, então a
+                # tela mostra o médico/CRM do documento atual e não os da
+                # consulta anterior. Sem value=: com value= E session_state o
+                # Streamlit avisa "widget created with a default value but
+                # also had its value set via the Session State API".
+                st.session_state["medico_nome"] = med.get("nome") or "—"
+                st.session_state["medico_crm"] = med.get("crm") or "—"
+                st.text_input("Nome", disabled=True, key="medico_nome")
+                st.text_input("CRM", disabled=True, key="medico_crm")
 
             diag = dados.get("diagnostico_principal")
             cid = dados.get("cid_sugerido") or dados.get("cid")
