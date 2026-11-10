@@ -7,9 +7,12 @@ maxUploadSize = 10
 
 [theme.light]
 primaryColor = "#2563EB"
-backgroundColor = "#F8FAFD"
+backgroundColor = "#E8F0F8"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#1E293B"
 
 [theme.dark]
 primaryColor = "#60A5FA"
+backgroundColor = "#0B1220"
+secondaryBackgroundColor = "#162032"
+textColor = "#E2E8F0"
