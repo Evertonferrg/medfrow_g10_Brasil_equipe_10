@@ -26,7 +26,7 @@ DADOS = {
         "solicitante": "Dra. Renata Silveira CRM-SP 145892",
         "exame": "Tomografia de Tórax com contraste",
         "conclusao": "Quadro compatível com Tromboembolismo Pulmonar Agudo. "
-                     "Sugere-se correlação clínica urgente.",
+        "Sugere-se correlação clínica urgente.",
         "imagem": CAMINHO_EXAME,
     },
     "paciente": {"nome": "Carlos Eduardo Mendes", "idade": 52},
@@ -175,35 +175,34 @@ col_esq, col_dir = st.columns(2, gap="large")
 # ------------------------------------------------------------------
 # ESQUERDA: VISUALIZAÇÃO DO DOCUMENTO
 # ------------------------------------------------------------------
-with col_esq:
-    with st.container(key="card_preview"):
-        d = DADOS["documento"]
+with col_esq, st.container(key="card_preview"):
+    d = DADOS["documento"]
 
-        st.markdown(
-            f'<div class="topo"><p class="card-title">VISUALIZAÇÃO DO DOCUMENTO</p>'
-            f'{pill("📄 " + DADOS["status_upload"])}</div>',
-            unsafe_allow_html=True,
+    st.markdown(
+        f'<div class="topo"><p class="card-title">VISUALIZAÇÃO DO DOCUMENTO</p>'
+        f"{pill('📄 ' + DADOS['status_upload'])}</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Área com scroll interno, como no protótipo
+    with st.container(height=ALTURA_PREVIEW, border=True):
+        # IMPORTANTE: sem indentação no HTML, senão vira bloco de código
+        html_laudo = (
+            '<div class="papel">'
+            f"<h4>{d['hospital']}</h4>"
+            f'<p class="sub">{d["titulo"]}</p>'
+            f"<p><b>Paciente:</b> {d['paciente']}</p>"
+            f"<p><b>Solicitante:</b> {d['solicitante']}</p>"
+            f"<p><b>Exame:</b> {d['exame']}</p>"
+            '<p style="margin-top:16px;"><b>CONCLUSÃO:</b></p>'
+            f"<p>{d['conclusao']}</p>"
+            f"{imagem_base64(d['imagem'])}"
+            "</div>"
         )
+        st.markdown(html_laudo, unsafe_allow_html=True)
 
-        # Área com scroll interno, como no protótipo
-        with st.container(height=ALTURA_PREVIEW, border=True):
-            # IMPORTANTE: sem indentação no HTML, senão vira bloco de código
-            html_laudo = (
-                '<div class="papel">'
-                f'<h4>{d["hospital"]}</h4>'
-                f'<p class="sub">{d["titulo"]}</p>'
-                f'<p><b>Paciente:</b> {d["paciente"]}</p>'
-                f'<p><b>Solicitante:</b> {d["solicitante"]}</p>'
-                f'<p><b>Exame:</b> {d["exame"]}</p>'
-                '<p style="margin-top:16px;"><b>CONCLUSÃO:</b></p>'
-                f'<p>{d["conclusao"]}</p>'
-                f'{imagem_base64(d["imagem"])}'
-                '</div>'
-            )
-            st.markdown(html_laudo, unsafe_allow_html=True)
-
-            if not Path(d["imagem"]).exists():
-                st.info("Adicione a imagem do exame em assets/exame_torax.png")
+        if not Path(d["imagem"]).exists():
+            st.info("Adicione a imagem do exame em assets/exame_torax.png")
 
 # ------------------------------------------------------------------
 # DIREITA: PACIENTE / DADOS CLÍNICOS / JSON
@@ -227,7 +226,7 @@ with col_dir:
         badges = "".join(pill(t, cor) for t, cor in c["badges"])
         st.markdown(
             f'<div class="topo"><p class="card-title">DADOS CLÍNICOS</p>'
-            f'{pill(c["urgencia"], "red")}</div>'
+            f"{pill(c['urgencia'], 'red')}</div>"
             + linha("Médico Solicitante", c["medico"])
             + linha("CRM", c["crm"])
             + linha("Exame Realizado", c["exame"])
@@ -241,7 +240,9 @@ with col_dir:
 
     # VISUALIZAÇÃO DO JSON
     with st.container(key="card_json"):
-        st.markdown('<p class="card-title">VISUALIZAÇÃO DO JSON</p>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="card-title">VISUALIZAÇÃO DO JSON</p>', unsafe_allow_html=True
+        )
         st.code(
             json.dumps(DADOS["payload"], indent=2, ensure_ascii=False),
             language="json",
