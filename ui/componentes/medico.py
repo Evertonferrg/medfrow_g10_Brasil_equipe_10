@@ -15,4 +15,10 @@ def bloco_medico(dados_extraidos: dict | None) -> None:
     st.subheader("Médico solicitante")
     resumo = resumo_medico((dados_extraidos or {}).get("medico_solicitante"))
     for rotulo, valor in resumo.items():
-        st.text_input(rotulo, value=valor, disabled=True, key=f"medico_{rotulo}")
+        chave = f"medico_{rotulo}"
+        # Mesmo padrão de bloco_paciente: o valor vem SÓ do session_state,
+        # gravado ANTES de criar o widget, para não reutilizar o médico do
+        # documento anterior. Sem value= (senão o Streamlit avisa que o
+        # widget tem default e também valor setado via Session State API).
+        st.session_state[chave] = valor
+        st.text_input(rotulo, disabled=True, key=chave)
