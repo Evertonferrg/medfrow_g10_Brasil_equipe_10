@@ -31,4 +31,12 @@ def bloco_paciente(dados_extraidos: dict | None) -> None:
     st.subheader("Paciente")
     resumo = resumo_paciente((dados_extraidos or {}).get("paciente"))
     for rotulo, valor in resumo.items():
-        st.text_input(rotulo, value=valor, disabled=True, key=f"paciente_{rotulo}")
+        chave = f"paciente_{rotulo}"
+        # O valor vem SÓ do session_state, gravado ANTES de criar o widget:
+        # é ele que manda quando a chave já existe, então a tela mostra o
+        # paciente do documento atual e não o da consulta anterior.
+        # Não passar value=: com value= E session_state o Streamlit avisa
+        # "widget created with a default value but also had its value set
+        # via the Session State API".
+        st.session_state[chave] = valor
+        st.text_input(rotulo, disabled=True, key=chave)
