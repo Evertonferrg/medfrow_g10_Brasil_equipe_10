@@ -61,6 +61,56 @@ def montar_classificacao(extracao, score) -> Classificacao:
     )
 
 
+def destino_sem_revisao(extracao, classificacao, limite_confianca):
+    """Calcula o destino que o documento teria sem as pendências de revisão.
+
+    Ignora o score baixo e os problemas de validação, mas preserva
+    o tipo de documento e a prioridade clínica.
+    """
+    if extracao is None or classificacao is None:
+        return None
+
+    tipo = getattr(classificacao, "tipo_documento", None)
+    tipo = getattr(tipo, "value", tipo)
+
+    if tipo == TipoDocumento.NAO_IDENTIFICADO.value:
+        return None
+
+    try:
+        # Cria uma cópia sem alterar a classificação original.
+        classificacao_limpa = classificacao.model_copy(
+            update={"score_confianca_classificacao": 1.0}
+        )
+
+        # Estado limpo: remove os motivos que forçariam a revisão.
+        estado = {
+            "extracao": extracao,
+            "classificacao": classificacao_limpa,
+            "score": 1.0,
+            "problemas": [],
+            "motivos_revisao": [],
+            "motivo_revisao": None,
+            "requer_revisao": False,
+            "erro": None,
+        }
+
+        decisao = rt.criar_decisao_roteamento(
+            estado,
+            limite_confianca=limite_confianca,
+        )
+
+        destino = decisao.destino_principal
+
+        if destino == Destino.FILA_REVISAO_HUMANA:
+            return None
+
+        return destino
+
+    except Exception:
+        logger.exception("Não foi possível calcular o destino sem revisão")
+        return None
+
+
 def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor=None):
     """'extrator', 'classificador' e 'leitor' podem ser trocados por versões falsas nos
     testes (sem LLM, sem rede)."""

@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from . import config, storage
+from .estado_revisao import salvar_estado_revisao
 from .eventos import registrar_desfecho
 from .schemas import (
     ArmazenamentoOCI,
@@ -18,11 +19,12 @@ from .schemas import (
 PASTA_URGENTES = "processados/urgentes"
 PASTA_ROTINA = "processados/rotina"
 PASTA_REVISAO = "auditoria_humana"
+PASTA_REJEITADOS = "rejeitados"
 PASTAS = {
     Destino.FILA_EMERGENCIA_MEDICA.value: PASTA_URGENTES,
     Destino.FILA_REVISAO_HUMANA.value: PASTA_REVISAO,
 }
-PASTAS_RESULTADO = (PASTA_URGENTES, PASTA_ROTINA, PASTA_REVISAO)
+PASTAS_RESULTADO = (PASTA_URGENTES, PASTA_ROTINA, PASTA_REVISAO, PASTA_REJEITADOS)
 CAMPOS_FORA = {
     "tipo_documento",
     "especialidade",
@@ -157,9 +159,11 @@ def arquivar(documento_id: str, estado: dict) -> dict:
         try:
             resultado = montar_resposta(documento_id, estado)
         except Exception as ex:
-            logger.exception(...)
+            logger.exception("Falha ao montar o resultado de %s", documento_id)
             resultado = falha_de_processamento(documento_id, str(ex))
     resultado.armazenamento_oci = salvar_resultado(documento_id, resultado)
+    if resultado.decisao_roteamento.destino_principal == Destino.FILA_REVISAO_HUMANA:
+        salvar_estado_revisao(documento_id, estado, storage)  # H4.4.1 T2
     registrar_desfecho(documento_id, resultado)
     return resultado.model_dump(mode="json")
 
