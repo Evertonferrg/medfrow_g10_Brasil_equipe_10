@@ -139,17 +139,16 @@ def test_corrigir_crm_chega_ao_resultado_final_e_registra_antes_e_depois(amb):
     )
     out = decidir_caso("C1", d, amb.colab)
     salvo = json.loads(amb.mem.ler(out["caminho"]))
-    assert salvo["dados_extraidos"]["medico_solicitante"]["crm"] == "CRM-SP 123456"
+    assert salvo["dados_extraidos"]["medico_solicitante"]["crm"] == "123456-SP"
     assert (
-        amb.vistos[-1]["dados_extraidos"]["medico_solicitante"]["crm"]
-        == "CRM-SP 123456"
+        amb.vistos[-1]["dados_extraidos"]["medico_solicitante"]["crm"] == "123456-SP"
     )  # destino recalculado com o valor novo
     correcao = next(e for e in amb.ev.listar("C1") if e.get("campo") == "crm")
     assert (
         correcao["valor_anterior"],
         correcao["valor_novo"],
         correcao["autor_nome"],
-    ) == ("12345-XX", "CRM-SP 123456", "Helena")
+    ) == ("12345-XX", "123456-SP", "Helena")
 
 
 def test_crm_corrigido_para_valor_invalido_nao_altera_nada(amb):

@@ -112,52 +112,15 @@ CAMPOS_EDITAVEIS = {
     "diagnostico_principal": ("diagnostico_principal",),
     "cid": ("cid",),
 }
-_UFS = frozenset(
-    [
-        "AC",
-        "AL",
-        "AP",
-        "AM",
-        "BA",
-        "CE",
-        "DF",
-        "ES",
-        "GO",
-        "MA",
-        "MT",
-        "MS",
-        "MG",
-        "PA",
-        "PB",
-        "PR",
-        "PE",
-        "PI",
-        "RJ",
-        "RN",
-        "RS",
-        "RO",
-        "RR",
-        "SC",
-        "SP",
-        "SE",
-        "TO",
-    ]
-)
 
 
 def _crm(valor) -> str:
-    t = str(valor).upper().strip()
-    m = re.fullmatch(r"(?:CRM[-/ ]?)?(\d{4,7})[-/ ]?([A-Z]{2})", t)
-    if m:
-        numero, uf = m.groups()
-    else:
-        m = re.fullmatch(r"CRM[-/ ]?([A-Z]{2})[-/ ]?(\d{4,7})", t)
-        if not m:
-            raise ValueError("CRM em formato inválido")
-        uf, numero = m.groups()
-    if uf not in _UFS:
-        raise ValueError(f"UF do CRM inválida: {uf}")
-    return f"CRM-{uf} {numero}"
+    from app.validacao import normalizar_crm  # import local: evita ciclo de imports
+
+    normal = normalizar_crm(str(valor))
+    if normal is None:
+        raise ValueError("CRM inválido: informe número e UF, como 145892-SP")
+    return normal
 
 
 def _idade(valor) -> int:
