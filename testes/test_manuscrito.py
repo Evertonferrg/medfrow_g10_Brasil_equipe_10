@@ -1,7 +1,9 @@
+import os
 from pathlib import Path
 
 import pytest
 
+import app.config  # noqa: F401  (carrega o .env antes do skipif)
 from app.manuscrito import LIMITE_MANUSCRITO, MOTIVO_REVISAO, processar_manuscrita
 from app.schemas_manuscrito import ILEGIVEL, CampoLido, LeituraManuscrita, MedicamentoManuscrito
 
