@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from app import config, storage
 from app.api.ligacao_fila import ligar_decisao, ligar_fila_revisao
+from app.api.ligacao_historico import ligar_historico
 from app.api.tempo import MedirTempoMiddleware, configurar_log
 from app.arquivos import (
     MAPA_EXTENSAO_FORMATO,
@@ -260,6 +261,7 @@ def criar_app(extrator=None) -> FastAPI:
 
     ligar_fila_revisao(app)  # H4.2.1: GET /filas/revisao
     ligar_decisao(app, colaboradores_padrao())  # H4.4.1: POST /documentos/{id}/decisao
+    ligar_historico(app)  # H5.3.2: GET /historico/exportar
     return app
 
 
