@@ -105,6 +105,11 @@ Regras:
 - legibilidade.legivel: false se o documento não puder ser lido com segurança (borrado, cortado, escuro,
   sem texto, manuscrito indecifrável). Nesse caso, explique em legibilidade.motivo.
 - legibilidade.legivel: true somente se o conteúdo clínico principal pôde ser lido.
+- legibilidade.tipo_motivo: preencha SOMENTE quando legivel=false, usando EXATAMENTE um dos valores:
+  "inclinacao" — foto girada ou muito inclinada;
+  "sombra"     — sombra ou iluminação ruim que impede a leitura;
+  "corte"      — documento parcialmente visível (parte cortada);
+  "outro"      — qualquer outro motivo (borrado, manuscrito, etc.).
 """
 
 

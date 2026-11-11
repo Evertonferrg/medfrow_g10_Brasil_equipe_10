@@ -6,6 +6,7 @@ from langgraph.graph import END, StateGraph
 from . import config
 from . import roteamento as rt
 from .arquivos import extensao_por_assinatura
+from .imagem import preprocessar_imagem  # H1.4.2 T1
 from .llm import extrair, ler_imagem
 from .modelos import Classificacao, Destino, TipoDocumento
 from .modelos.destino import DecisaoRoteamento, Notificacao
@@ -42,6 +43,7 @@ class Estado(TypedDict, total=False):
     notificacao: Notificacao | None
     tipo_arquivo: str  # "TEXTO", "PDF" ou "Imagem"
     ilegivel: bool
+    motivo_ilegibilidade: str | None  # H1.4.2 T2: inclinacao | sombra | corte | outro
     resultado: dict
     decisao_roteamento: (
         DecisaoRoteamento | None
@@ -136,6 +138,8 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                     imagens, tipo = renderizar_paginas(dados), "PDF"  # T2: escaneado
             else:
                 imagens, tipo = [dados], "Imagem"
+            # H1.4.2 T1: pré-processa cada imagem em memória (nunca grava em recebidos/)
+            imagens = [preprocessar_imagem(img) for img in imagens]
             texto, leg = leitor(imagens)  # T4
         except Exception as e:
             logger.exception("Falha ao ler a entrada")
@@ -147,6 +151,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 "texto": "",
                 "tipo_arquivo": tipo,
                 "ilegivel": True,
+                "motivo_ilegibilidade": leg.tipo_motivo,  # H1.4.2 T2
                 "extracao": None,
                 "score": 0.0,
                 "motivos_revisao": ["ilegível"],  # H4.1.5 T1
