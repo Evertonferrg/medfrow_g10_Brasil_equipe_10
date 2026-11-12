@@ -13,4 +13,5 @@ reportlab
 streamlit
 python-multipart
 pytest-cov
+pillow
 # ruff

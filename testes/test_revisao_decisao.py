@@ -150,6 +150,8 @@ def test_corrigir_crm_chega_ao_resultado_final_e_registra_antes_e_depois(amb):
         correcao["autor_nome"],
     ) == ("12345-XX", "123456-SP", "Helena")
 
+    assert correcao["regra_aplicada"] == "R-AUDITORA"
+
 
 def test_crm_corrigido_para_valor_invalido_nao_altera_nada(amb):
     amb.entra("C2")
