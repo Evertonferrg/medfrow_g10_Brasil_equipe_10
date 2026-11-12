@@ -170,3 +170,30 @@ def test_t4_documento_com_baixa_confianca_vai_para_revisao_via_grafo():
     assert resultado is not None
     assert resultado["decisao_roteamento"]["destino_principal"] == "Fila_Revisao_Humana"
     assert resultado["decisao_roteamento"]["requer_auditoria_humana"] is True
+
+
+def test_t4_grafo_respeita_decisao_da_barreira(monkeypatch):
+    """Critério 2 pelo grafo: classificação alta, mas a barreira pede revisão."""
+    from app import grafo
+
+    def barreira_falsa(score, extracao, limite=None, **kwargs):
+        return 0.875, ["campo crítico medicamentos.dose abaixo do limite"], True
+
+    monkeypatch.setattr(grafo, "avaliar_confianca", barreira_falsa)
+
+    ext = Extracao(
+        tipo_documento="Receituário Médico",
+        nivel_prioridade="Rotina",
+        score_confianca_classificacao=0.95,
+        paciente=Paciente(nome="Maria Souza"),
+        medico_solicitante=MedicoSolicitante(nome="Dr. Paulo Lima", crm="CRM 99887 SP"),
+        medicamentos=[Medicamento(nome="Amoxicilina", dose="500mg")],
+    )
+    texto = (
+        "RECEITUARIO. Paciente: Maria Souza, 40 anos. Dr. Paulo Lima CRM 99887 SP. "
+        "Amoxicilina 500mg de 8 em 8 horas por 7 dias."
+    )
+
+    estado = triar(texto, extrator_fixo(ext))
+    assert estado["requer_revisao"] is True
+    assert any("medicamentos.dose" in p for p in estado["problemas"])
