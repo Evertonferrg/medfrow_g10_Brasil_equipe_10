@@ -7,10 +7,10 @@ Aberto a partir da fila: /Revisao_caso?id=<documento_id>. Somente leitura
 import os
 import sys
 from pathlib import Path
-from services.estilo import preparar_pagina
 
 import requests
 import streamlit as st
+from services.estilo import preparar_pagina
 
 PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:

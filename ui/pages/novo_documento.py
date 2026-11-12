@@ -6,8 +6,7 @@ from urllib.parse import urlparse
 
 import requests
 import streamlit as st
-
-from services.estilo import PAGINA_LISTA, PAGINA_DASHBOARD, preparar_pagina
+from services.estilo import PAGINA_DASHBOARD, PAGINA_LISTA, preparar_pagina
 
 ARQUIVO_REGRAS = Path(__file__).resolve().parents[2] / "config" / "regras.json"
 TIPO_ARQUIVO_TEXTO = "TEXTO"
@@ -84,11 +83,16 @@ def enviar_documento(url_base: str, payload: dict) -> tuple[bool, str]:
             f"{url_base}/triagem", json=payload, timeout=TIMEOUT, allow_redirects=False
         )
     except requests.RequestException:
-        return False, "Não foi possível se comunicar com a API. Verifique se ela está no ar."
+        return (
+            False,
+            "Não foi possível se comunicar com a API. Verifique se ela está no ar.",
+        )
     return _resposta_envio(resp, payload["documento_id"])
 
 
-def enviar_arquivo(url_base: str, documento_id: str, canal: str, arquivo) -> tuple[bool, str]:
+def enviar_arquivo(
+    url_base: str, documento_id: str, canal: str, arquivo
+) -> tuple[bool, str]:
     try:
         resp = requests.post(
             f"{url_base}/triagem/arquivo",
@@ -104,7 +108,10 @@ def enviar_arquivo(url_base: str, documento_id: str, canal: str, arquivo) -> tup
             allow_redirects=False,
         )
     except requests.RequestException:
-        return False, "Não foi possível se comunicar com a API. Verifique se ela está no ar."
+        return (
+            False,
+            "Não foi possível se comunicar com a API. Verifique se ela está no ar.",
+        )
     return _resposta_envio(resp, documento_id)
 
 
@@ -124,13 +131,18 @@ def _enviar() -> None:
     elif arquivo is not None and arquivo.size > MAX_ARQUIVO:
         ss["_resultado"] = (False, "arquivo acima de 10 MB")
     elif not ss.get("confirmo_sintetico"):
-        ss["_resultado"] = (False, "Confirme que o documento contém apenas dados sintéticos.")
+        ss["_resultado"] = (
+            False,
+            "Confirme que o documento contém apenas dados sintéticos.",
+        )
     else:
         canal = ss.get("canal_origem", "")
         if arquivo is not None:  # arquivo tem prioridade sobre o texto
             ok, msg = enviar_arquivo(url_da_api(), doc_id, canal, arquivo)
         else:
-            ok, msg = enviar_documento(url_da_api(), montar_payload(doc_id, texto, canal))
+            ok, msg = enviar_documento(
+                url_da_api(), montar_payload(doc_id, texto, canal)
+            )
         ss["_resultado"] = (ok, msg)
         if ok:
             ss["ultimo_documento_id"] = doc_id  # NOVO: para o Dashboard
@@ -143,7 +155,9 @@ def _enviar() -> None:
 # ------------------------------------------------------------------
 # PÁGINA
 # ------------------------------------------------------------------
-st.set_page_config(page_title="Novo documento · MediFlow", page_icon="🩺", layout="wide")
+st.set_page_config(
+    page_title="Novo documento · MediFlow", page_icon="🩺", layout="wide"
+)
 preparar_pagina()
 
 st.page_link(PAGINA_LISTA, label="Voltar para Lista", icon=":material/arrow_back:")
@@ -159,7 +173,9 @@ if not url_valida(URL):
     st.error("A variável de ambiente API_URL é inválida. Use http:// ou https://.")
     st.stop()
 if sem_https_fora_do_local(URL):
-    st.warning("A API não usa HTTPS: os dados trafegam sem criptografia. Não envie dados reais.")
+    st.warning(
+        "A API não usa HTTPS: os dados trafegam sem criptografia. Não envie dados reais."
+    )
 
 canais = carregar_canais()
 if not canais:
@@ -175,52 +191,51 @@ if resultado:
     if resultado[0]:
         st.page_link(PAGINA_DASHBOARD, label="Ver no Dashboard", icon="🩺")
 
-with st.container(key="card_cadastro"):
-    with st.form("envio", border=False):
-        # Campos comuns aos dois modos
-        c1, c2 = st.columns(2)
-        with c1:
-            st.text_input(
-                "ID do documento",
-                key="documento_id",
-                max_chars=64,
-                help="Identificador único. Letras, números, '_' ou '-'. "
-                "Não use CPF, nome ou outro dado do paciente.",
-            )
-        with c2:
-            st.selectbox(
-                "Canal de origem",
-                canais,
-                key="canal_origem",
-                help="De onde o documento chegou.",
-            )
-
-        aba_upload, aba_texto = st.tabs(["Upload", "Texto Direto"])
-
-        with aba_upload:
-            n_upload = st.session_state.get("n_upload", 0)
-            arquivo = st.file_uploader(
-                "Arraste o arquivo clínico aqui (PDF/Imagem)",
-                type=TIPOS_ARQUIVO,
-                key=f"arquivo_{n_upload}",
-                max_upload_size=10,
-            )
-            if arquivo is not None:
-                if (arquivo.type or "").startswith("image/"):
-                    st.image(arquivo, caption=arquivo.name, width=400)
-                else:
-                    st.caption(f"📄 {arquivo.name} ({arquivo.size // 1024} KB)")
-
-        with aba_texto:
-            st.text_area(
-                "Texto do documento",
-                key="texto_documento",
-                height=250,
-                placeholder="Cole aqui o texto do laudo, receita, guia, alta ou atestado.",
-            )
-
-        st.checkbox(
-            "Confirmo que este documento contém apenas dados sintéticos (sem dados reais de pacientes).",
-            key="confirmo_sintetico",
+with st.container(key="card_cadastro"), st.form("envio", border=False):
+    # Campos comuns aos dois modos
+    c1, c2 = st.columns(2)
+    with c1:
+        st.text_input(
+            "ID do documento",
+            key="documento_id",
+            max_chars=64,
+            help="Identificador único. Letras, números, '_' ou '-'. "
+            "Não use CPF, nome ou outro dado do paciente.",
         )
-        st.form_submit_button("Enviar", type="primary", on_click=_enviar)
+    with c2:
+        st.selectbox(
+            "Canal de origem",
+            canais,
+            key="canal_origem",
+            help="De onde o documento chegou.",
+        )
+
+    aba_upload, aba_texto = st.tabs(["Upload", "Texto Direto"])
+
+    with aba_upload:
+        n_upload = st.session_state.get("n_upload", 0)
+        arquivo = st.file_uploader(
+            "Arraste o arquivo clínico aqui (PDF/Imagem)",
+            type=TIPOS_ARQUIVO,
+            key=f"arquivo_{n_upload}",
+            max_upload_size=10,
+        )
+        if arquivo is not None:
+            if (arquivo.type or "").startswith("image/"):
+                st.image(arquivo, caption=arquivo.name, width=400)
+            else:
+                st.caption(f"📄 {arquivo.name} ({arquivo.size // 1024} KB)")
+
+    with aba_texto:
+        st.text_area(
+            "Texto do documento",
+            key="texto_documento",
+            height=250,
+            placeholder="Cole aqui o texto do laudo, receita, guia, alta ou atestado.",
+        )
+
+    st.checkbox(
+        "Confirmo que este documento contém apenas dados sintéticos (sem dados reais de pacientes).",
+        key="confirmo_sintetico",
+    )
+    st.form_submit_button("Enviar", type="primary", on_click=_enviar)

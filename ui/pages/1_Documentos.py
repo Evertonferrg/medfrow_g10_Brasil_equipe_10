@@ -3,10 +3,10 @@ import os
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
-from services.estilo import preparar_pagina
 
 import requests
 import streamlit as st
+from services.estilo import preparar_pagina
 
 ARQUIVO_REGRAS = Path(__file__).resolve().parents[2] / "config" / "regras.json"
 TIPO_ARQUIVO_TEXTO = "TEXTO"

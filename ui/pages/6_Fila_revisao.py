@@ -1,13 +1,11 @@
 """H4.2.1 T2 + H4.2.2 T2 — fila de revisão. Requer Streamlit >= 1.37 (st.fragment)."""
 
 import os
-from pathlib import Path
 
 import requests
 import streamlit as st
-
-from services.estilo import preparar_pagina
 from componentes.fila import minutos_de_espera, texto_dose_destacada, texto_espera
+from services.estilo import preparar_pagina
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
@@ -15,6 +13,7 @@ st.set_page_config(page_title="Fila de revisão", layout="wide")
 preparar_pagina()
 
 st.title("Fila de revisão")
+
 
 @st.fragment(run_every=30)  # recalcula os minutos de espera a cada 30 s
 def fila():
