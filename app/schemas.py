@@ -1,5 +1,5 @@
 import re
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -160,9 +160,31 @@ class ResultadoTriagem(BaseModel):
     armazenamento_oci: ArmazenamentoOCI | None = None
 
 
-class Legibilidade(BaseModel):  # H1.1.3 T3
+class MotivoIlegibilidade(str):
+    """H1.4.2 T2 — motivo tipado devolvido pelo LLM quando a imagem não é legível.
+
+    Valores canônicos (o LLM é instruído a usar exactamente estes):
+    - ``inclinacao`` — foto girada ou muito inclinada
+    - ``sombra``     — sombra ou iluminação ruim
+    - ``corte``      — documento parcialmente visível (cortado)
+    - ``outro``      — qualquer outro motivo (borrado, manuscrito, etc.)
+    """
+
+    INCLINACAO = "inclinacao"
+    SOMBRA = "sombra"
+    CORTE = "corte"
+    OUTRO = "outro"
+
+    # Conjunto dos valores que indicam problema de *captura* (passíveis de nova foto)
+    PROBLEMAS_DE_CAPTURA: ClassVar[set[str]] = {INCLINACAO, SOMBRA, CORTE}
+
+
+class Legibilidade(BaseModel):  # H1.1.3 T3 / H1.4.2 T2
     legivel: bool
     motivo: str | None = None
+    # H1.4.2 T2: motivo tipado (inclinacao | sombra | corte | outro)
+    # O LLM preenche este campo quando legivel=False.
+    tipo_motivo: str | None = None
 
 
 class LeituraImagem(BaseModel):
