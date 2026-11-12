@@ -188,7 +188,9 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             or "documento fora das categorias" in problemas
         )
         if not eh_fora:
-            sg, motivos_conf, revisao_conf = avaliar_confianca(score, extracao, limite=lim)
+            sg, motivos_conf, revisao_conf = avaliar_confianca(
+                score, extracao, limite=lim
+            )
             if revisao_conf:
                 saida["score"] = sg
                 saida["score_global"] = sg
