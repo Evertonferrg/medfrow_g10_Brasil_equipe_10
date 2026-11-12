@@ -14,7 +14,6 @@ from app import config
 from app.confianca import (
     avaliar_confianca,
     calcular_score_global,
-    obter_scores_campos,
 )
 from app.grafo import triar
 from app.modelos import Destino
@@ -107,7 +106,7 @@ def test_t3_t5_score_global_095_com_dose_050_vai_a_revisao():
         "medicamentos.dose": 0.50,  # campo crítico abaixo de 0.80
     }
 
-    score_glob, motivos, requer_rev = avaliar_confianca(
+    _score_glob, motivos, requer_rev = avaliar_confianca(
         0.95, ext, limite=0.80, scores_campos=scores_customizados
     )
 

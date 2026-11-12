@@ -75,7 +75,7 @@ def obter_scores_campos(extracao: Extracao | dict[str, Any] | None) -> dict[str,
     if isinstance(extracao, dict):
         score_campos_existente = extracao.get("score_campos")
     elif hasattr(extracao, "score_campos"):
-        score_campos_existente = getattr(extracao, "score_campos")
+        score_campos_existente = extracao.score_campos
 
     if isinstance(score_campos_existente, dict):
         return {str(k): float(v) for k, v in score_campos_existente.items()}
