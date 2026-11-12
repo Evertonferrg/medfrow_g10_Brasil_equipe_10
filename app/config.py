@@ -73,3 +73,24 @@ def tamanho_maximo_mb() -> int:
         return int(bruto)
     except (TypeError, ValueError):
         return 10
+
+
+# H4.1.1 T1: campos cujo score individual de confiança é verificado
+CAMPOS_CRITICOS_PADRAO = [
+    "paciente.nome",
+    "medico_solicitante.crm",
+    "medicamentos.nome",
+    "medicamentos.dose",
+    "cid_sugerido",
+]
+
+
+def campos_criticos() -> list[str]:
+    """Lista de caminhos (dotted) dos campos cuja confiança individual é verificada (H4.1.1 T1).
+
+    Precedência: config/regras.json > CAMPOS_CRITICOS_PADRAO.
+    """
+    raw = carregar_regras().get("campos_criticos")
+    if isinstance(raw, list) and raw:
+        return [str(c) for c in raw]
+    return list(CAMPOS_CRITICOS_PADRAO)
