@@ -4,8 +4,8 @@ ILEGIVEL = "ilegível"
 
 
 class CampoLido(BaseModel):
-    valor: str | None   # None = o campo não está escrito na receita
-    score: float        # 0 a 1: certeza da leitura
+    valor: str | None  # None = o campo não está escrito na receita
+    score: float  # 0 a 1: certeza da leitura
 
 
 class MedicamentoManuscrito(BaseModel):

@@ -27,14 +27,18 @@ def _limitar(campo: CampoLido, limite: float) -> CampoLido:
     return campo
 
 
-def aplicar_limite(leitura: LeituraManuscrita, limite_confianca: float) -> LeituraManuscrita:
+def aplicar_limite(
+    leitura: LeituraManuscrita, limite_confianca: float
+) -> LeituraManuscrita:
     """T2: nome de medicamento e dose abaixo do limite viram 'ilegível',
     mesmo que o LLM tenha arriscado um valor."""
     medicamentos = [
-        m.model_copy(update={
-            "nome": _limitar(m.nome, limite_confianca),
-            "dose": _limitar(m.dose, limite_confianca),
-        })
+        m.model_copy(
+            update={
+                "nome": _limitar(m.nome, limite_confianca),
+                "dose": _limitar(m.dose, limite_confianca),
+            }
+        )
         for m in leitura.medicamentos
     ]
     return leitura.model_copy(update={"medicamentos": medicamentos})
@@ -42,9 +46,7 @@ def aplicar_limite(leitura: LeituraManuscrita, limite_confianca: float) -> Leitu
 
 def tem_ilegivel(leitura: LeituraManuscrita) -> bool:
     return any(
-        c.valor == ILEGIVEL
-        for m in leitura.medicamentos
-        for c in (m.nome, m.dose)
+        c.valor == ILEGIVEL for m in leitura.medicamentos for c in (m.nome, m.dose)
     )
 
 
