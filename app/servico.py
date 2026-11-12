@@ -2,8 +2,9 @@ import logging
 
 from . import storage
 from .grafo import triar
-from .resposta import arquivar
 from .indice_carga import registrar_resultado  # H2.4.1
+from .resposta import arquivar
+
 # from .schemas import Extracao
 
 logger = logging.getLogger(__name__)
@@ -49,5 +50,7 @@ def processar(
             "justificativa": f"Enviado à revisão humana (regra R-REVISAO): falha de processamento ({str(e)[:80]}).",
         }
     resultado = arquivar(documento_id, estado)
-    registrar_resultado(documento_id, resultado)  # H2.4.1: atualiza o índice "Meus envios"
+    registrar_resultado(
+        documento_id, resultado
+    )  # H2.4.1: atualiza o índice "Meus envios"
     return resultado

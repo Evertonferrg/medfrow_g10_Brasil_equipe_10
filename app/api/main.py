@@ -127,7 +127,9 @@ def criar_app(extrator=None) -> FastAPI:
             servico_padrao().registrar(documento_id, StatusDocumento.RECEBIDO)
         except (OSError, ValueError):
             logger.exception("Não foi possível registrar o evento de status")
-        registrar_chegada(documento_id, canal_origem)  # H2.4.1: entra na lista "Meus envios"
+        registrar_chegada(
+            documento_id, canal_origem
+        )  # H2.4.1: entra na lista "Meus envios"
         return salvo["caminho_objeto"], None
 
     def _processar_original(

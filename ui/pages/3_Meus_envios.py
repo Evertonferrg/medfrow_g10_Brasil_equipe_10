@@ -29,9 +29,25 @@ if not itens:
     st.stop()
 
 df = pd.DataFrame(itens)[
-    ["data", "documento_id", "tipo_documento", "nivel_prioridade", "destino", "status", "motivo_rejeicao"]
+    [
+        "data",
+        "documento_id",
+        "tipo_documento",
+        "nivel_prioridade",
+        "destino",
+        "status",
+        "motivo_rejeicao",
+    ]
 ]
-df.columns = ["Data", "Documento", "Tipo", "Prioridade", "Destino", "Status", "Motivo de rejeição"]
+df.columns = [
+    "Data",
+    "Documento",
+    "Tipo",
+    "Prioridade",
+    "Destino",
+    "Status",
+    "Motivo de rejeição",
+]
 
 evento = st.dataframe(
     df,

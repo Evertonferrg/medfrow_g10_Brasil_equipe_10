@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from threading import Lock
 
 from pydantic import BaseModel
@@ -32,7 +32,7 @@ def resumo_de_resultado(
         nivel_prioridade=cl.get("nivel_prioridade"),
         destino=d.get("destino_principal"),
         status=status or res.get("status_documento") or "Processado",
-        data=data or res.get("data") or datetime.now(timezone.utc),
+        data=data or res.get("data") or datetime.now(UTC),
         motivo_rejeicao=res.get("motivo_rejeicao"),
         canal_origem=canal_origem or res.get("canal_origem"),
     )
@@ -64,7 +64,9 @@ class IndiceDocumentos:
             itens = list(self._por_id.values())
         if canal_origem:
             itens = [r for r in itens if r.canal_origem == canal_origem]
-        return sorted(itens, key=lambda r: r.data, reverse=True)  # mais recente primeiro
+        return sorted(
+            itens, key=lambda r: r.data, reverse=True
+        )  # mais recente primeiro
 
 
 indice = IndiceDocumentos()

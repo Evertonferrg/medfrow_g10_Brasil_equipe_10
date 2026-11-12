@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app import indice_carga, storage
 from app.indice_documentos import IndiceDocumentos
@@ -20,12 +20,14 @@ def test_reconstruir_ignora_json_corrompido_e_ordena_pela_chegada(monkeypatch):
         "rejeitados/DOC-3.json": b"{corrompido",
     }
     chegadas = {
-        "DOC-1": datetime(2026, 11, 12, 8, 0, tzinfo=timezone.utc),
-        "DOC-2": datetime(2026, 11, 12, 9, 0, tzinfo=timezone.utc),
+        "DOC-1": datetime(2026, 11, 12, 8, 0, tzinfo=UTC),
+        "DOC-2": datetime(2026, 11, 12, 9, 0, tzinfo=UTC),
     }
     novo = IndiceDocumentos()
     monkeypatch.setattr(indice_carga, "indice", novo)
-    monkeypatch.setattr(storage, "listar", lambda p: [c for c in arquivos if c.startswith(p)])
+    monkeypatch.setattr(
+        storage, "listar", lambda p: [c for c in arquivos if c.startswith(p)]
+    )
     monkeypatch.setattr(storage, "ler", lambda c: arquivos.get(c))
     monkeypatch.setattr(indice_carga, "_chegada", lambda d: chegadas.get(d))
     monkeypatch.setattr(indice_carga, "_status", lambda d, r: "Processado")

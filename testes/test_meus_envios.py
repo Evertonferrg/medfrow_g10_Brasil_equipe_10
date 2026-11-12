@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.api.ligacao_documentos import ligar_documentos
 from app.indice_documentos import IndiceDocumentos, ResumoDocumento
 
-BASE = datetime(2026, 11, 12, 8, 0, tzinfo=timezone.utc)
+BASE = datetime(2026, 11, 12, 8, 0, tzinfo=UTC)
 
 
 def _resumo(i, canal="Ambulatorio"):
@@ -41,9 +41,17 @@ def test_dez_documentos_em_ordem_decrescente_de_data():
 def test_filtro_por_canal_origem():
     indice = IndiceDocumentos()
     indice.reconstruir(
-        [_resumo(1, "Laboratorio"), _resumo(2, "Ambulatorio"), _resumo(3, "Laboratorio")]
+        [
+            _resumo(1, "Laboratorio"),
+            _resumo(2, "Ambulatorio"),
+            _resumo(3, "Laboratorio"),
+        ]
     )
-    itens = _cliente(indice).get("/documentos", params={"canal_origem": "Laboratorio"}).json()
+    itens = (
+        _cliente(indice)
+        .get("/documentos", params={"canal_origem": "Laboratorio"})
+        .json()
+    )
     assert {i["documento_id"] for i in itens} == {"DOC-001", "DOC-003"}
 
 

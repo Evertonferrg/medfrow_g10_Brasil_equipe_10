@@ -1,7 +1,7 @@
 import json
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app import storage
 from app.eventos import servico_padrao, status_do_documento
@@ -10,7 +10,9 @@ from app.status import StatusDocumento
 
 logger = logging.getLogger(__name__)
 
-_EPOCA = datetime(1970, 1, 1, tzinfo=timezone.utc)  # sem evento de chegada: vai para o fim da lista
+_EPOCA = datetime(
+    1970, 1, 1, tzinfo=UTC
+)  # sem evento de chegada: vai para o fim da lista
 
 
 def _chegada(documento_id) -> datetime | None:
@@ -24,7 +26,7 @@ def _chegada(documento_id) -> datetime | None:
         quando = datetime.fromisoformat(eventos[0]["em"])
     except (OSError, ValueError, KeyError):
         return None
-    return quando if quando.tzinfo else quando.replace(tzinfo=timezone.utc)
+    return quando if quando.tzinfo else quando.replace(tzinfo=UTC)
 
 
 def _status(documento_id: str, resultado: dict) -> str | None:
@@ -55,7 +57,9 @@ def reconstruir_do_bucket() -> int:
                     )
                 )
             except (TypeError, ValueError, KeyError):
-                logger.warning("Índice: %s ignorado (JSON ausente ou fora do formato)", caminho)
+                logger.warning(
+                    "Índice: %s ignorado (JSON ausente ou fora do formato)", caminho
+                )
     indice.reconstruir(resumos)
     return len(resumos)
 
@@ -68,7 +72,7 @@ def registrar_chegada(documento_id: str, canal_origem: str | None) -> None:
             ResumoDocumento(
                 documento_id=documento_id,
                 status=str(recebido),
-                data=datetime.now(timezone.utc),
+                data=datetime.now(UTC),
                 canal_origem=canal_origem,
             )
         )
@@ -85,7 +89,9 @@ def registrar_resultado(documento_id: str, resultado: dict) -> None:
                 resultado,
                 canal_origem=existente.canal_origem if existente else None,
                 status=_status(documento_id, resultado),
-                data=existente.data if existente else (_chegada(documento_id) or _EPOCA),
+                data=existente.data
+                if existente
+                else (_chegada(documento_id) or _EPOCA),
             )
         )
     except Exception:
