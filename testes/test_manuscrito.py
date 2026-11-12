@@ -10,6 +10,10 @@ from app.schemas_manuscrito import ILEGIVEL, CampoLido, LeituraManuscrita, Medic
 LIMITE = LIMITE_MANUSCRITO  # 0.9, definido em app/manuscrito.py
 FIXTURES = Path(__file__).parent / "fixtures" / "manuscritas"
 
+requer_chave = pytest.mark.skipif(
+    not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
+    reason="sem chave do Gemini (GEMINI_API_KEY)",
+)
 
 def _med(nome, s_nome, dose, s_dose):
     return MedicamentoManuscrito(
@@ -108,6 +112,7 @@ def test_dose_nao_escrita_nao_e_ilegivel():
 # ---------- testes reais (chamam o Gemini; rodar com -m llm) ----------
 
 @pytest.mark.llm
+@requer_chave
 def test_llm_real_dose_ilegivel_vai_para_revisao():
     leitura, status = processar_manuscrita(
         [_imagem("receita_dose_ilegivel.png")], LIMITE, lambda *a: None, "real"
@@ -119,6 +124,7 @@ def test_llm_real_dose_ilegivel_vai_para_revisao():
 
 
 @pytest.mark.llm
+@requer_chave
 def test_llm_real_receita_pessima_vai_para_revisao():
     _, status = processar_manuscrita(
         [_imagem("receita_pessima.png")], LIMITE, lambda *a: None, "real"
@@ -127,6 +133,7 @@ def test_llm_real_receita_pessima_vai_para_revisao():
 
 
 @pytest.mark.llm
+@requer_chave
 def test_llm_real_le_receita_legivel():
     leitura, status = processar_manuscrita(
         [_imagem("receita_legivel.jpg")], LIMITE, lambda *a: None, "real"
