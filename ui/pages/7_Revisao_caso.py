@@ -7,6 +7,7 @@ Aberto a partir da fila: /Revisao_caso?id=<documento_id>. Somente leitura
 import os
 import sys
 from pathlib import Path
+from services.estilo import preparar_pagina
 
 import requests
 import streamlit as st
@@ -145,6 +146,7 @@ def mostrar_extracao(res: dict) -> None:
 st.set_page_config(
     page_title="MediFlow — Revisão do caso", page_icon="🧐", layout="wide"
 )
+preparar_pagina()
 st.title("🧐 Revisão do caso")
 
 documento_id = str(st.query_params.get("id", "")).strip()
