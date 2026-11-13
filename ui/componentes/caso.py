@@ -38,4 +38,6 @@ def dados_do_caso(resultado: dict) -> dict[str, str]:
     """Devolve sempre as 5 chaves de CAMPOS, com '—' quando faltar o dado."""
     extraidos = resultado.get("dados_extraidos")
     dados = {**(extraidos if isinstance(extraidos, dict) else {}), **resultado}
-    return {campo: _como_texto(_buscar(dados, chaves)) for campo, chaves in CAMPOS.items()}
+    return {
+        campo: _como_texto(_buscar(dados, chaves)) for campo, chaves in CAMPOS.items()
+    }

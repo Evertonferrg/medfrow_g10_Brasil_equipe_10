@@ -24,6 +24,17 @@ Environment=OCI_AUTH=instance_principal
 Environment=GEMINI_MODEL=gemini-2.5-flash
 Secret=gemini_api_key,type=env,target=GEMINI_API_KEY
 
+# Notificações (Slack e Gmail). Configuração que não é segredo:
+Environment=NOTIFICACAO_CANAL=ambos
+Environment=UI_BASE_URL=https://mediflow-oci.duckdns.org
+
+# Credenciais de notificação. Os valores ficam no OCI Vault e são copiados à mão para
+# Podman secrets na VM. Precisam existir ANTES deste arquivo chegar, senão o container não sobe.
+Secret=mediflow-slack-webhook-url,type=env,target=SLACK_WEBHOOK_URL
+Secret=mediflow-gmail-app-password,type=env,target=GMAIL_APP_PASSWORD
+Secret=mediflow-gmail-user,type=env,target=GMAIL_USER
+Secret=mediflow-plantao-email-destino,type=env,target=PLANTAO_EMAIL_DESTINO
+
 # Healthcheck explícito (a imagem não tem curl/wget; o python3 tem). Travou 3 vezes seguidas:
 # o Podman mata o container e o Restart=always do systemd sobe de novo.
 HealthCmd=python3 -c "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=3)"

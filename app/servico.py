@@ -1,4 +1,3 @@
-
 import logging
 import os
 
@@ -17,8 +16,10 @@ def _carregar_original(caminho: str) -> tuple[str, bytes | None]:
     dados = storage.ler(caminho)
     if dados is None:
         raise FileNotFoundError(f"original não encontrado: {caminho}")
+
     if caminho.endswith(".txt"):
         return dados.decode("utf-8"), None
+
     return "", dados
 
 
@@ -45,7 +46,7 @@ def processar(
             documento_id=documento_id,
         )
 
-    except Exception as e:
+    except Exception as e:  # se tiver falha vai para revisão humana
         logger.exception("Falha no processamento")
 
         estado = {
@@ -80,9 +81,7 @@ def processar(
         try:
             from .notificacao import notificar_responsavel_por_destino
 
-            status_notificacao = notificar_responsavel_por_destino(
-                resultado
-            )
+            status_notificacao = notificar_responsavel_por_destino(resultado)
 
             logger.info(
                 "Notificação do documento %s: %s",

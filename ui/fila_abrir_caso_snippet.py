@@ -4,6 +4,7 @@ de emergência é desenhada), dentro do loop de itens.
 O id vai em st.query_params (link compartilhável) e também em session_state,
 porque a troca de página pode limpar os parâmetros da URL em algumas versões.
 """
+
 import streamlit as st
 
 

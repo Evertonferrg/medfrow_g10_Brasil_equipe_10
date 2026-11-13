@@ -1,4 +1,3 @@
-
 """H4.2.1 T2 + H4.2.2 T2 — fila de revisão.
 Requer Streamlit >= 1.37 (st.fragment).
 """
@@ -9,13 +8,13 @@ from pathlib import Path
 import requests
 import streamlit as st
 from services.estilo import preparar_pagina
+
 from ui.componentes.fila import (
     minutos_de_espera,
     texto_dose_destacada,
     texto_espera,
 )
 from ui.fila_abrir_caso_snippet import botao_abrir_caso
-
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
@@ -74,8 +73,7 @@ def fila():
         return
 
     st.caption(
-        f"{len(casos)} documento(s) pendente(s), "
-        "do mais urgente ao menos urgente."
+        f"{len(casos)} documento(s) pendente(s), do mais urgente ao menos urgente."
     )
 
     for caso in casos:
@@ -88,9 +86,7 @@ def fila():
                 f"documento `{documento_id}`"
             )
 
-            espera = texto_espera(
-                minutos_de_espera(caso["chegada_em"])
-            )
+            espera = texto_espera(minutos_de_espera(caso["chegada_em"]))
 
             st.write(
                 f"Chegou em "
@@ -104,9 +100,7 @@ def fila():
                 st.markdown(f"- {motivo}")
 
             for destaque in caso.get("destaques_dose", []):
-                st.markdown(
-                    f":red[**{texto_dose_destacada(destaque)}**]"
-                )
+                st.markdown(f":red[**{texto_dose_destacada(destaque)}**]")
 
             # Abre a tela resumida do caso
             botao_abrir_caso(documento_id)

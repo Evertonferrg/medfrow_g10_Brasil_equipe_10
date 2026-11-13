@@ -87,3 +87,9 @@ def pdf_sem_texto() -> bytes:
 @pytest.fixture(autouse=True)
 def _eventos_em_tmp(tmp_path, monkeypatch):
     monkeypatch.setenv("EVENTOS_DIR", str(tmp_path / "eventos"))
+
+
+@pytest.fixture(autouse=True)
+def _sem_webhook_nos_testes(monkeypatch):
+    """H3.3.2: nenhum teste chama o n8n de verdade, mesmo com N8N_WEBHOOK_URL no .env."""
+    monkeypatch.delenv("N8N_WEBHOOK_URL", raising=False)

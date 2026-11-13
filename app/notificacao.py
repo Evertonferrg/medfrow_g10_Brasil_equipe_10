@@ -1,4 +1,3 @@
-﻿
 import logging
 import os
 import smtplib
@@ -61,7 +60,6 @@ class ServicoNotificacao:
         funcao: str | None = None,
         slack_id: str | None = None,
     ) -> None:
-
         self._canal = canal
         self._timeout = timeout
         self._registrar_falha = registrar_falha
@@ -76,29 +74,21 @@ class ServicoNotificacao:
         self.gmail_password = os.getenv("GMAIL_APP_PASSWORD")
 
         # Dados do destinatário
-        self.email_destino = (
-            email_destino or os.getenv("PLANTAO_EMAIL_DESTINO")
+        self.email_destino = email_destino or os.getenv("PLANTAO_EMAIL_DESTINO")
+
+        self.nome_destinatario = nome_destinatario or os.getenv(
+            "NOTIFICACAO_NOME_DESTINATARIO",
+            "Equipe responsável",
         )
 
-        self.nome_destinatario = (
-            nome_destinatario or os.getenv(
-                "NOTIFICACAO_NOME_DESTINATARIO",
-                "Equipe responsável",
-            )
+        self.tratamento = tratamento or os.getenv(
+            "NOTIFICACAO_TRATAMENTO",
+            "",
         )
 
-        self.tratamento = (
-            tratamento or os.getenv(
-                "NOTIFICACAO_TRATAMENTO",
-                "",
-            )
-        )
-
-        self.funcao = (
-            funcao or os.getenv(
-                "NOTIFICACAO_FUNCAO",
-                "Equipe responsável",
-            )
+        self.funcao = funcao or os.getenv(
+            "NOTIFICACAO_FUNCAO",
+            "Equipe responsável",
         )
 
         # Mantém compatibilidade com o nome anterior do atributo.
@@ -106,7 +96,6 @@ class ServicoNotificacao:
 
     def _nome_com_tratamento(self) -> str:
         """Monta a identificação personalizada do destinatário."""
-
         nome = self.nome_destinatario.strip()
         tratamento = self.tratamento.strip()
 
@@ -122,7 +111,6 @@ class ServicoNotificacao:
         Não inclui diagnóstico, nome do paciente, medicamentos
         ou conteúdo extraído do documento.
         """
-
         destinatario = self._nome_com_tratamento()
 
         return (
@@ -143,21 +131,15 @@ class ServicoNotificacao:
         mensagem: str,
         link: str,
     ) -> None:
-        """Envia a notificação para o canal configurado no webhook Slack."""
-
-        payload_texto = (
-            f"*ALERTA MEDIFLOW*\n\n"
-            f"{mensagem}"
-        )
+        """Envia a notificação por mensagem direta ou pelo webhook Slack."""
+        payload_texto = f"*ALERTA MEDIFLOW*\n\n{mensagem}"
 
         if link:
-            payload_texto += (
-                f"\n\n<{link}|Acessar plataforma MediFlow>"
-            )
+            payload_texto += f"\n\n<{link}|Acessar plataforma MediFlow>"
 
         post = self._post or httpx.post
 
-        # Envio individual por mensagem direta, quando h? token e ID.
+        # Envio individual por mensagem direta, quando há token e ID.
         if self.slack_bot_token and self.slack_id:
             headers = {
                 "Authorization": f"Bearer {self.slack_bot_token}",
@@ -175,12 +157,13 @@ class ServicoNotificacao:
             dados = resposta.json()
             if not dados.get("ok"):
                 raise RuntimeError(
-                    f"Slack conversations.open: {dados.get('error', 'erro desconhecido')}"
+                    "Slack conversations.open: "
+                    f"{dados.get('error', 'erro desconhecido')}"
                 )
 
             canal_id = (dados.get("channel") or {}).get("id")
             if not canal_id:
-                raise RuntimeError("Slack n?o retornou o ID da conversa.")
+                raise RuntimeError("Slack não retornou o ID da conversa.")
 
             resposta = post(
                 "https://slack.com/api/chat.postMessage",
@@ -196,13 +179,14 @@ class ServicoNotificacao:
             dados = resposta.json()
             if not dados.get("ok"):
                 raise RuntimeError(
-                    f"Slack chat.postMessage: {dados.get('error', 'erro desconhecido')}"
+                    "Slack chat.postMessage: "
+                    f"{dados.get('error', 'erro desconhecido')}"
                 )
 
         else:
-            # Mant?m compatibilidade com o webhook central.
+            # Mantém compatibilidade com o webhook central.
             if not self.slack_webhook_url:
-                raise RuntimeError("Webhook Slack n?o configurado.")
+                raise RuntimeError("Webhook Slack não configurado.")
 
             resposta = post(
                 self.slack_webhook_url,
@@ -211,10 +195,7 @@ class ServicoNotificacao:
             )
             resposta.raise_for_status()
 
-        logger.info(
-            "Alerta enviado ao Slack. Documento: %s",
-            documento_id,
-        )
+        logger.info("Alerta enviado ao Slack. Documento: %s", documento_id)
 
     def _enviar_email(
         self,
@@ -223,30 +204,18 @@ class ServicoNotificacao:
         link: str,
     ) -> None:
         """Envia e-mail personalizado pelo Gmail."""
-
         msg = EmailMessage()
 
-        msg["Subject"] = (
-            f"[AÇÃO PRIORITÁRIA] MediFlow - Documento {documento_id}"
-        )
-
+        msg["Subject"] = f"[AÇÃO PRIORITÁRIA] MediFlow - Documento {documento_id}"
         msg["From"] = self.gmail_user
         msg["To"] = self.email_destino
 
         corpo = mensagem
 
         if link:
-            corpo += (
-                "\n\nAcesse a plataforma MediFlow pelo endereço:\n"
-                f"{link}"
-            )
+            corpo += f"\n\nAcesse a plataforma MediFlow pelo endereço:\n{link}"
 
-        corpo += (
-            "\n\n"
-            "---\n"
-            "Sistema de Notificações Automáticas\n"
-            "Equipe MediFlow"
-        )
+        corpo += "\n\n---\nSistema de Notificações Automáticas\nEquipe MediFlow"
 
         msg.set_content(corpo)
 
@@ -257,81 +226,48 @@ class ServicoNotificacao:
             587,
             timeout=self._timeout,
         ) as servidor:
-
             servidor.starttls()
-
-            servidor.login(
-                self.gmail_user,
-                self.gmail_password,
-            )
-
+            servidor.login(self.gmail_user, self.gmail_password)
             servidor.send_message(msg)
 
-        logger.info(
-            "E-mail enviado. Documento: %s",
-            documento_id,
-        )
+        logger.info("E-mail enviado. Documento: %s", documento_id)
 
-    def _registrar_erro(
-        self,
-        documento_id: str,
-        erros: list[str],
-    ) -> None:
+    def _registrar_erro(self, documento_id: str, erros: list[str]) -> None:
         """Registra uma única ocorrência de falha de notificação."""
-
         resumo = "; ".join(erros)[:200]
 
         try:
             self._registrar_falha(documento_id, resumo)
-
         except Exception:
             logger.exception(
                 "Não foi possível registrar a falha de notificação (%s).",
                 documento_id,
             )
 
-    def enviar(
-        self,
-        documento_id: str,
-        notificacao: dict | None,
-    ) -> str:
+    def enviar(self, documento_id: str, notificacao: dict | None) -> str:
         """Dispara a notificação pelos canais configurados."""
-
         canal = (
-            self._canal
-            or os.getenv("NOTIFICACAO_CANAL", "ambos")
-        ).strip().lower()
+            (self._canal or os.getenv("NOTIFICACAO_CANAL", "ambos")).strip().lower()
+        )
 
         if canal == "desativado":
             return DESATIVADO
 
         if canal not in ("slack", "email", "ambos"):
-            logger.warning(
-                "Canal de notificação inválido: %s",
-                canal,
-            )
+            logger.warning("Canal de notificação inválido: %s", canal)
             return DESATIVADO
 
-        # A mensagem recebida do roteamento não é enviada diretamente.
-        # Assim evitamos expor conteúdo clínico na notificação.
+        # A mensagem vinda do roteamento não é enviada diretamente,
+        # para não expor conteúdo clínico na notificação.
         mensagem = self._montar_mensagem(documento_id)
 
         base = os.getenv("UI_BASE_URL", "").rstrip("/")
-
-        link = (
-            f"{base}/?doc={quote(str(documento_id), safe='')}"
-            if base
-            else ""
-        )
+        link = f"{base}/?doc={quote(str(documento_id), safe='')}" if base else ""
 
         canais = []
 
-        if (
-            canal in ("slack", "ambos")
-            and (
-                self.slack_webhook_url
-                or (self.slack_bot_token and self.slack_id)
-            )
+        if canal in ("slack", "ambos") and (
+            self.slack_webhook_url or (self.slack_bot_token and self.slack_id)
         ):
             canais.append("slack")
 
@@ -353,21 +289,11 @@ class ServicoNotificacao:
         erros = []
 
         for nome_canal in canais:
-
             try:
                 if nome_canal == "slack":
-                    self._enviar_slack(
-                        documento_id,
-                        mensagem,
-                        link,
-                    )
-
+                    self._enviar_slack(documento_id, mensagem, link)
                 elif nome_canal == "email":
-                    self._enviar_email(
-                        documento_id,
-                        mensagem,
-                        link,
-                    )
+                    self._enviar_email(documento_id, mensagem, link)
 
             except Exception as erro:
                 logger.exception(
@@ -375,7 +301,6 @@ class ServicoNotificacao:
                     nome_canal,
                     documento_id,
                 )
-
                 erros.append(f"{nome_canal}: {erro}")
 
         if erros:
@@ -392,13 +317,9 @@ def alertar_plantao(
     forcar: bool = False,
 ) -> str:
     """Alerta o plantão somente para casos de emergência, salvo envio forçado."""
-
     decisao = resultado.get("decisao_roteamento") or {}
 
-    if (
-        not forcar
-        and str(decisao.get("destino_principal")) != DESTINO_EMERGENCIA
-    ):
+    if not forcar and str(decisao.get("destino_principal")) != DESTINO_EMERGENCIA:
         return NAO_URGENTE
 
     documento_id = resultado.get("documento_id")
@@ -409,29 +330,21 @@ def alertar_plantao(
     notificacao = decisao.get("notificacao_gerada")
 
     notificacao_servico = servico or ServicoNotificacao()
-
-    status = notificacao_servico.enviar(
-        documento_id,
-        notificacao,
-    )
+    status = notificacao_servico.enviar(documento_id, notificacao)
 
     if levantar_em_falha and status in (FALHOU, DESATIVADO):
-        raise RuntimeError(
-            f"Plantão não alertado ({status})"
-        )
+        raise RuntimeError(f"plantão não alertado ({status})")
 
     return status
 
 
 def alertar_plantao_revisao(resultado: dict) -> None:
-    """Envia o alerta após uma decisão de revisão para emergência."""
-
+    """Envia o alerta obrigatório após uma decisão de revisão para emergência."""
     alertar_plantao(
         resultado,
         levantar_em_falha=True,
         forcar=True,
     )
-
 
 
 def notificar_responsavel_por_destino(resultado: dict) -> str | None:
@@ -467,27 +380,18 @@ def notificar_responsavel_por_destino(resultado: dict) -> str | None:
         return FALHOU
 
     if not responsaveis:
-        logger.error(
-            "Nenhum responsável cadastrado para o setor %s.",
-            setor,
-        )
+        logger.error("Nenhum responsável cadastrado para o setor %s.", setor)
         return DESATIVADO
 
     resultados = []
 
     for responsavel in responsaveis:
-
-        if (
-            not responsavel.get("email")
-            and not responsavel.get("slack_id")
-        ):
+        if not responsavel.get("email") and not responsavel.get("slack_id"):
             continue
 
         servico = ServicoNotificacao(
             email_destino=responsavel.get("email") or None,
-            nome_destinatario=(
-                responsavel.get("nome") or "Equipe responsável"
-            ),
+            nome_destinatario=responsavel.get("nome") or "Equipe responsável",
             tratamento=responsavel.get("tratamento") or "",
             funcao=responsavel.get("funcao") or setor,
             slack_id=responsavel.get("slack_id") or None,
@@ -495,10 +399,7 @@ def notificar_responsavel_por_destino(resultado: dict) -> str | None:
 
         try:
             if setor == "plantao":
-                status = alertar_plantao(
-                    resultado,
-                    servico=servico,
-                )
+                status = alertar_plantao(resultado, servico=servico)
             else:
                 status = servico.enviar(
                     documento_id,
@@ -506,10 +407,7 @@ def notificar_responsavel_por_destino(resultado: dict) -> str | None:
                 )
 
         except Exception:
-            logger.exception(
-                "Erro ao notificar destinatário do setor %s.",
-                setor,
-            )
+            logger.exception("Erro ao notificar destinatário do setor %s.", setor)
             status = FALHOU
 
         resultados.append(status)

@@ -31,9 +31,7 @@ def ligar_fila_revisao(
 
     app.include_router(rotas.router_fila)
 
-    app.dependency_overrides[rotas.get_indice_revisao] = (
-        lambda: indice
-    )
+    app.dependency_overrides[rotas.get_indice_revisao] = lambda: indice
 
     app.include_router(router_trilha)
 
@@ -46,6 +44,4 @@ def ligar_decisao(
 
     app.include_router(router_decisao)
 
-    app.dependency_overrides[get_colaboradores] = (
-        lambda: colaboradores
-    )
+    app.dependency_overrides[get_colaboradores] = lambda: colaboradores

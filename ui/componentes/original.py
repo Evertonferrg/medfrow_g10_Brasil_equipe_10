@@ -21,7 +21,9 @@ def paginas_do_original(
                 pix = pagina.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
                 paginas.append(pix.tobytes("png"))
         return paginas
-    raise ValueError(f"Tipo de arquivo não suportado para visualização: {tipo or 'desconhecido'}")
+    raise ValueError(
+        f"Tipo de arquivo não suportado para visualização: {tipo or 'desconhecido'}"
+    )
 
 
 def mostrar_original(st, conteudo: bytes, content_type: str) -> None:
