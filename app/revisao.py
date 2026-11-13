@@ -416,6 +416,7 @@ def calcular_destino_real(resultado: dict) -> str | None:
 
 def colaboradores_padrao() -> Colaboradores:
     from app import storage
+    from app.notificacao import alertar_plantao_revisao  # H3.3.2
 
     # validar_correcoes: troque pelos normalizadores de H1.3.2 (CRM) e H4.1.2 se divergirem
     return Colaboradores(
@@ -423,4 +424,5 @@ def colaboradores_padrao() -> Colaboradores:
         eventos=servico_padrao(),
         calcular_destino=calcular_destino_real,
         validar_correcoes=validar_correcoes_basico,
+        alerta_plantao=alertar_plantao_revisao,  # H3.3.2: avisa o plantão após a decisão
     )
