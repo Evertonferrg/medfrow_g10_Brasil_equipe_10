@@ -6,16 +6,17 @@ from langgraph.graph import END, StateGraph
 from . import config
 from . import roteamento as rt
 from .arquivos import extensao_por_assinatura
-from .confianca import avaliar_confianca  # H4.1.1 T3
-from .imagem import preprocessar_imagem  # H1.4.2 T1
+from .confianca import avaliar_confianca  
+from .imagem import preprocessar_imagem  
 from .llm import extrair, ler_imagem
 from .modelos import Classificacao, Destino, TipoDocumento
 from .modelos.destino import DecisaoRoteamento, Notificacao
 from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
+from .regras import servico_regras  # H6.1.1 T1
 from .resposta import falha_de_processamento, montar_resposta
 from .schemas import Extracao
 from .validacao import validar
-from .validacao_obrigatorios import campos_faltantes  # H4.1.2 T2
+from .validacao_obrigatorios import campos_faltantes 
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class Estado(TypedDict, total=False):
     justificativa: str
     notificacao: Notificacao | None
     tipo_arquivo: str  # "TEXTO", "PDF" ou "Imagem"
+    versao_regras: str  # H6.1.1 T4
     ilegivel: bool
     motivo_ilegibilidade: str | None  # H1.4.2 T2: inclinacao | sombra | corte | outro
     resultado: dict
@@ -123,11 +125,17 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
     leitor = leitor or ler_imagem
 
     def n_ler_entrada(s: Estado):
-        # H1.2.2 T2: carrega o limite de confiança uma única vez por execução do grafo
-        limite = config.limite_confianca()
+        # H1.2.2 T2 / H6.1.1 T1: carrega regras e limite de confiança dinâmicos do storage
+        regras = servico_regras().obter_regras()
+        limite = regras.limite_confianca
+        versao = regras.versao
         dados = s.get("pdf_bytes")
         if not dados:
-            return {"tipo_arquivo": "TEXTO", "limite_confianca": limite}
+            return {
+                "tipo_arquivo": "TEXTO",
+                "limite_confianca": limite,
+                "versao_regras": versao,
+            }
         try:
             if extensao_por_assinatura(dados) == ".pdf":
                 try:
@@ -135,6 +143,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                         "texto": extrair_texto_pdf(dados),
                         "tipo_arquivo": "PDF",
                         "limite_confianca": limite,
+                        "versao_regras": versao,
                     }
                 except PDFSemTexto:
                     imagens, tipo = renderizar_paginas(dados), "PDF"  # T2: escaneado
@@ -145,7 +154,12 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             texto, leg = leitor(imagens)  # T4
         except Exception as e:
             logger.exception("Falha ao ler a entrada")
-            return {"texto": "", "erro": str(e), "limite_confianca": limite}
+            return {
+                "texto": "",
+                "erro": str(e),
+                "limite_confianca": limite,
+                "versao_regras": versao,
+            }
 
         if not leg.legivel or not texto.strip():  # T5
             motivo = leg.motivo or "sem texto reconhecível"
@@ -160,8 +174,14 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 "motivo_revisao": "ilegível",
                 "problemas": [f"ilegível: {motivo}"],
                 "limite_confianca": limite,
+                "versao_regras": versao,
             }
-        return {"texto": texto, "tipo_arquivo": tipo, "limite_confianca": limite}
+        return {
+            "texto": texto,
+            "tipo_arquivo": tipo,
+            "limite_confianca": limite,
+            "versao_regras": versao,
+        }
 
     def n_extrair(s: Estado):
         if s.get("erro"):
@@ -348,7 +368,9 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             return {"resultado": montar_resposta(doc_id, s).model_dump(mode="json")}
         except Exception as e:
             logger.exception("Resultado fora do formato")
-            resultado = falha_de_processamento(doc_id, str(e))
+            resultado = falha_de_processamento(
+                doc_id, str(e), versao_regras=s.get("versao_regras")
+            )
             return {
                 "destino": str(Destino.FILA_REVISAO_HUMANA),
                 "regra": "R-REVISAO",

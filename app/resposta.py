@@ -97,6 +97,7 @@ def montar_resposta(documento_id: str, estado: Mapping[str, Any]) -> ResultadoTr
         dados_extraidos=dados_extraidos,
         problemas=estado.get("problemas", []),
         decisao_roteamento=decisao,
+        versao_regras=estado.get("versao_regras"),
     )
 
 
@@ -105,6 +106,7 @@ def falha_de_processamento(
     motivo: str,
     justificativa: str | None = None,
     notificacao: Notificacao | None = None,
+    versao_regras: str | None = None,
 ) -> ResultadoTriagem:
     """Resultado fora do formato nunca é entregue (H2.3.1): vai para a revisão humana
     com o motivo 'falha de processamento', sem dados parciais."""
@@ -122,6 +124,7 @@ def falha_de_processamento(
             regra_aplicada="R-REVISAO",
             notificacao_gerada=notificacao,
         ),
+        versao_regras=versao_regras,
     )
 
 

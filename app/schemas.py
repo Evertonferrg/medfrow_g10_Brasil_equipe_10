@@ -158,6 +158,7 @@ class ResultadoTriagem(BaseModel):
     problemas: list[str] = Field(default_factory=list)
     decisao_roteamento: DecisaoRoteamento
     armazenamento_oci: ArmazenamentoOCI | None = None
+    versao_regras: str | None = None  # H6.1.1 T4
 
 
 class MotivoIlegibilidade(str):
