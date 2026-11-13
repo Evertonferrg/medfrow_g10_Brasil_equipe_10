@@ -414,6 +414,32 @@ def calcular_destino_real(resultado: dict) -> str | None:
     return destino_sem_revisao(extracao, classificacao, limite)
 
 
+def _alertar_plantao_configurado(resultado: dict) -> None:
+    from app.destinatarios import buscar_responsavel
+    from app.notificacao import ServicoNotificacao, alertar_plantao
+
+    responsavel = buscar_responsavel("plantao")
+
+    if not responsavel or not responsavel.get("email"):
+        raise RuntimeError("Responsável pelo plantão não configurado.")
+
+    servico = ServicoNotificacao(
+        email_destino=responsavel["email"],
+        nome_destinatario=responsavel["nome"],
+        tratamento=responsavel["tratamento"],
+        funcao=responsavel["funcao"],
+    )
+
+    status = alertar_plantao(resultado, servico=servico, levantar_em_falha=True)
+
+    logger.info(
+        "Notificação do plantao: documento= %s, responsável=%s, status=%s",
+        resultado.get("documento_id"),
+        responsavel.get("nome"),
+        status,
+    )
+
+
 def colaboradores_padrao() -> Colaboradores:
     from app import storage
     from app.notificacao import alertar_plantao_revisao  # H3.3.2
