@@ -6,16 +6,17 @@ from langgraph.graph import END, StateGraph
 from . import config
 from . import roteamento as rt
 from .arquivos import extensao_por_assinatura
+from .confianca import avaliar_confianca  # H4.1.1 T3
 from .eventos import servico_padrao
+from .imagem import preprocessar_imagem  # H1.4.2 T1
 from .llm import extrair, ler_imagem
 from .modelos import Classificacao, Destino, TipoDocumento
 from .modelos.destino import DecisaoRoteamento, Notificacao
 from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
 from .resposta import falha_de_processamento, montar_resposta
 from .schemas import Extracao
-from .confianca import avaliar_confianca  
 from .validacao import validar
-from .validacao_obrigatorios import campos_faltantes  
+from .validacao_obrigatorios import campos_faltantes  # H4.1.2 T2  
 
 logger = logging.getLogger(__name__)
 
