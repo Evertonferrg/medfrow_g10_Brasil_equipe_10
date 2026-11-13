@@ -14,7 +14,6 @@ from app import config
 from app.confianca import (
     avaliar_confianca,
     calcular_score_global,
-    obter_scores_campos,
 )
 from app.grafo import triar
 from app.modelos import Destino
@@ -57,7 +56,7 @@ def test_t2_score_global_menor_valor_entre_classificacao_e_media_campos():
     # Caso 2: média dos campos menor que a classificação
     # campos com média 0.60, classificação 0.95 -> score global 0.60
     scores_campos = {"paciente.nome": 0.8, "medico_solicitante.crm": 0.4}
-    assert calcular_score_global(0.95, scores_campos) == 0.60
+    assert calcular_score_global(0.95, scores_campos) == pytest.approx(0.60)
 
     # Caso 3: sem campos de score -> devolve o próprio score de classificação
     assert calcular_score_global(0.85, {}) == 0.85
@@ -107,7 +106,7 @@ def test_t3_t5_score_global_095_com_dose_050_vai_a_revisao():
         "medicamentos.dose": 0.50,  # campo crítico abaixo de 0.80
     }
 
-    score_glob, motivos, requer_rev = avaliar_confianca(
+    _score_glob, motivos, requer_rev = avaliar_confianca(
         0.95, ext, limite=0.80, scores_campos=scores_customizados
     )
 
@@ -162,7 +161,10 @@ def test_t4_documento_com_baixa_confianca_vai_para_revisao_via_grafo():
     )
 
     estado = triar(texto, extrator_fixo(ext))
-    assert estado["destino"] == Destino.FILA_REVISAO_HUMANA.value or estado["destino"] == Destino.FILA_REVISAO_HUMANA
+    assert (
+        estado["destino"] == Destino.FILA_REVISAO_HUMANA.value
+        or estado["destino"] == Destino.FILA_REVISAO_HUMANA
+    )
     assert estado["requer_revisao"] is True
     resultado = estado.get("resultado")
     assert resultado is not None

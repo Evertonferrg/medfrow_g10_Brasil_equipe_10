@@ -322,6 +322,7 @@ def decidir_caso(
                 StatusDocumento.EM_AUDITORIA_HUMANA,
                 autor_tipo="auditora",
                 autor_nome=decisao.auditora,
+                regra_aplicada=REGRA_AUDITORA,
                 campo=alt.campo,
                 valor_anterior=alt.anterior,
                 valor_novo=alt.novo,

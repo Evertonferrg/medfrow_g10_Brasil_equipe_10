@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app import config, storage
+from app.api.ligacao_documentos import ligar_documentos
 from app.api.ligacao_fila import ligar_decisao, ligar_fila_revisao
 from app.api.ligacao_historico import ligar_historico
 from app.api.tempo import MedirTempoMiddleware, configurar_log
@@ -21,6 +22,7 @@ from app.arquivos import (
     montar_mensagem_tamanho_excedido,
 )
 from app.eventos import servico_padrao, status_do_documento
+from app.indice_carga import lifespan_indice, registrar_chegada
 from app.resposta import carregar_resultado
 from app.revisao import colaboradores_padrao
 from app.schemas import DocumentoEntrada, ResultadoTriagem, validar_id
@@ -89,7 +91,7 @@ def _responder_consulta(documento_id: str):
 def criar_app(extrator=None) -> FastAPI:
     if extrator is None:
         from app.llm import extrair as extrator
-    app = FastAPI(title="MediFlow", version="0.1")
+    app = FastAPI(title="MediFlow", version="0.1", lifespan=lifespan_indice)
     configurar_log()
     app.add_middleware(MedirTempoMiddleware)  # T8: log da duração de cada requisição
 
@@ -103,7 +105,10 @@ def criar_app(extrator=None) -> FastAPI:
         return JSONResponse(status_code=422, content={"detail": msg})
 
     def _aceitar(
-        documento_id: str, conteudo: bytes, extensao: str
+        documento_id: str,
+        conteudo: bytes,
+        extensao: str,
+        canal_origem: str | None = None,
     ) -> tuple[str | None, JSONResponse | None]:
         """H5.1.1: grava o original ANTES de qualquer processamento.
 
@@ -122,6 +127,9 @@ def criar_app(extrator=None) -> FastAPI:
             servico_padrao().registrar(documento_id, StatusDocumento.RECEBIDO)
         except (OSError, ValueError):
             logger.exception("Não foi possível registrar o evento de status")
+        registrar_chegada(
+            documento_id, canal_origem
+        )  # H2.4.1: entra na lista "Meus envios"
         return salvo["caminho_objeto"], None
 
     def _processar_original(
@@ -145,7 +153,10 @@ def criar_app(extrator=None) -> FastAPI:
         doc: DocumentoEntrada, background: BackgroundTasks, aguardar: bool = False
     ):
         caminho, recusa = _aceitar(
-            doc.documento_id, doc.documento_texto.encode("utf-8"), ".txt"
+            doc.documento_id,
+            doc.documento_texto.encode("utf-8"),
+            ".txt",
+            getattr(doc, "canal_origem", None),
         )
         if recusa or caminho is None:
             return recusa
@@ -172,7 +183,7 @@ def criar_app(extrator=None) -> FastAPI:
             return JSONResponse(
                 status_code=413, content={"detail": "PDF acima de 10 MB"}
             )
-        caminho, recusa = _aceitar(documento_id, conteudo, ".pdf")
+        caminho, recusa = _aceitar(documento_id, conteudo, ".pdf", canal_origem)
         if recusa or caminho is None:
             return recusa
         return _processar_original(documento_id, caminho, background, aguardar)
@@ -234,7 +245,7 @@ def criar_app(extrator=None) -> FastAPI:
             ):
                 return JSONResponse(status_code=415, content={"detail": msg_formato})
 
-        caminho, recusa = _aceitar(documento_id, conteudo, extensao)
+        caminho, recusa = _aceitar(documento_id, conteudo, extensao, canal_origem)
         if recusa or caminho is None:
             return recusa
         return _processar_original(documento_id, caminho, background, aguardar)
@@ -262,6 +273,7 @@ def criar_app(extrator=None) -> FastAPI:
     ligar_fila_revisao(app)  # H4.2.1: GET /filas/revisao
     ligar_decisao(app, colaboradores_padrao())  # H4.4.1: POST /documentos/{id}/decisao
     ligar_historico(app)  # H5.3.2: GET /historico/exportar
+    ligar_documentos(app)  # H2.4.1: GET /documentos
     return app
 
 

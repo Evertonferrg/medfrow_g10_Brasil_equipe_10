@@ -45,6 +45,7 @@ class Estado(TypedDict, total=False):
     notificacao: Notificacao | None
     tipo_arquivo: str  # "TEXTO", "PDF" ou "Imagem"
     ilegivel: bool
+    motivo_ilegibilidade: str | None  # H1.4.2 T2: inclinacao | sombra | corte | outro
     resultado: dict
     decisao_roteamento: (
         DecisaoRoteamento | None
@@ -157,6 +158,8 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                     imagens, tipo = renderizar_paginas(dados), "PDF"  # T2: escaneado
             else:
                 imagens, tipo = [dados], "Imagem"
+            # H1.4.2 T1: pré-processa cada imagem em memória (nunca grava em recebidos/)
+            imagens = [preprocessar_imagem(img) for img in imagens]
             texto, leg = leitor(imagens)  # T4
         except Exception as e:
             logger.exception("Falha ao ler a entrada")
@@ -168,6 +171,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 "texto": "",
                 "tipo_arquivo": tipo,
                 "ilegivel": True,
+                "motivo_ilegibilidade": leg.tipo_motivo,  # H1.4.2 T2
                 "extracao": None,
                 "score": 0.0,
                 "motivos_revisao": ["ilegível"],  # H4.1.5 T1
@@ -205,7 +209,9 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             or "documento fora das categorias" in problemas
         )
         if not eh_fora:
-            sg, motivos_conf, revisao_conf = avaliar_confianca(score, extracao, limite=lim)
+            sg, motivos_conf, revisao_conf = avaliar_confianca(
+                score, extracao, limite=lim
+            )
             if revisao_conf:
                 saida["score"] = sg
                 saida["score_global"] = sg

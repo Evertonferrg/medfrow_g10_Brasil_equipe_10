@@ -75,7 +75,7 @@ def obter_scores_campos(extracao: Extracao | dict[str, Any] | None) -> dict[str,
     if isinstance(extracao, dict):
         score_campos_existente = extracao.get("score_campos")
     elif hasattr(extracao, "score_campos"):
-        score_campos_existente = getattr(extracao, "score_campos")
+        score_campos_existente = extracao.score_campos
 
     if isinstance(score_campos_existente, dict):
         return {str(k): float(v) for k, v in score_campos_existente.items()}
@@ -101,11 +101,17 @@ def obter_scores_campos(extracao: Extracao | dict[str, Any] | None) -> dict[str,
             dose = _obter_valor_aninhado(m, "dose")
             scores_nome.append(_extrair_score_ou_presenca(nome))
             scores_dose.append(_extrair_score_ou_presenca(dose))
-        scores["medicamentos.nome"] = sum(scores_nome) / len(scores_nome) if scores_nome else 0.0
-        scores["medicamentos.dose"] = sum(scores_dose) / len(scores_dose) if scores_dose else 0.0
+        scores["medicamentos.nome"] = (
+            sum(scores_nome) / len(scores_nome) if scores_nome else 0.0
+        )
+        scores["medicamentos.dose"] = (
+            sum(scores_dose) / len(scores_dose) if scores_dose else 0.0
+        )
 
     # 5. cid_sugerido
-    cid = _obter_valor_aninhado(extracao, "cid_sugerido") or _obter_valor_aninhado(extracao, "cid")
+    cid = _obter_valor_aninhado(extracao, "cid_sugerido") or _obter_valor_aninhado(
+        extracao, "cid"
+    )
     if cid is not None:
         scores["cid_sugerido"] = _extrair_score_ou_presenca(cid)
 
@@ -154,7 +160,9 @@ def avaliar_confianca(
 
     # Motivo para score global abaixo do limite
     if score_glob < limite:
-        motivos.append(f"score global abaixo do limite ({score_glob:.2f} < {limite:.2f})")
+        motivos.append(
+            f"score global abaixo do limite ({score_glob:.2f} < {limite:.2f})"
+        )
 
     # Motivos por campo crítico abaixo do limite
     campos_criticos_config = config.campos_criticos()
