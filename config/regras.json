@@ -1,5 +1,12 @@
 {
   "limite_confianca": 0.80,
+  "campos_criticos": [
+    "paciente.nome",
+    "medico_solicitante.crm",
+    "medicamentos.nome",
+    "medicamentos.dose",
+    "cid_sugerido"
+  ],
   "canais_origem": ["Pronto_Socorro", "Ambulatorio", "Laboratorio", "Operadora"],
   "destinos": [
     "Farmacia_Hospitalar",

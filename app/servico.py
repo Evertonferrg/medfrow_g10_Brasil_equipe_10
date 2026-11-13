@@ -2,6 +2,7 @@ import logging
 
 from . import storage
 from .grafo import triar
+from .indice_carga import registrar_resultado  # H2.4.1
 from .resposta import arquivar
 
 # from .schemas import Extracao
@@ -48,4 +49,8 @@ def processar(
             "notificacao": None,
             "justificativa": f"Enviado à revisão humana (regra R-REVISAO): falha de processamento ({str(e)[:80]}).",
         }
-    return arquivar(documento_id, estado)
+    resultado = arquivar(documento_id, estado)
+    registrar_resultado(
+        documento_id, resultado
+    )  # H2.4.1: atualiza o índice "Meus envios"
+    return resultado

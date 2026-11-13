@@ -30,6 +30,12 @@ class DecisaoAuditora(BaseModel):
             raise ValueError("auditora inválida")
         return v
 
+    @field_validator("motivo")
+    @classmethod
+    def _motivo_sem_espacos(cls, v: str | None) -> str | None:
+        v = " ".join(v.split()) if v else None
+        return v or None  # so conta como vazio
+
     @model_validator(mode="after")
     def _confere_campos_da_acao(self):
         exigidos = {

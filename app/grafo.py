@@ -6,6 +6,8 @@ from langgraph.graph import END, StateGraph
 from . import config
 from . import roteamento as rt
 from .arquivos import extensao_por_assinatura
+from .confianca import avaliar_confianca  # H4.1.1 T3
+from .imagem import preprocessar_imagem  # H1.4.2 T1
 from .llm import extrair, ler_imagem
 from .modelos import Classificacao, Destino, TipoDocumento
 from .modelos.destino import DecisaoRoteamento, Notificacao
@@ -33,6 +35,7 @@ class Estado(TypedDict, total=False):
     erro: str | None
     problemas: list
     score: float
+    score_global: float  # H4.1.1 T2: min(score_classificacao, media_scores_campos)
     destino: Destino
     regra: str  # id da regra aplicada (R-URGENCIA, R-RECEITA...)
     requer_revisao: bool
@@ -42,6 +45,7 @@ class Estado(TypedDict, total=False):
     notificacao: Notificacao | None
     tipo_arquivo: str  # "TEXTO", "PDF" ou "Imagem"
     ilegivel: bool
+    motivo_ilegibilidade: str | None  # H1.4.2 T2: inclinacao | sombra | corte | outro
     resultado: dict
     decisao_roteamento: (
         DecisaoRoteamento | None
@@ -136,6 +140,8 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                     imagens, tipo = renderizar_paginas(dados), "PDF"  # T2: escaneado
             else:
                 imagens, tipo = [dados], "Imagem"
+            # H1.4.2 T1: pré-processa cada imagem em memória (nunca grava em recebidos/)
+            imagens = [preprocessar_imagem(img) for img in imagens]
             texto, leg = leitor(imagens)  # T4
         except Exception as e:
             logger.exception("Falha ao ler a entrada")
@@ -147,6 +153,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 "texto": "",
                 "tipo_arquivo": tipo,
                 "ilegivel": True,
+                "motivo_ilegibilidade": leg.tipo_motivo,  # H1.4.2 T2
                 "extracao": None,
                 "score": 0.0,
                 "motivos_revisao": ["ilegível"],  # H4.1.5 T1
@@ -170,15 +177,42 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             return {"problemas": [], "score": 0.0}
         extracao, problemas, score = validar(s["extracao"], s["texto"])
         saida = {"extracao": extracao, "problemas": problemas, "score": score}
+
+        # H4.1.1 T3: avaliar confiança global e por campo crítico
+        # O score global (min do score de classificação e média dos campos) é
+        # calculado e, se abaixo do limite, substitui o score do estado.
+        # Não se aplica a documentos fora das categorias (tipo 'Não identificado').
+        lim = s.get("limite_confianca") or config.limite_confianca()
+        eh_fora = (
+            extracao.tipo_documento == TipoDocumento.NAO_IDENTIFICADO.value
+            or "documento fora das categorias" in problemas
+        )
+        if not eh_fora:
+            sg, motivos_conf, revisao_conf = avaliar_confianca(
+                score, extracao, limite=lim
+            )
+            if revisao_conf:
+                saida["score"] = sg
+                saida["score_global"] = sg
+                saida["problemas"] = list(problemas) + [
+                    m for m in motivos_conf if m not in problemas
+                ]
+            else:
+                saida["score_global"] = sg
+        else:
+            saida["score_global"] = score
+
         # H4.1.2 T2/T3: lista todas as faltas de uma vez
         faltas = campos_faltantes(extracao.tipo_documento, extracao.model_dump())
         if faltas:
             # "problemas" já aparece no JSON e na fila (ResultadoTriagem.problemas)
-            saida["problemas"] = list(problemas) + [
-                f for f in faltas if f not in problemas
+            saida["problemas"] = list(saida["problemas"]) + [
+                f for f in faltas if f not in saida["problemas"]
             ]
-            saida["motivos_revisao"] = faltas
-            saida["motivo_revisao"] = "; ".join(faltas)
+            saida["motivos_revisao"] = list(saida.get("motivos_revisao") or []) + [
+                f for f in faltas if f not in (saida.get("motivos_revisao") or [])
+            ]
+            saida["motivo_revisao"] = "; ".join(saida["motivos_revisao"])
         return saida
 
     def n_classificar(s: Estado):

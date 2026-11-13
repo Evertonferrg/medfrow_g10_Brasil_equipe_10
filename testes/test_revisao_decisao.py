@@ -150,6 +150,8 @@ def test_corrigir_crm_chega_ao_resultado_final_e_registra_antes_e_depois(amb):
         correcao["autor_nome"],
     ) == ("12345-XX", "123456-SP", "Helena")
 
+    assert correcao["regra_aplicada"] == "R-AUDITORA"
+
 
 def test_crm_corrigido_para_valor_invalido_nao_altera_nada(amb):
     amb.entra("C2")
@@ -326,3 +328,108 @@ def test_sobrepor_correcoes_so_toca_em_chaves_existentes_e_nao_muda_a_entrada():
     assert "idade" not in novo["paciente"]  # chave que a extração não tem
     assert novo["cid_sugerido"] == "S72.0" and "cid" not in novo
     assert extracao["medico_solicitante"]["crm"] == "x"
+
+
+def test_rejeitar_sem_motivo_ou_so_com_espacos_e_recusado():
+    for motivo in (None, "", "   "):
+        with pytest.raises(ValueError, match="motivo"):
+            DecisaoAuditora(acao="rejeitar", auditora="H", motivo=motivo)
+
+
+def test_motivo_da_rejeicao_aparece_no_resultado_e_nao_gera_destino(amb):
+    amb.entra("J1")
+    out = decidir_caso(
+        "J1",
+        DecisaoAuditora(acao="rejeitar", auditora="H", motivo="CRM ilegível"),
+        amb.colab,
+    )
+    assert out["destino"] is None and out["caminho"] == "rejeitados/J1.json"
+    salvo = json.loads(amb.mem.ler(out["caminho"]))
+    rot = salvo["decisao_roteamento"]
+    assert "CRM ilegível" in rot["justificativa_roteamento"]
+    assert rot["requer_auditoria_humana"] is False
+    assert not amb.vistos  # nenhum cálculo de destino: não passa por rotear
+
+
+def test_redirecionar_registra_justificativa_da_auditora_e_a_mudanca_na_trilha(amb):
+    amb.entra("K1")
+    d = DecisaoAuditora(
+        acao="redirecionar", auditora="Helena", destino="Prontuario_Eletronico"
+    )
+    out = decidir_caso("K1", d, amb.colab)
+    salvo = json.loads(amb.mem.ler(out["caminho"]))
+    assert salvo["decisao_roteamento"]["justificativa_roteamento"].startswith(
+        "Destino definido pela auditora"
+    )
+    assert salvo["decisao_roteamento"]["destino_principal"] == "Prontuario_Eletronico"
+    mudanca = next(e for e in amb.ev.listar("K1") if e.get("campo") == "destino")
+    assert (
+        mudanca["valor_anterior"] == "Farmacia_Hospitalar"
+    )  # o que o roteamento escolheria
+    assert mudanca["valor_novo"] == "Prontuario_Eletronico"
+    assert amb.ev.verificar_cadeia("K1") == []
+
+
+def test_redirecionar_para_emergencia_alerta_o_plantao(amb):
+    amb.entra("L1")
+    alertas = []
+    amb.colab.alertar_plantao = alertas.append
+    d = DecisaoAuditora(
+        acao="redirecionar", auditora="H", destino="Fila_Emergencia_Medica"
+    )
+    out = decidir_caso("L1", d, amb.colab)
+    assert (
+        out["plantao_alertado"] is True
+        and out["caminho"] == "processados/urgentes/L1.json"
+    )
+    assert len(alertas) == 1 and alertas[0]["documento_id"] == "L1"
+
+
+def test_redirecionar_para_outro_destino_nao_alerta(amb):
+    amb.entra("L2")
+    alertas = []
+    amb.colab.alertar_plantao = alertas.append
+    decidir_caso(
+        "L2",
+        DecisaoAuditora(
+            acao="redirecionar", auditora="H", destino="Farmacia_Hospitalar"
+        ),
+        amb.colab,
+    )
+    assert alertas == []
+
+
+def test_falha_no_alerta_nao_desfaz_a_decisao(amb):
+    amb.entra("L3")
+
+    def quebra(_resultado):
+        raise RuntimeError("slack fora do ar")
+
+    amb.colab.alertar_plantao = quebra
+    d = DecisaoAuditora(
+        acao="redirecionar", auditora="H", destino="Fila_Emergencia_Medica"
+    )
+    out = decidir_caso("L3", d, amb.colab)
+    assert out["plantao_alertado"] is False
+    assert prefixos_do_documento(amb.mem, "L3") == ["processados/urgentes"]
+    assert amb.ev.status_atual("L3") == S.PROCESSADO
+
+
+def test_rota_rejeitar_sem_motivo_da_422_e_com_motivo_move(amb):
+    c = _cliente(amb)
+    amb.entra("M1")
+    r = c.post("/documentos/M1/decisao", json={"acao": "rejeitar", "auditora": "H"})
+    assert r.status_code == 422
+    assert prefixos_do_documento(amb.mem, "M1") == ["auditoria_humana"]
+    ok = c.post(
+        "/documentos/M1/decisao",
+        json={"acao": "rejeitar", "auditora": "H", "motivo": "ilegível"},
+    )
+    assert ok.status_code == 200 and prefixos_do_documento(amb.mem, "M1") == [
+        "rejeitados"
+    ]
+    destino_fora = c.post(
+        "/documentos/M1/decisao",
+        json={"acao": "redirecionar", "auditora": "H", "destino": "Lugar_Nenhum"},
+    )
+    assert destino_fora.status_code in (409, 422)
