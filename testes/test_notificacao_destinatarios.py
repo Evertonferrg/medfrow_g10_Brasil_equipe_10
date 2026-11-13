@@ -1,8 +1,8 @@
-﻿
+﻿from typing import ClassVar
+
 import pytest
 
 from app import notificacao
-
 
 ServicoNotificacaoReal = notificacao.ServicoNotificacao
 
@@ -10,7 +10,7 @@ ServicoNotificacaoReal = notificacao.ServicoNotificacao
 class ServicoNotificacaoFalso:
     """Simula o envio sem acessar Gmail ou Slack."""
 
-    chamadas = []
+    chamadas: ClassVar[list] = []
 
     def __init__(self, **kwargs):
         self.configuracao = kwargs
@@ -134,7 +134,7 @@ def test_notifica_todos_os_responsaveis(monkeypatch):
 def test_emergencia_direciona_para_plantao(monkeypatch):
     chamadas = []
 
-    def alertar_falso(resultado, servico=None):
+    def alertar_falso(resultado, servico=None, **kwargs):
         chamadas.append({
             "resultado": resultado,
             "servico": servico,
