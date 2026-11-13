@@ -20,6 +20,7 @@ from app.api.ligacao_documentos import ligar_documentos
 from app.api.ligacao_fila import ligar_decisao, ligar_fila_revisao
 from app.api.ligacao_historico import ligar_historico
 from app.api.ligacao_original import ligar_original
+from app.api.ligacao_regras import ligar_regras
 from app.api.tempo import MedirTempoMiddleware, configurar_log
 from app.arquivos import (
     MAPA_EXTENSAO_FORMATO,
@@ -450,6 +451,9 @@ def criar_app(extrator=None) -> FastAPI:
 
     # H2.4.1: GET /documentos
     ligar_documentos(app)
+
+    # H6.1.1: PUT /regras/limite e GET /regras
+    ligar_regras(app)
 
     return app
 

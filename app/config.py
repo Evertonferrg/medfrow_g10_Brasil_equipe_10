@@ -20,22 +20,30 @@ def carregar_regras(caminho: Path | None = None) -> dict:
 
 
 def limite_confianca() -> float:
-    """Abaixo deste score o documento vai para revisão humana (H1.2.2 T2).
+    """Abaixo deste score o documento vai para revisão humana (H1.2.2 T2 / H6.1.1 T1).
 
-    Precedência: env LIMIAR_CONFIANCA > config/regras.json > 0.80.
+    Precedência: env LIMIAR_CONFIANCA > ServicoRegras (storage/bucket) > config/regras.json > 0.80.
     """
     bruto = os.getenv("LIMIAR_CONFIANCA")
-    if bruto is None:
-        bruto = carregar_regras().get("limite_confianca", LIMITE_CONFIANCA_PADRAO)
+    if bruto is not None:
+        try:
+            return min(1.0, max(0.0, float(bruto)))
+        except (TypeError, ValueError):
+            return LIMITE_CONFIANCA_PADRAO
     try:
-        valor = float(bruto)
-    except (TypeError, ValueError):
-        return LIMITE_CONFIANCA_PADRAO
-    return min(1.0, max(0.0, valor))
+        from app.regras import servico_regras
+
+        return servico_regras().obter_regras().limite_confianca
+    except Exception:
+        bruto = carregar_regras().get("limite_confianca", LIMITE_CONFIANCA_PADRAO)
+        try:
+            return min(1.0, max(0.0, float(bruto)))
+        except (TypeError, ValueError):
+            return LIMITE_CONFIANCA_PADRAO
 
 
 def limiar_confianca() -> float:
-    """Nome antigo mantido para compatibilidade; use limite_confianca()."""
+    """Nome antigo mantido para compatibilidade."""
     return limite_confianca()
 
 
