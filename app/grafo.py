@@ -12,7 +12,7 @@ from .llm import extrair, ler_imagem
 from .modelos import Classificacao, Destino, TipoDocumento
 from .modelos.destino import DecisaoRoteamento, Notificacao
 from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
-from .regras import servico_regras  # H6.1.1 T1
+from .regras import servico_regras  
 from .resposta import falha_de_processamento, montar_resposta
 from .schemas import Extracao
 from .validacao import validar
