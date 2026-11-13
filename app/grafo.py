@@ -13,9 +13,9 @@ from .modelos.destino import DecisaoRoteamento, Notificacao
 from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
 from .resposta import falha_de_processamento, montar_resposta
 from .schemas import Extracao
-from .confianca import avaliar_confianca  # H4.1.1 T3
+from .confianca import avaliar_confianca  
 from .validacao import validar
-from .validacao_obrigatorios import campos_faltantes  # H4.1.2 T2
+from .validacao_obrigatorios import campos_faltantes  
 
 logger = logging.getLogger(__name__)
 
