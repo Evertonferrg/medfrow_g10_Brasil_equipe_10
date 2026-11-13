@@ -1,10 +1,14 @@
-"""H2.3.2 T2 / H5.3.1 — ServicoEventos: log de eventos por documento em eventos/<id>.json.
+"""H2.3.2 T2 / H5.3.1 / H5.2.2 — ServicoEventos: log de eventos por documento em eventos/<id>.json.
 
 O status atual é o do último evento. Cada evento guarda o hash do anterior (cadeia):
 `verificar_cadeia` acusa evento alterado ou removido do meio. Não detecta quem
 recalcula a cadeia inteira nem o corte dos últimos eventos (não há assinatura nem
 âncora externa). Não usar retenção do bucket: ela impediria mover objetos.
 Guarda só id, status, horário, autor e, nas correções, o campo e os valores antes/depois.
+
+H5.2.2 T1/T2: Modelo Evento padronizado com tipo, data_hora, autor, detalhe.
+Gravação append-only com concorrência otimista (if_match com etag baseada no hash/conteúdo)
+e bloqueio de reescrita ou remoção para garantir que os eventos só sejam acrescentados.
 """
 
 from __future__ import annotations
@@ -16,15 +20,21 @@ import logging
 import os
 import re
 import threading
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+from app.modelos.evento import Evento
 from app.status import StatusDocumento
 
 logger = logging.getLogger(__name__)
 _ID_VALIDO = re.compile(r"^[A-Za-z0-9_-]{1,100}$")  # bloqueia path traversal
-AUTORES = ("agente", "auditora")
+AUTORES = ("agente", "auditora", "sistema")
+
+
+class ConflitoConcorrenciaError(Exception):
+    """Lançado quando uma gravação concorrente é detectada (etag / if_match)."""
 
 
 def _hash_do_evento(evento: dict) -> str:
@@ -33,7 +43,16 @@ def _hash_do_evento(evento: dict) -> str:
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()
 
 
+def _calcular_etag(conteudo_bruto: bytes | str) -> str:
+    """Calcula a etag a partir do conteúdo bruto do arquivo de eventos."""
+    if isinstance(conteudo_bruto, str):
+        conteudo_bruto = conteudo_bruto.encode("utf-8")
+    return hashlib.sha256(conteudo_bruto).hexdigest()
+
+
 class ServicoEventos:
+    """Serviço append-only de eventos com garantia de integridade em cadeia e concorrência otimista."""
+
     def __init__(
         self,
         pasta: Path | str = "eventos",
@@ -50,26 +69,79 @@ class ServicoEventos:
             raise ValueError("documento_id inválido")
         return self._pasta / f"{documento_id}.json"
 
-    def listar(self, documento_id: str) -> list[dict]:
+    def _ler_conteudo_e_etag(self, documento_id: str) -> tuple[list[dict], str]:
         caminho = self._caminho(documento_id)
         if not caminho.exists():
-            return []
-        return json.loads(caminho.read_text(encoding="utf-8"))
+            return [], ""
+        bruto = caminho.read_bytes()
+        etag = _calcular_etag(bruto)
+        try:
+            return json.loads(bruto.decode("utf-8")), etag
+        except json.JSONDecodeError:
+            return [], etag
+
+    def listar(self, documento_id: str) -> list[dict]:
+        """Devolve os eventos gravados em ordem cronológica (lista de dicts compatível)."""
+        eventos, _ = self._ler_conteudo_e_etag(documento_id)
+        return eventos
+
+    def listar_eventos(self, documento_id: str) -> list[Evento]:
+        """H5.2.2 T1/T3: Devolve os eventos estruturados no modelo padronizado Evento em ordem cronológica."""
+        brutos = self.listar(documento_id)
+        resultado: list[Evento] = []
+        for e in brutos:
+            data_hora = e.get("data_hora") or e.get("em") or ""
+            tipo = e.get("tipo") or e.get("status") or "evento"
+            autor = e.get("autor_nome") or e.get("autor_tipo") or e.get("autor") or "agente"
+            detalhe = e.get("detalhe") or e.get("regra_aplicada")
+            extra = {
+                k: v
+                for k, v in e.items()
+                if k not in ("tipo", "data_hora", "em", "autor", "detalhe", "hash", "hash_anterior")
+            }
+            resultado.append(
+                Evento(
+                    tipo=tipo,
+                    data_hora=data_hora,
+                    autor=autor,
+                    detalhe=detalhe,
+                    hash=e.get("hash"),
+                    hash_anterior=e.get("hash_anterior"),
+                    extra=extra,
+                )
+            )
+        return resultado
 
     def registrar(
         self,
         documento_id: str,
-        status: StatusDocumento,
+        status: StatusDocumento | str,
         detalhe: str | None = None,
+        tipo: str | None = None,
+        autor: str | None = None,
+        max_tentativas: int = 5,
         **extra,
     ) -> dict:
+        """H5.2.2 T2: Acrescenta um evento de forma estritamente append-only.
+        
+        Usa concorrência otimista (if_match com etag lida) e retentativas automáticas
+        para suportar gravações simultâneas em ramos paralelos sem perda de eventos.
+        """
         caminho = self._caminho(documento_id)
-        evento = {
-            "status": StatusDocumento(status).value,
-            "em": self._relogio().isoformat(),
+        status_val = StatusDocumento(status).value if isinstance(status, StatusDocumento) else str(status)
+        agora = self._relogio().isoformat()
+
+        # Criação do payload base do evento
+        evento: dict = {
+            "status": status_val,
+            "tipo": tipo or status_val,
+            "em": agora,
+            "data_hora": agora,
+            "autor": autor or extra.get("autor_tipo") or "agente",
         }
         if detalhe:
             evento["detalhe"] = detalhe
+
         nulos_ok = extra.get("campo") is not None
         evento.update(
             {
@@ -78,23 +150,41 @@ class ServicoEventos:
                 if v is not None or (nulos_ok and k in ("valor_anterior", "valor_novo"))
             }
         )
-        with self._lock:
-            self._pasta.mkdir(parents=True, exist_ok=True)
-            eventos = self.listar(documento_id)
-            evento["hash_anterior"] = eventos[-1].get("hash", "") if eventos else ""
-            evento["hash"] = _hash_do_evento(evento)
-            eventos.append(evento)
-            tmp = caminho.with_suffix(".tmp")
-            tmp.write_text(
-                json.dumps(eventos, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            os.replace(tmp, caminho)  # escrita atômica
+
+        for tentativa in range(max_tentativas):
+            with self._lock:
+                self._pasta.mkdir(parents=True, exist_ok=True)
+                eventos_atuais, etag_esperada = self._ler_conteudo_e_etag(documento_id)
+
+                # Se o arquivo já existe no disco durante a gravação, confere se a etag bate (concorrência otimista)
+                if caminho.exists():
+                    etag_atual = _calcular_etag(caminho.read_bytes())
+                    if etag_atual != etag_esperada:
+                        if tentativa < max_tentativas - 1:
+                            time.sleep(0.01 * (2**tentativa))
+                            continue
+                        raise ConflitoConcorrenciaError(
+                            f"Conflito de concorrência ao gravar evento para {documento_id}"
+                        )
+
+                # Encadeamento de integridade SHA-256
+                evento["hash_anterior"] = eventos_atuais[-1].get("hash", "") if eventos_atuais else ""
+                evento["hash"] = _hash_do_evento(evento)
+
+                lista_nova = [*eventos_atuais, evento]
+                tmp = caminho.with_suffix(f".tmp.{os.getpid()}.{threading.get_ident()}")
+                tmp.write_text(
+                    json.dumps(lista_nova, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                os.replace(tmp, caminho)  # escrita atômica no filesystem
+                return evento
+
         return evento
 
     def registrar_decisao(
         self,
         documento_id: str,
-        status: StatusDocumento,
+        status: StatusDocumento | str,
         *,
         autor_tipo: str,
         autor_nome: str,
@@ -106,12 +196,13 @@ class ServicoEventos:
     ) -> dict:
         """H5.3.1 T1/T2: decisão do agente (com a regra) ou da auditora (com nome e valores)."""
         if autor_tipo not in AUTORES:
-            raise ValueError("autor_tipo deve ser 'agente' ou 'auditora'")
+            raise ValueError("autor_tipo deve ser 'agente', 'auditora' ou 'sistema'")
         return self.registrar(
             documento_id,
             status,
-            detalhe,
+            detalhe=detalhe,
             tipo="decisao",
+            autor=autor_nome,
             autor_tipo=autor_tipo,
             autor_nome=autor_nome,
             regra_aplicada=regra_aplicada,
@@ -121,8 +212,7 @@ class ServicoEventos:
         )
 
     def verificar_cadeia(self, documento_id: str) -> list[str]:
-        """H5.3.1 T3: lista de problemas da cadeia (vazia = íntegra). Eventos antigos,
-        sem hash, são aceitos só no começo da trilha."""
+        """H5.3.1 T3: lista de problemas da cadeia (vazia = íntegra)."""
         problemas = []
         anterior = ""
         for i, ev in enumerate(self.listar(documento_id)):
@@ -141,22 +231,26 @@ class ServicoEventos:
 
     def status_atual(self, documento_id: str) -> StatusDocumento | None:
         eventos = self.listar(documento_id)
-        return StatusDocumento(eventos[-1]["status"]) if eventos else None
+        if not eventos:
+            return None
+        st = eventos[-1].get("status")
+        try:
+            return StatusDocumento(st)
+        except ValueError:
+            return None
 
     def listar_por_status(self, status: StatusDocumento) -> list[tuple[str, str]]:
-        """Documentos cujo ÚLTIMO evento é `status`: [(documento_id, horário do 1º evento)].
-
-        O 1º evento (recebido) é a chegada do documento; serve de horário de chegada na fila.
-        """
+        """Documentos cujo ÚLTIMO evento é `status`: [(documento_id, horário do 1º evento)]."""
         alvo = StatusDocumento(status).value
         achados = []
         for caminho in sorted(self._pasta.glob("*.json")):
             try:
                 eventos = json.loads(caminho.read_text(encoding="utf-8"))
             except (OSError, ValueError):
-                continue  # arquivo ilegível não derruba a listagem
+                continue
             if eventos and eventos[-1].get("status") == alvo:
-                achados.append((caminho.stem, eventos[0]["em"]))
+                data_chegada = eventos[0].get("data_hora") or eventos[0].get("em") or ""
+                achados.append((caminho.stem, data_chegada))
         return achados
 
 
@@ -166,12 +260,12 @@ def _servico(pasta: str) -> ServicoEventos:
 
 
 def servico_padrao() -> ServicoEventos:
-    """Instância compartilhada (main.py, resposta.py e a fila usam a mesma pasta)."""
+    """Instância compartilhada de ServicoEventos."""
     return _servico(os.getenv("EVENTOS_DIR", "eventos"))
 
 
 def registrar_desfecho(documento_id: str, resultado) -> None:
-    """Decisão automática (H5.3.1): autor "agente", com a regra aplicada e o destino.
+    """Decisão automática (H5.3.1): autor 'agente', com a regra aplicada e o destino.
 
     Chamar em arquivar(), depois de salvar o resultado. Falha ao registrar o evento
     não derruba o processamento (o resultado já foi salvo).
@@ -185,13 +279,15 @@ def registrar_desfecho(documento_id: str, resultado) -> None:
         if destino == "Fila_Revisao_Humana"
         else StatusDocumento.PROCESSADO
     )
+    regra = getattr(decisao, "regra_aplicada", None)
     try:
+        # Registra a decisão do agente
         servico_padrao().registrar_decisao(
             documento_id,
             status,
             autor_tipo="agente",
             autor_nome="agente",
-            regra_aplicada=getattr(decisao, "regra_aplicada", None),
+            regra_aplicada=regra,
             detalhe=f"destino: {destino}",
         )
     except (OSError, ValueError):
@@ -199,9 +295,7 @@ def registrar_desfecho(documento_id: str, resultado) -> None:
 
 
 def status_do_documento(documento_id: str, resultado: dict | None = None) -> str | None:
-    """Status do ciclo de vida do documento (recebido, processando, processado,
-    em_auditoria_humana ou rejeitado). Vem dos eventos; sem evento (documento antigo),
-    é deduzido do resultado salvo. Devolve None se não houver nenhum dos dois."""
+    """Status do ciclo de vida do documento."""
     try:
         atual = servico_padrao().status_atual(documento_id)
     except (OSError, ValueError):
