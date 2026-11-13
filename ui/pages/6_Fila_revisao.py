@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 import streamlit as st
-
+from services.estilo import preparar_pagina
 from ui.componentes.fila import (
     minutos_de_espera,
     texto_dose_destacada,
@@ -16,9 +16,11 @@ from ui.componentes.fila import (
 )
 from ui.fila_abrir_caso_snippet import botao_abrir_caso
 
+
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="Fila de revisão", layout="wide")
+preparar_pagina()
 
 CAMINHO_LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 

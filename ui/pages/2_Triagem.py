@@ -13,6 +13,7 @@ from pathlib import Path
 
 import requests
 import streamlit as st
+from services.estilo import preparar_pagina
 
 PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
@@ -105,32 +106,7 @@ def botao_download(resultado):
 
 
 st.set_page_config(page_title="MediFlow — Resultado", page_icon="🔎", layout="wide")
-
-CAMINHO_LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
-if CAMINHO_LOGO.exists():
-    st.logo(str(CAMINHO_LOGO), size="large")
-
-st.markdown(
-    """
-<style>
-    [data-testid="stLogo"] {
-        height: 3.5rem !important;
-    }
-    [data-testid="stLogo"] img {
-        height: 3.5rem !important;
-        max-height: 3.5rem !important;
-        width: auto !important;
-    }
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-with st.sidebar:
-    st.markdown("<div style='height: 35vh;'></div>", unsafe_allow_html=True)
-    st.divider()
-    st.caption("⚙️ Configurações")
-    st.caption("🚪 Sair")
+preparar_pagina()
 
 st.title("🔎 Resultado da triagem")
 

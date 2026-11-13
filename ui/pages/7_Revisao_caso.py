@@ -10,6 +10,7 @@ from pathlib import Path
 
 import requests
 import streamlit as st
+from services.estilo import preparar_pagina
 
 PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
@@ -233,6 +234,7 @@ def mostrar_trilha(documento_id: str) -> None:
 st.set_page_config(
     page_title="MediFlow — Revisão do caso", page_icon="🧐", layout="wide"
 )
+preparar_pagina()
 st.title("🧐 Revisão do caso")
 
 documento_id = str(st.query_params.get("id", "")).strip()
