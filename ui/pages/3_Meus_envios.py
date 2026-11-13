@@ -61,6 +61,13 @@ if linhas:
     doc_id = df.iloc[linhas[0]]["Documento"]
     st.divider()
     st.subheader(f"Detalhe: {doc_id}")
+
+    # H3.4.1 T4: abre o resumo do caso em uma tela (5_Caso.py)
+    if st.button("Abrir caso", key=f"abrir_{doc_id}", type="primary"):
+        st.session_state["caso_id"] = doc_id
+        st.query_params["id"] = doc_id
+        st.switch_page("pages/5_Caso.py")
+
     det = requests.get(f"{API}/documentos/{doc_id}", timeout=30)
     if det.status_code == 200:
         mostrar_resultado(det.json())
