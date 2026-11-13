@@ -1,4 +1,3 @@
-
 import logging
 import os
 import smtplib
@@ -92,16 +91,12 @@ class ServicoNotificacao:
         link: str,
     ) -> None:
         msg = EmailMessage()
-        msg["Subject"] = (
-            f"[ALERTA MÉDICO URGENTE] MediFlow - Doc: {documento_id}"
-        )
+        msg["Subject"] = f"[ALERTA MÉDICO URGENTE] MediFlow - Doc: {documento_id}"
         msg["From"] = self.gmail_user
         msg["To"] = self.plantao_email_destino
 
         corpo = (
-            "Prezado(a) plantonista,\n\n"
-            f"{mensagem}\n\n"
-            f"ID do Documento: {documento_id}"
+            f"Prezado(a) plantonista,\n\n{mensagem}\n\nID do Documento: {documento_id}"
         )
 
         if link:
@@ -136,10 +131,7 @@ class ServicoNotificacao:
             )
 
     def enviar(self, documento_id: str, notificacao: dict | None) -> str:
-        canal = (
-            self._canal
-            or os.getenv("NOTIFICACAO_CANAL", "ambos")
-        ).strip().lower()
+        canal = (self._canal or os.getenv("NOTIFICACAO_CANAL", "ambos")).strip().lower()
 
         if canal == "desativado":
             return DESATIVADO
@@ -210,10 +202,7 @@ def alertar_plantao(
 
     decisao = resultado.get("decisao_roteamento") or {}
 
-    if (
-        not forcar
-        and str(decisao.get("destino_principal")) != DESTINO_EMERGENCIA
-    ):
+    if not forcar and str(decisao.get("destino_principal")) != DESTINO_EMERGENCIA:
         return NAO_URGENTE
 
     documento_id = resultado.get("documento_id")

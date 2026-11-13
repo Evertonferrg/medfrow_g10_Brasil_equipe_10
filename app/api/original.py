@@ -12,6 +12,7 @@ O router recebe duas funções, para você ligar ao que já existe no projeto
 A chave vem sempre do registro do documento, nunca do parâmetro da URL,
 para não permitir ler objetos arbitrários do bucket.
 """
+
 import io
 import mimetypes
 from collections.abc import Callable
@@ -34,7 +35,9 @@ def criar_router_original(
         try:
             conteudo = ler_objeto(documento["chave"])
         except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="Arquivo original não encontrado")
+            raise HTTPException(
+                status_code=404, detail="Arquivo original não encontrado"
+            )
 
         nome = documento.get("nome_arquivo") or documento["chave"].rsplit("/", 1)[-1]
         tipo = (

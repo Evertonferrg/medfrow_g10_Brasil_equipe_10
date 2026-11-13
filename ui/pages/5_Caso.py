@@ -1,4 +1,5 @@
 """H3.4.1 T2/T3 — resumo do caso em uma tela (sem rolagem em 1366x768)."""
+
 import os
 import sys
 from pathlib import Path
@@ -47,7 +48,9 @@ except httpx.HTTPError:
     st.stop()
 
 if resp.status_code == 202:
-    st.info("Este documento ainda está sendo processado. Recarregue em alguns segundos.")
+    st.info(
+        "Este documento ainda está sendo processado. Recarregue em alguns segundos."
+    )
     st.stop()
 
 caso = dados_do_caso(resp.json())
@@ -57,7 +60,11 @@ if caso["origem"] == "—":
     try:
         lista = httpx.get(f"{API_URL}/documentos", timeout=10).json()
         canal = next(
-            (d.get("canal_origem") for d in lista if d.get("documento_id") == documento_id),
+            (
+                d.get("canal_origem")
+                for d in lista
+                if d.get("documento_id") == documento_id
+            ),
             None,
         )
         if canal:

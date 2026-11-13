@@ -1,4 +1,5 @@
 """H3.4.1 T3/T5 — componentes da página do caso."""
+
 import pytest
 
 from ui.componentes.caso import VAZIO, dados_do_caso
@@ -6,13 +7,15 @@ from ui.componentes.original import paginas_do_original
 
 
 def test_dados_do_caso_completo():
-    d = dados_do_caso({
-        "paciente": {"nome": "Maria Souza", "idade": 54},
-        "origem": "Hospital X",
-        "achado_principal": "Nódulo pulmonar 2,3 cm",
-        "cid": "R91",
-        "medico_solicitante": "Dr. João",
-    })
+    d = dados_do_caso(
+        {
+            "paciente": {"nome": "Maria Souza", "idade": 54},
+            "origem": "Hospital X",
+            "achado_principal": "Nódulo pulmonar 2,3 cm",
+            "cid": "R91",
+            "medico_solicitante": "Dr. João",
+        }
+    )
     assert d == {
         "paciente": "Maria Souza",
         "origem": "Hospital X",
@@ -29,17 +32,19 @@ def test_dados_ausentes_viram_traco():
 
 
 def test_formato_real_da_api_com_dados_extraidos():
-    d = dados_do_caso({
-        "status": "ok",
-        "canal_origem": "email",
-        "dados_extraidos": {
-            "paciente": "Maria Souza",
-            "medico_solicitante": "Dr. João",
-            "diagnostico_principal": "Nódulo pulmonar",
-            "cid": "não encontrado",
-            "cid_sugerido": "R91",
-        },
-    })
+    d = dados_do_caso(
+        {
+            "status": "ok",
+            "canal_origem": "email",
+            "dados_extraidos": {
+                "paciente": "Maria Souza",
+                "medico_solicitante": "Dr. João",
+                "diagnostico_principal": "Nódulo pulmonar",
+                "cid": "não encontrado",
+                "cid_sugerido": "R91",
+            },
+        }
+    )
     assert d == {
         "paciente": "Maria Souza",
         "origem": "email",
@@ -77,4 +82,6 @@ def test_pdf_respeita_max_paginas():
     doc = pymupdf.open()
     for _ in range(5):
         doc.new_page()
-    assert len(paginas_do_original(doc.tobytes(), "application/pdf", max_paginas=2)) == 2
+    assert (
+        len(paginas_do_original(doc.tobytes(), "application/pdf", max_paginas=2)) == 2
+    )

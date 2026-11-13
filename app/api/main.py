@@ -1,4 +1,3 @@
-
 import logging
 import re
 from pathlib import Path
@@ -75,8 +74,7 @@ def _validar_id_limpo(documento_id: str):
 def _recebido(documento_id: str) -> bool:
     """True se o original já está em recebidos/."""
     return any(
-        storage.existe(f"recebidos/{documento_id}{e}")
-        for e in storage.EXTENSOES
+        storage.existe(f"recebidos/{documento_id}{e}") for e in storage.EXTENSOES
     )
 
 
@@ -92,9 +90,7 @@ def _responder_consulta(documento_id: str):
         )
         return JSONResponse(
             status_code=500,
-            content={
-                "detail": "resultado armazenado fora do formato combinado"
-            },
+            content={"detail": "resultado armazenado fora do formato combinado"},
         )
 
     if resultado is not None:
@@ -141,11 +137,7 @@ def criar_app(extrator=None) -> FastAPI:
     async def _422(request: Request, exc: RequestValidationError):
         erro = exc.errors()[0]
 
-        campo = ".".join(
-            str(p)
-            for p in erro["loc"]
-            if p != "body"
-        )
+        campo = ".".join(str(p) for p in erro["loc"] if p != "body")
 
         msg = erro["msg"].replace("Value error, ", "")
 
@@ -177,9 +169,7 @@ def criar_app(extrator=None) -> FastAPI:
         except ObjetoJaExisteError:
             return None, JSONResponse(
                 status_code=409,
-                content={
-                    "detail": f"documento_id já recebido: {documento_id}"
-                },
+                content={"detail": f"documento_id já recebido: {documento_id}"},
             )
 
         try:
@@ -187,12 +177,10 @@ def criar_app(extrator=None) -> FastAPI:
                 documento_id,
                 StatusDocumento.RECEBIDO,
                 canal_origem=canal_origem,
-        )
+            )
 
         except (OSError, ValueError):
-            logger.exception(
-                "Não foi possível registrar o evento de status"
-            )
+            logger.exception("Não foi possível registrar o evento de status")
 
         registrar_chegada(
             documento_id,
@@ -207,7 +195,6 @@ def criar_app(extrator=None) -> FastAPI:
         background: BackgroundTasks,
         aguardar: bool,
     ):
-
         """O grafo recebe o caminho do original já gravado."""
 
         if aguardar:

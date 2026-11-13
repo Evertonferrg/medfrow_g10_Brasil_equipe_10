@@ -1,4 +1,3 @@
-
 from email.message import EmailMessage
 
 import pytest
@@ -13,7 +12,6 @@ from app.notificacao import (
     alertar_plantao,
     alertar_plantao_revisao,
 )
-
 
 NOTIF = {
     "mensagem": "Suspeita de embolia pulmonar",
@@ -91,14 +89,13 @@ def _servico_slack(monkeypatch, post, falhas=None):
         canal="slack",
         post=post,
         registrar_falha=lambda documento, erro: (
-            falhas.append((documento, erro))
-            if falhas is not None
-            else None
+            falhas.append((documento, erro)) if falhas is not None else None
         ),
     )
 
 
 # ---------- Slack ----------
+
 
 def test_slack_envia_alerta_com_timeout_de_5_segundos(monkeypatch):
     chamadas = []
@@ -159,6 +156,7 @@ def test_slack_sem_webhook_fica_desativado(monkeypatch):
 
 
 # ---------- Gmail ----------
+
 
 def test_gmail_envia_email_com_sucesso(monkeypatch):
     _configurar_email(monkeypatch)
@@ -229,6 +227,7 @@ def test_gmail_sem_credenciais_fica_desativado(monkeypatch):
 
 
 # ---------- Slack e Gmail juntos ----------
+
 
 def test_ambos_enviam_com_sucesso(monkeypatch):
     _configurar_slack(monkeypatch)
@@ -323,6 +322,7 @@ def test_canal_desativado_nao_tenta_enviar(monkeypatch):
 
 # ---------- alertar_plantao ----------
 
+
 def test_alertar_plantao_nao_envia_para_fila_nao_urgente():
     chamadas = []
 
@@ -356,10 +356,13 @@ def test_alertar_plantao_usa_mensagem_padrao_quando_nao_ha_notificacao():
             assert notificacao is None
             return ENVIADO
 
-    assert alertar_plantao(
-        _resultado("Fila_Emergencia_Medica"),
-        ServicoFake(),
-    ) == ENVIADO
+    assert (
+        alertar_plantao(
+            _resultado("Fila_Emergencia_Medica"),
+            ServicoFake(),
+        )
+        == ENVIADO
+    )
 
 
 def test_alertar_plantao_forcar_ignora_destino():
@@ -372,11 +375,14 @@ def test_alertar_plantao_forcar_ignora_destino():
 
     resultado = _resultado("Fila_Revisao_Humana")
 
-    assert alertar_plantao(
-        resultado,
-        ServicoFake(),
-        forcar=True,
-    ) == ENVIADO
+    assert (
+        alertar_plantao(
+            resultado,
+            ServicoFake(),
+            forcar=True,
+        )
+        == ENVIADO
+    )
 
     assert chamadas == ["DOC-9"]
 
@@ -409,6 +415,7 @@ def test_alertar_plantao_levanta_quando_nao_ha_canal_configurado():
 
 # ---------- Revisão ----------
 
+
 def test_alertar_plantao_revisao_forca_envio():
     chamadas = []
 
@@ -419,12 +426,15 @@ def test_alertar_plantao_revisao_forca_envio():
 
     resultado = _resultado("Fila_Revisao_Humana", NOTIF)
 
-    assert alertar_plantao(
-        resultado,
-        servico=ServicoFake(),
-        forcar=True,
-        levantar_em_falha=True,
-    ) == ENVIADO
+    assert (
+        alertar_plantao(
+            resultado,
+            servico=ServicoFake(),
+            forcar=True,
+            levantar_em_falha=True,
+        )
+        == ENVIADO
+    )
 
     assert chamadas == [("DOC-9", NOTIF)]
 
@@ -447,6 +457,7 @@ def test_alertar_plantao_revisao_levanta_quando_envio_falha(monkeypatch):
 
 
 # ---------- Trilha de auditoria ----------
+
 
 def test_evento_de_falha_nao_muda_status_atual(tmp_path, monkeypatch):
     from app import eventos

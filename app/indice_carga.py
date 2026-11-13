@@ -1,4 +1,3 @@
-﻿
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -78,7 +77,6 @@ def reconstruir_do_bucket() -> int:
 
     for prefixo in PREFIXOS:
         for caminho in storage.listar(prefixo):
-
             if not caminho.endswith(".json"):
                 continue
 
@@ -151,15 +149,11 @@ def registrar_resultado(
             resumo_de_resultado(
                 resultado,
                 canal_origem=(
-                    existente.canal_origem
-                    if existente
-                    else _canal_origem(documento_id)
+                    existente.canal_origem if existente else _canal_origem(documento_id)
                 ),
                 status=_status(documento_id, resultado),
                 data=(
-                    existente.data
-                    if existente
-                    else (_chegada(documento_id) or _EPOCA)
+                    existente.data if existente else (_chegada(documento_id) or _EPOCA)
                 ),
             )
         )

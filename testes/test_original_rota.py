@@ -1,4 +1,5 @@
 """H3.4.1 T5 — bytes da rota idênticos ao objeto do bucket (dublê de storage)."""
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -12,8 +13,15 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00binario"
 
 BUCKET = {"recebidos/doc-1.pdf": PDF_BYTES, "recebidos/doc-2.png": PNG_BYTES}
 DOCS = {
-    "doc-1": {"chave": "recebidos/doc-1.pdf", "content_type": "application/pdf", "nome_arquivo": "guia.pdf"},
-    "doc-2": {"chave": "recebidos/doc-2.png", "nome_arquivo": "exame.png"},  # sem content_type
+    "doc-1": {
+        "chave": "recebidos/doc-1.pdf",
+        "content_type": "application/pdf",
+        "nome_arquivo": "guia.pdf",
+    },
+    "doc-2": {
+        "chave": "recebidos/doc-2.png",
+        "nome_arquivo": "exame.png",
+    },  # sem content_type
     "doc-3": {"chave": "recebidos/sumiu.pdf", "nome_arquivo": "sumiu.pdf"},
 }
 
