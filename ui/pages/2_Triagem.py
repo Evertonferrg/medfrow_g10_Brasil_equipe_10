@@ -28,11 +28,6 @@ from componentes.classificacao import (  # noqa: F401
 from componentes.fila import ROTULO_STATUS  # H2.3.2 T5
 
 try:
-    from componentes.historico import exibir_linha_do_tempo  # H5.2.2 T4
-except ImportError:
-    exibir_linha_do_tempo = None
-
-try:
     from componentes.paciente import bloco_paciente
 except ImportError:
     bloco_paciente = None
@@ -115,23 +110,13 @@ preparar_pagina()
 
 st.title("🔎 Resultado da triagem")
 
-# Suporte a consulta direta via URL: ?id=DOC-... ou ?documento_id=DOC-...
-param_id = str(st.query_params.get("id") or st.query_params.get("documento_id") or "").strip()
-
 with st.form("consulta"):
-    doc_id = st.text_input(
-        "ID do documento",
-        value=param_id if param_id else "",
-        placeholder="DOC-CLIN-2026-8942",
-    )
+    doc_id = st.text_input("ID do documento", placeholder="DOC-CLIN-2026-8942")
     buscar = st.form_submit_button("Buscar resultado")
 
-deve_buscar = (buscar and doc_id.strip()) or (param_id and not buscar)
-id_para_busca = doc_id.strip() if doc_id.strip() else param_id
-
-if deve_buscar and id_para_busca:
+if buscar and doc_id.strip():
     try:
-        r = requests.get(f"{API}/documentos/{id_para_busca}", timeout=30)
+        r = requests.get(f"{API}/documentos/{doc_id.strip()}", timeout=30)
     except requests.RequestException as exc:
         st.error(f"Não consegui falar com a API: {exc}")
         st.stop()
@@ -215,18 +200,6 @@ if deve_buscar and id_para_busca:
             st.subheader("⚠️ Pontos de atenção")
             for p in problemas:
                 st.write(f"- {p}")
-
-        # H5.2.2 T4: Linha do tempo / histórico do documento
-        if exibir_linha_do_tempo:
-            try:
-                r_hist = requests.get(f"{API}/documentos/{doc_id.strip()}/historico", timeout=10)
-                if getattr(r_hist, "status_code", None) == 200:
-                    dados_hist = r_hist.json()
-                    if isinstance(dados_hist, list) and (not dados_hist or isinstance(dados_hist[0], dict)):
-                        st.markdown("---")
-                        exibir_linha_do_tempo(dados_hist)
-            except Exception:
-                pass
 
         st.download_button(
             "Baixar resultado (JSON)",

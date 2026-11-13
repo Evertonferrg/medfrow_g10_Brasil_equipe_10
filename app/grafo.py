@@ -6,16 +6,16 @@ from langgraph.graph import END, StateGraph
 from . import config
 from . import roteamento as rt
 from .arquivos import extensao_por_assinatura
-from .eventos import servico_padrao
+from .confianca import avaliar_confianca  # H4.1.1 T3
+from .imagem import preprocessar_imagem  # H1.4.2 T1
 from .llm import extrair, ler_imagem
 from .modelos import Classificacao, Destino, TipoDocumento
 from .modelos.destino import DecisaoRoteamento, Notificacao
 from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
 from .resposta import falha_de_processamento, montar_resposta
 from .schemas import Extracao
-from .confianca import avaliar_confianca  
 from .validacao import validar
-from .validacao_obrigatorios import campos_faltantes  
+from .validacao_obrigatorios import campos_faltantes  # H4.1.2 T2
 
 logger = logging.getLogger(__name__)
 
@@ -50,23 +50,6 @@ class Estado(TypedDict, total=False):
     decisao_roteamento: (
         DecisaoRoteamento | None
     )  # submodelo DecisaoRoteamento (H2.1.1 T1/T4)
-
-
-def _registrar_evento_seguro(doc_id: str, tipo: str, detalhe: str | None = None, **extra):
-    """Auxiliar seguro para gravar evento no ServicoEventos sem quebrar o grafo caso falhe."""
-    if not doc_id:
-        return
-    try:
-        servico_padrao().registrar(
-            documento_id=doc_id,
-            status=extra.get("status", tipo),
-            tipo=tipo,
-            autor="agente",
-            detalhe=detalhe,
-            **extra,
-        )
-    except Exception:
-        logger.exception("Falha ao registrar evento '%s' para %s", tipo, doc_id)
 
 
 def montar_classificacao(extracao, score) -> Classificacao:
@@ -143,7 +126,6 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         # H1.2.2 T2: carrega o limite de confiança uma única vez por execução do grafo
         limite = config.limite_confianca()
         dados = s.get("pdf_bytes")
-        doc_id = s.get("documento_id", "")
         if not dados:
             return {"tipo_arquivo": "TEXTO", "limite_confianca": limite}
         try:
@@ -182,18 +164,12 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         return {"texto": texto, "tipo_arquivo": tipo, "limite_confianca": limite}
 
     def n_extrair(s: Estado):
-        doc_id = s.get("documento_id", "")
         if s.get("erro"):
             return {"extracao": None}
         try:
-            ext = extrator(s["texto"])
-            # H5.2.2 T1: registra evento de extração
-            detalhes = f"campos extraídos para tipo {getattr(ext, 'tipo_documento', 'desconhecido')}"
-            _registrar_evento_seguro(doc_id, tipo="extracao", detalhe=detalhes)
-            return {"extracao": ext}
+            return {"extracao": extrator(s["texto"])}
         except Exception as e:
             logger.exception("Falha na extração automática")
-            _registrar_evento_seguro(doc_id, tipo="extracao", detalhe=f"falha: {e}")
             return {"extracao": None, "erro": f"Falha na extração automática: {e}"}
 
     def n_validar(s: Estado):
@@ -203,6 +179,9 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         saida = {"extracao": extracao, "problemas": problemas, "score": score}
 
         # H4.1.1 T3: avaliar confiança global e por campo crítico
+        # O score global (min do score de classificação e média dos campos) é
+        # calculado e, se abaixo do limite, substitui o score do estado.
+        # Não se aplica a documentos fora das categorias (tipo 'Não identificado').
         lim = s.get("limite_confianca") or config.limite_confianca()
         eh_fora = (
             extracao.tipo_documento == TipoDocumento.NAO_IDENTIFICADO.value
@@ -226,6 +205,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         # H4.1.2 T2/T3: lista todas as faltas de uma vez
         faltas = campos_faltantes(extracao.tipo_documento, extracao.model_dump())
         if faltas:
+            # "problemas" já aparece no JSON e na fila (ResultadoTriagem.problemas)
             saida["problemas"] = list(saida["problemas"]) + [
                 f for f in faltas if f not in saida["problemas"]
             ]
@@ -236,19 +216,10 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         return saida
 
     def n_classificar(s: Estado):
-        doc_id = s.get("documento_id", "")
         if s.get("erro") or s.get("extracao") is None:
             return {"classificacao": None}
         try:
-            cl = classificador(s["extracao"], s["score"])
-            # H5.2.2 T1: registra evento de classificação
-            tipo_doc = getattr(cl, "tipo_documento", None) or (cl.get("tipo_documento") if isinstance(cl, dict) else None)
-            score_cls = getattr(cl, "score_confianca_classificacao", None) or (cl.get("score_confianca_classificacao") if isinstance(cl, dict) else None)
-            prio = getattr(cl, "nivel_prioridade", None) or (cl.get("nivel_prioridade") if isinstance(cl, dict) else None)
-            score_str = f"{score_cls:.2f}" if isinstance(score_cls, (int, float)) else str(score_cls)
-            detalhe = f"{tipo_doc} (score {score_str}, {prio})"
-            _registrar_evento_seguro(doc_id, tipo="classificacao", detalhe=detalhe)
-            return {"classificacao": cl}
+            return {"classificacao": classificador(s["extracao"], s["score"])}
         except Exception:
             logger.exception("Falha na classificação automática")
             return {"classificacao": None}
@@ -274,7 +245,6 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         """H2.1.1 T3: nó decidir que chama a função pura de roteamento
         aplicando precedência urgência → revisão → tipo.
         """
-        doc_id = s.get("documento_id", "")
         limite = (
             s["limite_confianca"]
             if "limite_confianca" in s
@@ -297,17 +267,6 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
                 }
             )
         requer = decisao.requer_auditoria_humana or bool(motivos)
-
-        # H5.2.2 T1: registra evento de decisão
-        detalhe_dec = f"regra {decisao.regra_aplicada} -> {decisao.destino_principal}"
-        _registrar_evento_seguro(
-            doc_id,
-            tipo="decisao",
-            detalhe=detalhe_dec,
-            regra_aplicada=decisao.regra_aplicada,
-            destino=str(decisao.destino_principal),
-        )
-
         return {
             "destino": str(decisao.destino_principal),
             "regra": decisao.regra_aplicada,
@@ -324,16 +283,8 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
     def n_rotear(s: Estado):
         """H2.1.1 T4: grava a decisão no estado e no resultado.
         No MVP, a fila de um setor é a consulta aos resultados com aquele destino."""
-        doc_id = s.get("documento_id", "")
         decisao = s.get("decisao_roteamento")
         if decisao is not None:
-            # H5.2.2 T1: registra evento de destino
-            _registrar_evento_seguro(
-                doc_id,
-                tipo="destino",
-                detalhe=f"encaminhado para {decisao.destino_principal}",
-                destino=str(decisao.destino_principal),
-            )
             return {
                 "destino": str(decisao.destino_principal),
                 "regra": decisao.regra_aplicada,
@@ -350,19 +301,9 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
 
     def n_enviar_revisao(s: Estado):
         """H1.2.3 T2: envia documentos fora das categorias ou com pendências para revisão humana."""
-        doc_id = s.get("documento_id", "")
         decisao = s.get("decisao_roteamento")
         motivos = _motivos(s)
         motivo = "; ".join(motivos) if motivos else None
-        
-        # H5.2.2 T1: registra evento de destino para revisão
-        _registrar_evento_seguro(
-            doc_id,
-            tipo="destino",
-            detalhe=f"encaminhado para Fila_Revisao_Humana ({motivo or 'auditoria necessária'})",
-            destino=str(Destino.FILA_REVISAO_HUMANA),
-        )
-
         if decisao is not None:
             return {
                 "destino": str(Destino.FILA_REVISAO_HUMANA),
@@ -397,7 +338,11 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         return "rotear"
 
     def n_montar_resultado(s: Estado):
-        """H2.3.1 T2: último nó. Monta e valida o ResultadoTriagem."""
+        """H2.3.1 T2: último nó. Monta e valida o ResultadoTriagem.
+
+        Se o resultado sair fora do formato (ValidationError), NÃO entrega resposta parcial:
+        o documento vai para a revisão com o motivo "falha de processamento".
+        """
         doc_id = s.get("documento_id", "")
         try:
             return {"resultado": montar_resposta(doc_id, s).model_dump(mode="json")}
@@ -430,6 +375,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         g.add_node(nome, fn)
 
     g.set_entry_point("ler_entrada")
+    # T5: ilegível vai direto para a revisão, sem passar por extrair/validar/classificar
     g.add_conditional_edges(
         "ler_entrada",
         lambda s: "decidir" if s.get("ilegivel") else "extrair",
