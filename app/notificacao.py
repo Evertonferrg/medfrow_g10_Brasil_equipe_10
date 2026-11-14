@@ -179,8 +179,7 @@ class ServicoNotificacao:
             dados = resposta.json()
             if not dados.get("ok"):
                 raise RuntimeError(
-                    "Slack chat.postMessage: "
-                    f"{dados.get('error', 'erro desconhecido')}"
+                    f"Slack chat.postMessage: {dados.get('error', 'erro desconhecido')}"
                 )
 
         else:
@@ -246,9 +245,7 @@ class ServicoNotificacao:
 
     def enviar(self, documento_id: str, notificacao: dict | None) -> str:
         """Dispara a notificação pelos canais configurados."""
-        canal = (
-            (self._canal or os.getenv("NOTIFICACAO_CANAL", "ambos")).strip().lower()
-        )
+        canal = (self._canal or os.getenv("NOTIFICACAO_CANAL", "ambos")).strip().lower()
 
         if canal == "desativado":
             return DESATIVADO

@@ -20,12 +20,10 @@ def _carregar_responsavel(prefixo: str) -> dict:
         "nome": os.getenv(f"{prefixo}_NOME", "").strip(),
         "tratamento": os.getenv(f"{prefixo}_TRATAMENTO", "").strip(),
         "funcao": os.getenv(f"{prefixo}_FUNCAO", "").strip(),
-        "email": emails[0] if emails else os.getenv(
-            f"{prefixo}_EMAIL", ""
-        ).strip(),
-        "slack_id": slack_ids[0] if slack_ids else os.getenv(
-            f"{prefixo}_SLACK_ID", ""
-        ).strip(),
+        "email": emails[0] if emails else os.getenv(f"{prefixo}_EMAIL", "").strip(),
+        "slack_id": slack_ids[0]
+        if slack_ids
+        else os.getenv(f"{prefixo}_SLACK_ID", "").strip(),
     }
 
 

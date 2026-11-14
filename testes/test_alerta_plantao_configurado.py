@@ -30,9 +30,11 @@ def test_responsavel_sem_email_levanta_erro(monkeypatch):
 def test_configurado_envia_com_dados_do_responsavel(monkeypatch):
     capturado = {}
 
-    monkeypatch.setattr(destinatarios, "buscar_responsavel", lambda papel: (
-        capturado.setdefault("papel", papel) and RESPONSAVEL
-    ))
+    monkeypatch.setattr(
+        destinatarios,
+        "buscar_responsavel",
+        lambda papel: capturado.setdefault("papel", papel) and RESPONSAVEL,
+    )
 
     def falso_alertar(resultado, servico, levantar_em_falha):
         capturado["resultado"] = resultado
@@ -61,6 +63,7 @@ def test_falha_no_envio_propaga(monkeypatch):
 
     with pytest.raises(ConnectionError):
         _alertar_plantao_configurado({"documento_id": "doc-1"})
+
 
 def test_colaboradores_padrao_usa_alerta_configurado():
     assert colaboradores_padrao().alerta_plantao is _alertar_plantao_configurado

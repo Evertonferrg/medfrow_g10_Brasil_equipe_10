@@ -7,11 +7,10 @@ arquivo padrão do repositório (config/regras.json).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
 import logging
 import re
-from typing import Any
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -53,9 +52,7 @@ class RegrasConfig(BaseModel):
             "Fila_Revisao_Humana",
         ]
     )
-    formatos_aceitos: list[str] = Field(
-        default_factory=lambda: ["PDF", "JPG", "PNG"]
-    )
+    formatos_aceitos: list[str] = Field(default_factory=lambda: ["PDF", "JPG", "PNG"])
     tamanho_maximo_mb: int = Field(default=10)
     versao: str = "v1"
     atualizado_por: str | None = None
@@ -120,7 +117,7 @@ class ServicoRegras:
 
         atual = self.obter_regras()
         nova_versao = _proxima_versao(atual.versao)
-        agora = datetime.now(timezone.utc).isoformat()
+        agora = datetime.now(UTC).isoformat()
 
         # Salva versão anterior no histórico se ainda não existir
         caminho_v_anterior = f"{CAMINHO_VERSOES_STORAGE}/{atual.versao}.json"
@@ -152,4 +149,3 @@ def servico_regras() -> ServicoRegras:
     if _instancia_servico is None:
         _instancia_servico = ServicoRegras()
     return _instancia_servico
-
