@@ -104,21 +104,24 @@ class ServicoNotificacao:
 
         return nome
 
-    def _montar_mensagem(self, documento_id: str) -> str:
+    def _montar_mensagem(self, documento_id: str, motivo: str | None = None) -> str:
         """
         Monta uma mensagem operacional.
 
-        Não inclui diagnóstico, nome do paciente, medicamentos
-        ou conteúdo extraído do documento.
+        Não inclui nome do paciente nem conteúdo extraído do documento.
+        O motivo, quando informado, deve ser um texto genérico do roteamento.
         """
         destinatario = self._nome_com_tratamento()
+
+        bloco_motivo = f"Motivo: {motivo}\n" if motivo else ""
 
         return (
             f"Olá, {destinatario}!\n\n"
             "O MediFlow identificou um documento que requer "
             "sua atenção prioritária.\n\n"
             f"Documento: {documento_id}\n"
-            f"Setor responsável: {self.funcao}\n\n"
+            f"Setor responsável: {self.funcao}\n"
+            f"{bloco_motivo}\n"
             "Por gentileza, acesse a plataforma MediFlow para "
             "consultar a solicitação e dar continuidade ao atendimento.\n\n"
             "Atenciosamente,\n"
@@ -254,9 +257,11 @@ class ServicoNotificacao:
             logger.warning("Canal de notificação inválido: %s", canal)
             return DESATIVADO
 
-        # A mensagem vinda do roteamento não é enviada diretamente,
-        # para não expor conteúdo clínico na notificação.
-        mensagem = self._montar_mensagem(documento_id)
+        # O motivo vem do roteamento e deve ser um texto genérico,
+        # sem dados do paciente
+        motivo = (notificacao or {}).get("mensagem")
+        mensagem = self._montar_mensagem(documento_id, motivo)
+
 
         base = os.getenv("UI_BASE_URL", "").rstrip("/")
         link = f"{base}/?doc={quote(str(documento_id), safe='')}" if base else ""

@@ -1,7 +1,11 @@
+
 import pytest
 
 from app import destinatarios, notificacao
-from app.revisao import _alertar_plantao_configurado, colaboradores_padrao
+from app.revisao import (
+    _alertar_plantao_configurado,
+    colaboradores_padrao,
+)
 
 RESPONSAVEL = {
     "nome": "Dra. Ana",
@@ -12,7 +16,11 @@ RESPONSAVEL = {
 
 
 def test_sem_responsavel_levanta_erro(monkeypatch):
-    monkeypatch.setattr(destinatarios, "buscar_responsavel", lambda _: None)
+    monkeypatch.setattr(
+        destinatarios,
+        "buscar_responsavel",
+        lambda _: None,
+    )
 
     with pytest.raises(RuntimeError, match="não configurado"):
         _alertar_plantao_configurado({"documento_id": "doc-1"})
@@ -20,7 +28,9 @@ def test_sem_responsavel_levanta_erro(monkeypatch):
 
 def test_responsavel_sem_email_levanta_erro(monkeypatch):
     monkeypatch.setattr(
-        destinatarios, "buscar_responsavel", lambda _: {**RESPONSAVEL, "email": ""}
+        destinatarios,
+        "buscar_responsavel",
+        lambda _: {**RESPONSAVEL, "email": ""},
     )
 
     with pytest.raises(RuntimeError, match="não configurado"):
@@ -30,10 +40,14 @@ def test_responsavel_sem_email_levanta_erro(monkeypatch):
 def test_configurado_envia_com_dados_do_responsavel(monkeypatch):
     capturado = {}
 
+    def buscar(papel):
+        capturado["papel"] = papel
+        return RESPONSAVEL
+
     monkeypatch.setattr(
         destinatarios,
         "buscar_responsavel",
-        lambda papel: capturado.setdefault("papel", papel) and RESPONSAVEL,
+        buscar,
     )
 
     def falso_alertar(resultado, servico, levantar_em_falha):
@@ -42,9 +56,14 @@ def test_configurado_envia_com_dados_do_responsavel(monkeypatch):
         capturado["levantar_em_falha"] = levantar_em_falha
         return "enviado"
 
-    monkeypatch.setattr(notificacao, "alertar_plantao", falso_alertar)
+    monkeypatch.setattr(
+        notificacao,
+        "alertar_plantao",
+        falso_alertar,
+    )
 
     resultado = {"documento_id": "doc-1"}
+
     _alertar_plantao_configurado(resultado)
 
     assert capturado["papel"] == "plantao"
@@ -54,16 +73,27 @@ def test_configurado_envia_com_dados_do_responsavel(monkeypatch):
 
 
 def test_falha_no_envio_propaga(monkeypatch):
-    monkeypatch.setattr(destinatarios, "buscar_responsavel", lambda _: RESPONSAVEL)
+    monkeypatch.setattr(
+        destinatarios,
+        "buscar_responsavel",
+        lambda _: RESPONSAVEL,
+    )
 
     def falha(*args, **kwargs):
         raise ConnectionError("SMTP fora do ar")
 
-    monkeypatch.setattr(notificacao, "alertar_plantao", falha)
+    monkeypatch.setattr(
+        notificacao,
+        "alertar_plantao",
+        falha,
+    )
 
     with pytest.raises(ConnectionError):
         _alertar_plantao_configurado({"documento_id": "doc-1"})
 
 
 def test_colaboradores_padrao_usa_alerta_configurado():
-    assert colaboradores_padrao().alerta_plantao is _alertar_plantao_configurado
+    assert (
+        colaboradores_padrao().alerta_plantao
+        is _alertar_plantao_configurado
+    )

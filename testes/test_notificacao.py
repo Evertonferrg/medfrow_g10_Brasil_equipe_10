@@ -499,6 +499,12 @@ def test_falha_ao_registrar_evento_nao_interrompe_envio(monkeypatch):
 
 
 def test_colaboradores_padrao_liga_alerta_do_plantao():
-    from app.revisao import colaboradores_padrao
+    from app.revisao import (
+        _alertar_plantao_configurado,
+        colaboradores_padrao,
+    )
 
-    assert colaboradores_padrao().alerta_plantao is alertar_plantao_revisao
+    assert (
+        colaboradores_padrao().alerta_plantao
+        is _alertar_plantao_configurado
+    )
