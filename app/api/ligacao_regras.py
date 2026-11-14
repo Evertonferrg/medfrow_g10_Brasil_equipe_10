@@ -22,13 +22,17 @@ class AtualizarLimiteRequest(BaseModel):
 
     @model_validator(mode="after")
     def _verificar_valor(self) -> AtualizarLimiteRequest:
-        val = self.limite_confianca if self.limite_confianca is not None else self.limite
+        val = (
+            self.limite_confianca if self.limite_confianca is not None else self.limite
+        )
         if val is None:
             raise ValueError("limite_confianca ou limite deve ser informado")
         return self
 
     def valor_limite(self) -> float:
-        val = self.limite_confianca if self.limite_confianca is not None else self.limite
+        val = (
+            self.limite_confianca if self.limite_confianca is not None else self.limite
+        )
         return float(val)
 
 
@@ -87,7 +91,9 @@ def ligar_regras(app: FastAPI) -> None:
         else:
             return JSONResponse(
                 status_code=422,
-                content={"detail": "limite_confianca é obrigatório (entre 0.50 e 0.99)"},
+                content={
+                    "detail": "limite_confianca é obrigatório (entre 0.50 e 0.99)"
+                },
             )
 
         try:
@@ -102,4 +108,3 @@ def ligar_regras(app: FastAPI) -> None:
                 status_code=422,
                 content={"detail": str(e)},
             )
-

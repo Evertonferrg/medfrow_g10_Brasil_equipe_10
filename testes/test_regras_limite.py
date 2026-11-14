@@ -22,7 +22,7 @@ from app.schemas import (
     ResultadoTriagem,
 )
 from app.servico import processar
-from testes.conftest import RECEITA, extrator_fixo
+from testes.conftest import extrator_fixo
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,9 @@ def test_put_regras_limite_valido_cria_versao(cliente):
 # ---------------------------------------------------------------------------
 # Cenários 1 & 2: Novo documento vai para revisão humana, documento já processado mantém destino
 # ---------------------------------------------------------------------------
-def test_cenario_alteracao_limite_novo_vai_a_revisao_e_processado_mantem_destino(cliente):
+def test_cenario_alteracao_limite_novo_vai_a_revisao_e_processado_mantem_destino(
+    cliente,
+):
     """Critérios de aceite H6.1.1:
     - Dado o limite inicial de 0.80, DOC-001 com score 0.85 é processado e segue para Farmacia_Hospitalar.
     - O limite é alterado de 0.80 para 0.90.
@@ -74,7 +76,9 @@ def test_cenario_alteracao_limite_novo_vai_a_revisao_e_processado_mantem_destino
         nivel_prioridade="Rotina",
         score_confianca_classificacao=0.85,
         paciente=Paciente(nome="Carlos Andrade"),
-        medico_solicitante=MedicoSolicitante(nome="Dr. Lucas Mendes", crm="CRM 12345 SP"),
+        medico_solicitante=MedicoSolicitante(
+            nome="Dr. Lucas Mendes", crm="CRM 12345 SP"
+        ),
         medicamentos=[Medicamento(nome="Paracetamol", dose="500mg")],
     )
 
@@ -132,7 +136,10 @@ def test_cenario_alteracao_limite_novo_vai_a_revisao_e_processado_mantem_destino
     get_doc1 = cliente.get("/documentos/DOC-ANTIGO-001")
     assert get_doc1.status_code == 200
     doc1_carregado = ResultadoTriagem.model_validate(get_doc1.json())
-    assert doc1_carregado.decisao_roteamento.destino_principal == Destino.FARMACIA_HOSPITALAR
+    assert (
+        doc1_carregado.decisao_roteamento.destino_principal
+        == Destino.FARMACIA_HOSPITALAR
+    )
     assert doc1_carregado.decisao_roteamento.requer_auditoria_humana is False
     assert doc1_carregado.versao_regras == "v1"
 

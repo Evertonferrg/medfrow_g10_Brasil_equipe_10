@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import requests
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
@@ -16,8 +19,10 @@ if PASTA_UI not in sys.path:
 try:
     from services.estilo import preparar_pagina
 except ImportError:
+
     def preparar_pagina():
         pass
+
 
 API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 
@@ -52,8 +57,8 @@ def carregar_regras() -> dict:
         r = requests.get(f"{API_URL}/regras", timeout=5)
         if r.status_code == 200:
             return r.json()
-    except Exception:
-        pass
+    except (requests.RequestException, ValueError) as erro:
+        logger.warning("API de regras indisponível; usando padrão local: %s", erro)
     return {
         "limite_confianca": 0.80,
         "versao": "v1",
@@ -121,7 +126,7 @@ if st.button("Salvar novo limite de confiança", type="primary"):
             st.rerun()
         else:
             st.error(f"Erro ao salvar: {resp.status_code} - {resp.text}")
-    except Exception as e:
+    except (requests.RequestException, ValueError) as e:
         st.error(f"Não foi possível conectar à API: {e}")
 
 st.markdown("---")
@@ -132,4 +137,3 @@ with st.expander("Campos Críticos e Parâmetros Ativos"):
     st.json(regras_atuais.get("canais_origem", []))
     st.write("**Destinos disponíveis:**")
     st.json(regras_atuais.get("destinos", []))
-

@@ -1,4 +1,4 @@
-﻿from typing import ClassVar
+from typing import ClassVar
 
 import pytest
 
@@ -64,18 +64,14 @@ def resultado(destino):
     ],
 )
 def test_direciona_para_responsavel_do_setor(destino, setor):
-    status = notificacao.notificar_responsavel_por_destino(
-        resultado(destino)
-    )
+    status = notificacao.notificar_responsavel_por_destino(resultado(destino))
 
     assert status == notificacao.ENVIADO
     assert len(ServicoNotificacaoFalso.chamadas) == 1
 
     servico = ServicoNotificacaoFalso.chamadas[0]
 
-    assert servico.configuracao["email_destino"] == (
-        f"{setor}@exemplo.com"
-    )
+    assert servico.configuracao["email_destino"] == (f"{setor}@exemplo.com")
     assert servico.configuracao["funcao"] == setor
     assert servico.documento_id == "DOC-TESTE-001"
 
@@ -116,8 +112,7 @@ def test_notifica_todos_os_responsaveis(monkeypatch):
     ]
 
     slack_ids = [
-        servico.configuracao["slack_id"]
-        for servico in ServicoNotificacaoFalso.chamadas
+        servico.configuracao["slack_id"] for servico in ServicoNotificacaoFalso.chamadas
     ]
 
     assert emails == [
@@ -135,10 +130,12 @@ def test_emergencia_direciona_para_plantao(monkeypatch):
     chamadas = []
 
     def alertar_falso(resultado, servico=None, **kwargs):
-        chamadas.append({
-            "resultado": resultado,
-            "servico": servico,
-        })
+        chamadas.append(
+            {
+                "resultado": resultado,
+                "servico": servico,
+            }
+        )
         return notificacao.ENVIADO
 
     monkeypatch.setattr(
@@ -154,9 +151,7 @@ def test_emergencia_direciona_para_plantao(monkeypatch):
     assert status == notificacao.ENVIADO
     assert len(chamadas) == 1
 
-    assert chamadas[0]["resultado"]["documento_id"] == (
-        "DOC-TESTE-001"
-    )
+    assert chamadas[0]["resultado"]["documento_id"] == ("DOC-TESTE-001")
 
     assert chamadas[0]["servico"].configuracao["email_destino"] == (
         "plantao@exemplo.com"
@@ -172,9 +167,7 @@ def test_emergencia_direciona_para_plantao(monkeypatch):
     ],
 )
 def test_nao_notifica_destinos_sem_responsavel_automatico(destino):
-    status = notificacao.notificar_responsavel_por_destino(
-        resultado(destino)
-    )
+    status = notificacao.notificar_responsavel_por_destino(resultado(destino))
 
     assert status is None
     assert ServicoNotificacaoFalso.chamadas == []
@@ -184,9 +177,7 @@ def test_documento_sem_id_retorna_falhou():
     documento = resultado("Auditoria_Autorizacoes")
     documento["documento_id"] = ""
 
-    status = notificacao.notificar_responsavel_por_destino(
-        documento
-    )
+    status = notificacao.notificar_responsavel_por_destino(documento)
 
     assert status == notificacao.FALHOU
     assert ServicoNotificacaoFalso.chamadas == []
@@ -211,10 +202,12 @@ def test_slack_api_envia_mensagem_direta_simulada(monkeypatch):
             return self.dados
 
     respostas = [
-        RespostaFalsa({
-            "ok": True,
-            "channel": {"id": "D123456"},
-        }),
+        RespostaFalsa(
+            {
+                "ok": True,
+                "channel": {"id": "D123456"},
+            }
+        ),
         RespostaFalsa({"ok": True}),
     ]
 
@@ -241,13 +234,9 @@ def test_slack_api_envia_mensagem_direta_simulada(monkeypatch):
     assert chamadas[1]["url"].endswith("chat.postMessage")
     assert chamadas[1]["json"]["channel"] == "D123456"
 
-    assert "Mensagem simulada de teste." in (
-        chamadas[1]["json"]["text"]
-    )
+    assert "Mensagem simulada de teste." in (chamadas[1]["json"]["text"])
 
-    assert chamadas[0]["headers"]["Authorization"] == (
-        "Bearer xoxb-token-simulado"
-    )
+    assert chamadas[0]["headers"]["Authorization"] == ("Bearer xoxb-token-simulado")
 
 
 def test_slack_api_retorna_erro_ao_abrir_conversa(monkeypatch):

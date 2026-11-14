@@ -504,7 +504,4 @@ def test_colaboradores_padrao_liga_alerta_do_plantao():
         colaboradores_padrao,
     )
 
-    assert (
-        colaboradores_padrao().alerta_plantao
-        is _alertar_plantao_configurado
-    )
+    assert colaboradores_padrao().alerta_plantao is _alertar_plantao_configurado
