@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()  # sem override: variável de ambiente real sempre vence o .env
+
+logger = logging.getLogger(__name__)
 
 ARQUIVO_REGRAS = Path(__file__).resolve().parents[1] / "config" / "regras.json"
 LIMITE_CONFIANCA_PADRAO = 0.80
@@ -35,6 +38,9 @@ def limite_confianca() -> float:
 
         return servico_regras().obter_regras().limite_confianca
     except Exception:
+        logger.exception(
+            "Falha ao ler o limite de confiança do ServicoRegras; usando fallback local"
+        )
         bruto = carregar_regras().get("limite_confianca", LIMITE_CONFIANCA_PADRAO)
         try:
             return min(1.0, max(0.0, float(bruto)))
