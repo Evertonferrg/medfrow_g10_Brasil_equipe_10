@@ -1,4 +1,3 @@
-
 import pytest
 
 from app import destinatarios, notificacao
@@ -93,7 +92,4 @@ def test_falha_no_envio_propaga(monkeypatch):
 
 
 def test_colaboradores_padrao_usa_alerta_configurado():
-    assert (
-        colaboradores_padrao().alerta_plantao
-        is _alertar_plantao_configurado
-    )
+    assert colaboradores_padrao().alerta_plantao is _alertar_plantao_configurado

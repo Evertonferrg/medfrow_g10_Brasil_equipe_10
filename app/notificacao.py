@@ -262,7 +262,6 @@ class ServicoNotificacao:
         motivo = (notificacao or {}).get("mensagem")
         mensagem = self._montar_mensagem(documento_id, motivo)
 
-
         base = os.getenv("UI_BASE_URL", "").rstrip("/")
         link = f"{base}/?doc={quote(str(documento_id), safe='')}" if base else ""
 
