@@ -262,5 +262,92 @@ with direita:
     st.subheader("Extração")
     mostrar_extracao(resp.json())
 
+
+def carregar_destinos_auditora() -> list[str]:
+    """H6.3.1 T5: lê a lista de destinos do ServicoRegras para o seletor de redirecionamento."""
+    try:
+        r = requests.get(f"{API}/regras/destinos", timeout=5)
+        if r.status_code == 200:
+            destinos = r.json().get("destinos", [])
+            return [d for d in destinos if d != "Fila_Revisao_Humana"]
+    except requests.RequestException:
+        pass
+    try:
+        from app.revisao import obter_destinos_redirecionaveis
+
+        return obter_destinos_redirecionaveis()
+    except Exception:  # noqa: BLE001
+        return [
+            "Farmacia_Hospitalar",
+            "Auditoria_Autorizacoes",
+            "Prontuario_Eletronico",
+            "Fila_Emergencia_Medica",
+        ]
+
+
+def mostrar_painel_decisao(doc_id: str) -> None:
+    """H4.4.1 a H4.4.4 / H6.3.1 T5: formulário de decisão da auditora."""
+    st.divider()
+    st.subheader("Decisão da Auditora")
+
+    col_acao, col_detalhes = st.columns([1, 2])
+    with col_acao:
+        acao = st.radio(
+            "Ação",
+            options=["aprovar", "redirecionar", "rejeitar"],
+            format_func=lambda x: {
+                "aprovar": "Aprovar documento",
+                "redirecionar": "Redirecionar para outro setor",
+                "rejeitar": "Rejeitar documento",
+            }[x],
+        )
+
+    with col_detalhes:
+        destino_escolhido = None
+        motivo_rejeicao = None
+
+        if acao == "redirecionar":
+            destinos = carregar_destinos_auditora()
+            destino_escolhido = st.selectbox(
+                "Novo destino",
+                options=destinos,
+                help="Lista de destinos configurados no sistema (lidos do ServicoRegras).",
+            )
+        elif acao == "rejeitar":
+            motivo_rejeicao = st.text_input(
+                "Motivo da rejeição", placeholder="Ex.: Documento ilegível ou rasurado"
+            )
+
+    nome_auditora = st.session_state.get("auditora", "Dra. Renata Silveira")
+    if st.button("Confirmar decisão", type="primary"):
+        payload = {
+            "acao": acao,
+            "auditora": nome_auditora,
+        }
+        if acao == "redirecionar":
+            payload["destino"] = destino_escolhido
+        elif acao == "rejeitar":
+            if not motivo_rejeicao or not motivo_rejeicao.strip():
+                st.error("Motivo da rejeição é obrigatório.")
+                return
+            payload["motivo"] = motivo_rejeicao.strip()
+
+        try:
+            r = requests.post(
+                f"{API}/documentos/{doc_id}/decisao",
+                json=payload,
+                timeout=10,
+            )
+            if r.status_code == 200:
+                st.success(f"Decisão registrada com sucesso! Documento {acao}.")
+                st.rerun()
+            else:
+                st.error(f"Erro ao registrar decisão: {r.status_code} - {r.text}")
+        except requests.RequestException as e:
+            st.error(f"Falha de comunicação com a API: {e}")
+
+
+mostrar_painel_decisao(documento_id)
+
 # H5.3.1 T4 — Trilha de decisões
 mostrar_trilha(documento_id)
