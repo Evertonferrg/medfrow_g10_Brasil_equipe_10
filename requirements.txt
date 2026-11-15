@@ -1453,19 +1453,7 @@ onnxruntime==1.31.1 \
 opentelemetry-api==1.45.2 \
     --hash=sha256:2cbd737377e710ee740d261c94e93fa0f08e6d037c18f17513cc0a2d94479a34 \
     --hash=sha256:d7b0008e21e5fd61cbe7a7f34ca3b6905a78ab677d9bc395e299359c75cda6b4
-    # via
-    #   -r requirements.in
-    #   fastapi
-    #   opentelemetry-sdk
-    #   opentelemetry-semantic-conventions
-opentelemetry-sdk==1.45.2 \
-    --hash=sha256:7eec4de13dd21ff3a1670dcb0e02079e692736f94d733dfdce5af461d884248d \
-    --hash=sha256:ff974ea70ee4f1d51e2ec152db37c2b626c7bf82bb3f7d86114fd8704e7199c6
-    # via -r requirements.in
-opentelemetry-semantic-conventions==0.66b2 \
-    --hash=sha256:4cbe61e5f9275d57ab31708446e7938ef4291ebbe6a7fca6f7a629c5acae87d8 \
-    --hash=sha256:7da5f1a5dc4383eb66711d4d3d3e71824d9403ac1559fea021cc103c1a4c4976
-    # via opentelemetry-sdk
+    # via fastapi
 orjson==3.13.0 \
     --hash=sha256:0526a3456db67b264c6d661b5f090077f326b6cd074d0ef53a72763595dec5d7 \
     --hash=sha256:08bf722f923d2100bc5e5a5dcf72c656db557049c1bea26582fdd5dd9d5395a1 \

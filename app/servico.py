@@ -1,9 +1,9 @@
 import logging
+import os
 
 from . import storage
 from .grafo import triar
 from .indice_carga import registrar_resultado  # H2.4.1
-from .notificacao import alertar_plantao  # H3.3.2
 from .resposta import arquivar
 
 # from .schemas import Extracao
@@ -27,7 +27,7 @@ def processar(
     documento_id: str,
     texto: str,
     pdf_bytes: bytes | None,
-    extrator,  # Extracao,
+    extrator,
     caminho_original: str | None = None,
 ) -> dict:
     """Roda o grafo e arquiva o resultado.
@@ -65,18 +65,39 @@ def processar(
             ),
         }
 
+    # Arquiva o resultado independentemente de o grafo ter sucesso ou falhar.
     resultado = arquivar(documento_id, estado)
 
-    # H2.4.1: atualiza o índice "Meus envios"
+    # Atualiza o índice "Meus envios".
     registrar_resultado(documento_id, resultado)
 
-    # H3.3.2: envia notificação externa, sem interromper o processamento
-    try:
-        alertar_plantao(resultado)
-    except Exception:
-        logger.exception(
-            "Falha inesperada ao alertar o plantão (%s)",
-            documento_id,
-        )
+    # Notificações automáticas ficam desativadas por padrão.
+    notificacao_automatica = os.getenv(
+        "NOTIFICACAO_AUTOMATICA",
+        "false",
+    ).strip().lower() in ("1", "true", "yes", "sim", "on")
 
+    if notificacao_automatica:
+        try:
+            decisao = resultado.get("decisao_roteamento") or {}
+            destino = decisao.get("destino_principal")
+            destino = getattr(destino, "value", destino)
+
+            if destino == "Fila_Emergencia_Medica":
+                from .notificacao import notificar_responsavel_por_destino
+
+                status_notificacao = notificar_responsavel_por_destino(resultado)
+
+                logger.info(
+                    "Alerta de emergência do documento %s: %s",
+                    documento_id,
+                    status_notificacao,
+                )
+
+        except Exception:
+            # Uma falha de notificação não desfaz o processamento.
+            logger.exception(
+                "Falha ao notificar plantão do documento %s",
+                documento_id,
+            )
     return resultado

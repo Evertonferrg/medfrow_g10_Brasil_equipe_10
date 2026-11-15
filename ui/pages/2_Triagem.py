@@ -133,6 +133,9 @@ if buscar and doc_id.strip():
         st.error(r.json().get("detail", r.text))
     else:
         res = r.json()
+        armazenamento = res.get("armazenamento_oci") or {}
+        if armazenamento.get("status_backup") == "falha":
+            st.warning("Não foi possível salvar o backup do documento.")
         status_doc = res.get(
             "status_documento"
         )  # H2.3.2 T5: estágio do documento em destaque

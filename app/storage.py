@@ -74,6 +74,19 @@ def _cliente_oci():
         return oci.object_storage.ObjectStorageClient(cfg)
 
 
+def oci_retry_strat():
+    import oci
+
+    return oci.retry.RetryStrategyBuilder(
+        max_attempts_check=True,
+        max_attempts=3,
+        total_elapsed_time_check=False,
+        service_error_check=True,
+        service_error_retry_on_any_5xx=True,
+        backoff_type=oci.retry.BACKOFF_FULL_JITTER_EQUAL_ON_THROTTLE_VALUE,
+    ).get_retry_strategy()
+
+
 def _salvar_oci(
     namespace: str,
     caminho: str,
@@ -87,11 +100,22 @@ def _salvar_oci(
     if content_type:
         extra["content_type"] = content_type  # H5.1.1 T2
     try:
-        _cliente_oci().put_object(namespace, config.bucket(), caminho, dados, **extra)
+        _cliente_oci().put_object(
+            namespace,
+            config.bucket(),
+            caminho,
+            dados,
+            retry_strategy=oci_retry_strat(),
+            **extra,
+        )
     except Exception as e:
         if getattr(e, "status", None) == 412:  # objeto já existe
             raise ObjetoJaExisteError(caminho) from e
         raise
+
+
+class FalhaArmazenamentoError(RuntimeError):
+    """A persistência definitiva do objeto falhou após os retries."""
 
 
 def salvar(
@@ -119,17 +143,14 @@ def salvar(
     if ns:
         try:
             _salvar_oci(ns, caminho, dados, sobrescrever, content_type)
-            return {**base, "local": "oci", "status_backup": "sucesso"}
         except ObjetoJaExisteError:
-            raise
-        except Exception as e:  # falhou: não perde o documento
             logger.exception("O objeto da requisição já existe.")
+            raise
+        except Exception:  # falhou: não perde o documento
+            logger.exception("Falha no armazenamento na OCI após diversas tentativas.")
             _salvar_local(caminho, dados, sobrescrever)
-            return {
-                **base,
-                "local": "disco",
-                "status_backup": f"oci_falhou_salvo_local: {str(e)[:80]}",
-            }
+            return {**base, "local": "oci", "status_backup": "falha"}
+        return {**base, "local": "oci", "status_backup": "sucesso"}
     _salvar_local(caminho, dados, sobrescrever)
     return {**base, "local": "disco", "status_backup": "sucesso"}
 
@@ -147,12 +168,17 @@ def salvar_original(documento_id: str, conteudo: bytes, extensao: str) -> dict:
     for outra in EXTENSOES:
         if outra != extensao and existe(f"recebidos/{documento_id}{outra}"):
             raise ObjetoJaExisteError(documento_id)
-    return salvar(
+    salvo = salvar(
         f"recebidos/{documento_id}{extensao}",
         conteudo,
         sobrescrever=False,
         content_type=CONTENT_TYPES[extensao],
     )
+    if salvo["status_backup"] == "falha":
+        raise FalhaArmazenamentoError(
+            f"original não gravado: {salvo['caminho_objeto']}"
+        )
+    return salvo
 
 
 def ler(caminho: str):

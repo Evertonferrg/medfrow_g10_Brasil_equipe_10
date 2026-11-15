@@ -1,13 +1,16 @@
-"""H6.1.1 T3 / H6.3.1 T4 — Página de configuração de regras, limite de confiança e roteamento."""
+""" — Página de configuração de regras, limite de confiança e roteamento."""
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
 
 import requests
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:

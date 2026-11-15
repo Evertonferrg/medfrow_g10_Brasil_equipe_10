@@ -37,7 +37,7 @@ from app.revisao import colaboradores_padrao
 from app.schemas import DocumentoEntrada, ResultadoTriagem, validar_id
 from app.servico import processar
 from app.status import StatusDocumento
-from app.storage import ObjetoJaExisteError
+from app.storage import FalhaArmazenamentoError, ObjetoJaExisteError
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,8 @@ RESPOSTAS_ERRO_ARQUIVO = {
     413: {"description": "Arquivo acima do limite permitido em MB"},
     415: {"description": "Formato de arquivo não aceito"},
 }
+
+MENSAGEM_FALHA_ORIGINAL = "Não foi possível guardar o documento. Tente novamente."
 
 ID_LIMPO = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -166,11 +168,26 @@ def criar_app(extrator=None) -> FastAPI:
                 conteudo,
                 extensao,
             )
-
         except ObjetoJaExisteError:
             return None, JSONResponse(
                 status_code=409,
                 content={"detail": f"documento_id já recebido: {documento_id}"},
+            )
+        except FalhaArmazenamentoError:
+            logger.exception(
+                "Falha ao guardar o original do documento %s", documento_id
+            )
+            try:
+                servico_padrao().registrar_falha_armazenamento(
+                    documento_id,
+                    "Falha de armazenamento do original após três tentativas.",
+                )
+            except (OSError, ValueError):
+                logger.exception("Não foi possível registrar a falha de armazenamento")
+
+            return None, JSONResponse(
+                status_code=503,
+                content={"detail": MENSAGEM_FALHA_ORIGINAL},
             )
 
         try:
