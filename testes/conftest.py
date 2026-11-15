@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from reportlab.pdfgen import canvas
 
 from app.api import criar_app
+from app import storage
 
 # from app.schemas import Exame, Extracao, Medicamento, Medico, Paciente
 from app.schemas import Extracao, Medico, Paciente
@@ -93,3 +94,57 @@ def _eventos_em_tmp(tmp_path, monkeypatch):
 def _sem_webhook_nos_testes(monkeypatch):
     """H3.3.2: nenhum teste chama o n8n de verdade, mesmo com N8N_WEBHOOK_URL no .env."""
     monkeypatch.delenv("N8N_WEBHOOK_URL", raising=False)
+
+# ---- T2/T4 no OCI: content-type correto e escrita condicional (cliente falso, sem rede) ----
+class OCIFalso:
+    """Cliente OCI falso que registra chamadas e simula falhas transitórias."""
+
+    def __init__(self, falhas: int = 0, erro: Exception | None = None, falhar_nome=None):
+        from oci.exceptions import ClientError
+
+        self.erro = erro or ClientError("OCI indisponível")
+        self.falhas = falhas
+        self.falhar_nome = falhar_nome
+        self.chamadas = []
+
+    def get_object(self, namespace, bucket, nome, **kw):
+        # Preserve este stub se outros testes passarem a consultar OCI.
+        return None
+
+    def put_object(self, namespace, bucket, nome, corpo, **kw):
+        self.chamadas.append(
+            {
+                "namespace": namespace,
+                "bucket": bucket,
+                "nome": nome,
+                "corpo": corpo,
+                **kw,
+            }
+        )
+
+        deve_falhar = (
+            len(self.chamadas) <= self.falhas
+            if self.falhar_nome is None
+            else nome == self.falhar_nome
+        )
+        if deve_falhar:
+            raise self.erro
+
+        # falhas=2 significa: falha nas chamadas 1 e 2; sucesso na 3.
+        if len(self.chamadas) <= self.falhas:
+            raise self.erro
+
+class Erro412(Exception):
+    status = 412
+
+@pytest.fixture
+def oci(monkeypatch):
+    """Factory de cliente OCI falso; cada chamada cria um dublê independente."""
+
+    def criar(falhas: int = 0, erro: Exception | None = None):
+        falso = OCIFalso(falhas=falhas, erro=erro)
+        monkeypatch.setenv("OCI_NAMESPACE", "ns-teste")
+        monkeypatch.setattr(storage, "_cliente_oci", lambda: falso)
+        return falso
+
+    return criar
