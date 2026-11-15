@@ -391,7 +391,7 @@ def notificar_responsavel_por_destino(resultado: dict) -> str | None:
             continue
 
         servico = ServicoNotificacao(
-            canal="email" if setor == "plantao" else None,
+            canal="ambos" if setor == "plantao" else None,
             email_destino=responsavel.get("email") or None,
             nome_destinatario=responsavel.get("nome") or "Equipe responsável",
             tratamento=responsavel.get("tratamento") or "",
