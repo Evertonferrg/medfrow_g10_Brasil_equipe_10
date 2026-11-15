@@ -5,13 +5,13 @@ import time
 import pytest
 
 from app import resposta, storage
+from app.eventos import ServicoEventos
 from app.grafo import triar
 from app.schemas import ResultadoTriagem
-from testes.conftest import LAUDO_TEP, cliente_com, extracao, extrator_fixo
-from testes.test_api import CORPO
-from app.eventos import ServicoEventos
 from app.status import StatusDocumento
 from app.storage import FalhaArmazenamentoError
+from testes.conftest import LAUDO_TEP, cliente_com, extracao, extrator_fixo
+
 
 def _corpo(doc_id):
     return {
@@ -81,9 +81,9 @@ def test_se_a_gravacao_falha_nao_ha_resposta_com_caminho(monkeypatch):
         )  # nada de caminho_objeto/status_backup inventado
 
 
-#def test_falha_oci_registra_status_e_evento(
+# def test_falha_oci_registra_status_e_evento(
 #    monkeypatch, caplog, tmp_path, cliente, oci
-#):
+# ):
 #    import logging
 #    logger = logging.getLogger(__name__)
 #
@@ -124,9 +124,9 @@ def test_se_a_gravacao_falha_nao_ha_resposta_com_caminho(monkeypatch):
 #        for registro in caplog.records
 #    )
 
-#def test_falha_ao_gravar_original_retorna_503_e_nao_processa(
+# def test_falha_ao_gravar_original_retorna_503_e_nao_processa(
 #    cliente, monkeypatch
-#):
+# ):
 #    chamado = False
 #
 #    def falhar(*args, **kwargs):
@@ -140,8 +140,9 @@ def test_se_a_gravacao_falha_nao_ha_resposta_com_caminho(monkeypatch):
 #    assert resposta.json()["detail"] == (
 #        "Não foi possível guardar o documento. Tente novamente."
 #    )
-    # Use o espião de testes/test_envio.py para verificar que o extrator
-    # não recebeu texto e que a tarefa de processamento não foi iniciada.
+# Use o espião de testes/test_envio.py para verificar que o extrator
+# não recebeu texto e que a tarefa de processamento não foi iniciada.
+
 
 def test_oci_falha_duas_vezes_e_grava_na_terceira(oci):
     fake = oci(falhas=2)
@@ -151,9 +152,8 @@ def test_oci_falha_duas_vezes_e_grava_na_terceira(oci):
     assert len(fake.chamadas) == 3
     assert salvo["status_backup"] == "sucesso"
 
-def test_oci_falha_tres_vezes_devolve_falha_e_registra_evento(
-    oci, tmp_path, caplog
-):
+
+def test_oci_falha_tres_vezes_devolve_falha_e_registra_evento(oci, tmp_path, caplog):
     estado = triar(
         LAUDO_TEP,
         extrator_fixo(extracao()),
@@ -169,6 +169,7 @@ def test_oci_falha_tres_vezes_devolve_falha_e_registra_evento(
     eventos = ServicoEventos(tmp_path / "eventos").listar("DOC-OCI-FAIL-001")
     assert eventos[-1]["status"] == StatusDocumento.FALHA_OCI.value
     assert "falha de armazenamento" in eventos[-1]["detalhe"].lower()
+
 
 def test_falha_do_original_retorna_503_e_nao_processa(cliente, monkeypatch):
     chamadas_extrator = 0

@@ -96,6 +96,7 @@ def _sem_webhook_nos_testes(monkeypatch):
     """H3.3.2: nenhum teste chama o n8n de verdade, mesmo com N8N_WEBHOOK_URL no .env."""
     monkeypatch.delenv("N8N_WEBHOOK_URL", raising=False)
 
+
 # ---- T2/T4 no OCI: content-type correto e escrita condicional (cliente falso, sem rede) ----
 class OCIFalso:
     """Cliente OCI falso que registra chamadas e simula falhas transitórias."""
@@ -107,7 +108,10 @@ class OCIFalso:
         falhar_nome=None,
     ):
         self.erro = erro or oci_sdk.exceptions.ServiceError(
-            status=503, code="ServiceUnavailable", headers={}, message="OCI indisponível"
+            status=503,
+            code="ServiceUnavailable",
+            headers={},
+            message="OCI indisponível",
         )
         # erro explícito sem 'falhas' => falha sempre (ex.: 412)
         self.falhas = falhas if falhas is not None else (10**6 if erro else 0)

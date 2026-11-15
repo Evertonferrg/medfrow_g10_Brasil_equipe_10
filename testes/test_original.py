@@ -3,14 +3,14 @@
 import pytest
 
 from app import storage
-from app.storage import ObjetoJaExisteError, oci_retry_strat
+from app.storage import ObjetoJaExisteError
 from testes.conftest import (
     LAUDO_TEP,
+    Erro412,
     cliente_com,
     extracao,
     extrator_que_quebra,
     pdf_com_texto,
-    Erro412,
 )
 
 
@@ -106,11 +106,6 @@ def test_api_devolve_409_no_id_repetido(cliente):
 def test_extensao_desconhecida_e_recusada():
     with pytest.raises(ValueError):
         storage.salvar_original("DOC-ORI-009", b"x", ".exe")
-
-
-
-
-
 
 
 @pytest.mark.parametrize(

@@ -62,7 +62,7 @@ def montar_resposta(documento_id: str, estado: Mapping[str, Any]) -> ResultadoTr
             notificacao_gerada=estado.get("notificacao"),
         )
 
-    #if hasattr(extracao, "model_dump"):
+    # if hasattr(extracao, "model_dump"):
     if extracao is not None and hasattr(extracao, "model_dump"):
         dados_extraidos = extracao.model_dump(exclude=CAMPOS_FORA)
     elif isinstance(extracao, dict):
@@ -156,7 +156,8 @@ def salvar_resultado(
 
 
 def arquivar(documento_id: str, estado: dict) -> dict:
-    from app.eventos import servico_padrao 
+    from app.eventos import servico_padrao
+
     """Pega o resultado montado pelo grafo (nó montar_resultado), salva e devolve a resposta."""
     if estado.get("resultado"):
         resultado = ResultadoTriagem.model_validate(estado["resultado"])

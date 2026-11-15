@@ -54,9 +54,7 @@ RESPOSTAS_ERRO_ARQUIVO = {
     415: {"description": "Formato de arquivo não aceito"},
 }
 
-MENSAGEM_FALHA_ORIGINAL = (
-    "Não foi possível guardar o documento. Tente novamente."
-)
+MENSAGEM_FALHA_ORIGINAL = "Não foi possível guardar o documento. Tente novamente."
 
 ID_LIMPO = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -176,7 +174,9 @@ def criar_app(extrator=None) -> FastAPI:
                 content={"detail": f"documento_id já recebido: {documento_id}"},
             )
         except FalhaArmazenamentoError:
-            logger.exception("Falha ao guardar o original do documento %s", documento_id)
+            logger.exception(
+                "Falha ao guardar o original do documento %s", documento_id
+            )
             try:
                 servico_padrao().registrar_falha_armazenamento(
                     documento_id,

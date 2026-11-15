@@ -212,7 +212,7 @@ def test_storage_bloqueia_path_traversal():
         storage.salvar("/abs/x.txt", "x")
 
 
-#def test_oci_falhou_salva_no_disco(monkeypatch):
+# def test_oci_falhou_salva_no_disco(monkeypatch):
 #    monkeypatch.setenv("OCI_NAMESPACE", "ns")
 #    monkeypatch.setattr(
 #        storage,
@@ -225,6 +225,7 @@ def test_storage_bloqueia_path_traversal():
 #    )
 #    assert storage._local("recebidos/X-1.txt").read_text() == "dado"
 
+
 def test_oci_falhou_devolve_status_falha(monkeypatch):
     monkeypatch.setenv("OCI_NAMESPACE", "ns")
     monkeypatch.setattr(
@@ -233,7 +234,5 @@ def test_oci_falhou_devolve_status_falha(monkeypatch):
         lambda *a: (_ for _ in ()).throw(RuntimeError("sem rede")),
     )
     r = storage.salvar("recebidos/X-1.txt", "dado")
-    assert r["local"] == "oci" and r["status_backup"].startswith(
-        "falha"
-    )
+    assert r["local"] == "oci" and r["status_backup"].startswith("falha")
     assert storage._local("recebidos/X-1.txt").read_text() == "dado"

@@ -73,16 +73,19 @@ def _cliente_oci():
         )
         return oci.object_storage.ObjectStorageClient(cfg)
 
+
 def oci_retry_strat():
     import oci
+
     return oci.retry.RetryStrategyBuilder(
-        max_attempts_check=True, 
+        max_attempts_check=True,
         max_attempts=3,
         total_elapsed_time_check=False,
         service_error_check=True,
         service_error_retry_on_any_5xx=True,
-        backoff_type=oci.retry.BACKOFF_FULL_JITTER_EQUAL_ON_THROTTLE_VALUE
+        backoff_type=oci.retry.BACKOFF_FULL_JITTER_EQUAL_ON_THROTTLE_VALUE,
     ).get_retry_strategy()
+
 
 def _salvar_oci(
     namespace: str,
@@ -113,6 +116,7 @@ def _salvar_oci(
 
 class FalhaArmazenamentoError(RuntimeError):
     """A persistência definitiva do objeto falhou após os retries."""
+
 
 def salvar(
     caminho: str, conteudo, sobrescrever: bool = True, content_type: str | None = None
