@@ -25,12 +25,45 @@ Environment=GEMINI_MODEL=gemini-2.5-flash
 Secret=gemini_api_key,type=env,target=GEMINI_API_KEY
 
 # Notificações (Slack e Gmail). Configuração que não é segredo:
+# NOTIFICACAO_AUTOMATICA: false = não envia durante o processamento; true = envia ao responsável.
+Environment=NOTIFICACAO_AUTOMATICA=false
 Environment=NOTIFICACAO_CANAL=ambos
 Environment=UI_BASE_URL=https://mediflow-oci.duckdns.org
+Environment=SLACK_CHANNEL_ID=C0CGVRHQVT9
+
+# Responsáveis do MediFlow. Valores com espaço ou ";" vão com a atribuição inteira entre aspas
+# (sintaxe do systemd); as aspas não entram no valor.
+# PLANTÃO MÉDICO
+Environment="PLANTAO_NOME=Frederico Macau"
+Environment="PLANTAO_TRATAMENTO=Dr(a)."
+Environment="PLANTAO_FUNCAO=Médico Plantonista"
+Environment=PLANTAO_EMAIL=fredericomacau314@gmail.com
+Environment="PLANTAO_SLACK_ID=U0CH9989XT8;U0CH5TZSUGM;U0CHLK0M894"
+Environment="PLANTAO_EMAILS=guedesfeverton@gmail.com;fredericomacau314@gmail.com;insights.do.cesar@gmail.com;grufinosouza@gmail.com"
+Environment="PLANTAO_SLACK_IDS=U0CH9989XT8;U0CH5TZSUGM;U0CHLK0M894;U0CHH17R5T5"
+
+# AUDITORIA
+Environment="AUDITORIA_NOME=César Augusto de Fázio"
+Environment="AUDITORIA_TRATAMENTO=Sr(a)."
+Environment="AUDITORIA_FUNCAO=Auditoria Médica"
+Environment=AUDITORIA_EMAIL=insights.do.cesar@gmail.com
+Environment="AUDITORIA_SLACK_ID=U0CH9989XT8;U0CH5TZSUGM;U0CHLK0M894;U0CHH17R5T5"
+Environment="AUDITORIA_EMAILS=guedesfeverton@gmail.com;fredericomacau314@gmail.com;insights.do.cesar@gmail.com;grufinosouza@gmail.com"
+Environment="AUDITORIA_SLACK_IDS=U0CH9989XT8;U0CH5TZSUGM;U0CHLK0M894;U0CHH17R5T5"
+
+# FARMÁCIA
+Environment="FARMACIA_NOME=Gabriel Souza"
+Environment="FARMACIA_TRATAMENTO=Sr(a)."
+Environment="FARMACIA_FUNCAO=Farmácia Hospitalar"
+Environment=FARMACIA_EMAIL=grufinosouza@gmail.com
+Environment="FARMACIA_SLACK_ID=U0CH9989XT8;U0CH5TZSUGM;U0CHLK0M894;U0CHH17R5T5"
+Environment="FARMACIA_EMAILS=guedesfeverton@gmail.com;fredericomacau314@gmail.com;insights.do.cesar@gmail.com;grufinosouza@gmail.com"
+Environment="FARMACIA_SLACK_IDS=U0CH9989XT8;U0CH5TZSUGM;U0CHLK0M894;U0CHH17R5T5"
 
 # Credenciais de notificação. Os valores ficam no OCI Vault e são copiados à mão para
 # Podman secrets na VM. Precisam existir ANTES deste arquivo chegar, senão o container não sobe.
 Secret=mediflow-slack-webhook-url,type=env,target=SLACK_WEBHOOK_URL
+Secret=mediflow-slack-bot-token,type=env,target=SLACK_BOT_TOKEN
 Secret=mediflow-gmail-app-password,type=env,target=GMAIL_APP_PASSWORD
 Secret=mediflow-gmail-user,type=env,target=GMAIL_USER
 Secret=mediflow-plantao-email-destino,type=env,target=PLANTAO_EMAIL_DESTINO
