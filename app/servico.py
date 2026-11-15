@@ -79,21 +79,25 @@ def processar(
 
     if notificacao_automatica:
         try:
-            from .notificacao import notificar_responsavel_por_destino
+            decisao = resultado.get("decisao_roteamento") or {}
+            destino = decisao.get("destino_principal")
+            destino = getattr(destino, "value", destino)
 
-            status_notificacao = notificar_responsavel_por_destino(resultado)
+            if destino == "Fila_Emergencia_Medica":
+                from .notificacao import notificar_responsavel_por_destino
 
-            logger.info(
-                "Notificação do documento %s: %s",
-                documento_id,
-                status_notificacao,
-            )
+                status_notificacao = notificar_responsavel_por_destino(resultado)
+
+                logger.info(
+                    "Alerta de emergência do documento %s: %s",
+                    documento_id,
+                    status_notificacao,
+                )
 
         except Exception:
             # Uma falha de notificação não desfaz o processamento.
             logger.exception(
-                "Falha ao notificar responsável pelo documento %s",
+                "Falha ao notificar plantão do documento %s",
                 documento_id,
             )
-
     return resultado

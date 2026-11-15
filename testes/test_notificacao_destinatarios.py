@@ -1,4 +1,4 @@
-from typing import ClassVar
+﻿from typing import ClassVar
 
 import pytest
 
@@ -156,6 +156,7 @@ def test_emergencia_direciona_para_plantao(monkeypatch):
     assert chamadas[0]["servico"].configuracao["email_destino"] == (
         "plantao@exemplo.com"
     )
+    assert chamadas[0]["servico"].configuracao["canal"] == "email"
 
 
 @pytest.mark.parametrize(
