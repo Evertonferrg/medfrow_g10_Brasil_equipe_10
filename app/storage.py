@@ -142,19 +142,10 @@ def salvar(
         except ObjetoJaExisteError:
             logger.exception("O objeto da requisição já existe.")
             raise
-        except Exception as e:  # falhou: não perde o documento
-            #_salvar_local(caminho, dados, sobrescrever)
+        except Exception:  # falhou: não perde o documento
             logger.exception("Falha no armazenamento na OCI após diversas tentativas.")
-            #return {
-            #    **base,
-            #    "local": "disco",
-            #    "status_backup": f"oci_falhou_salvo_local: {str(e)[:80]}",
-            #}
-            return {
-                **base,
-                "local": "oci",
-                "status_backup": "falha",
-            }
+            _salvar_local(caminho, dados, sobrescrever)
+            return {**base, "local": "oci", "status_backup": "falha"}
         return {**base, "local": "oci", "status_backup": "sucesso"}
     _salvar_local(caminho, dados, sobrescrever)
     return {**base, "local": "disco", "status_backup": "sucesso"}
