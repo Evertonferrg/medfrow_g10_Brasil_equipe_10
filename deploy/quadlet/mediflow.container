@@ -24,9 +24,8 @@ Environment=OCI_AUTH=instance_principal
 Environment=GEMINI_MODEL=gemini-2.5-flash
 Secret=gemini_api_key,type=env,target=GEMINI_API_KEY
 
-# Notificações (Slack e Gmail). Configuração que não é segredo:
-# NOTIFICACAO_AUTOMATICA: false = não envia durante o processamento; true = envia ao responsável.
-Environment=NOTIFICACAO_AUTOMATICA=false
+# Notificações (Slack e Gmail)
+Environment=NOTIFICACAO_AUTOMATICA=true
 Environment=NOTIFICACAO_CANAL=ambos
 Environment=UI_BASE_URL=https://mediflow-oci.duckdns.org
 Environment=SLACK_CHANNEL_ID=C0CGVRHQVT9
