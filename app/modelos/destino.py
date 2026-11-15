@@ -40,9 +40,9 @@ class Notificacao(BaseModel):
 
 
 class DecisaoRoteamento(BaseModel):
-    """Submodelo de decisão de roteamento (H2.1.1 T1)."""
+    """Submodelo de decisão de roteamento (H2.1.1 T1 / H6.3.1 T1)."""
 
-    destino_principal: Destino
+    destino_principal: Destino | str
     requer_auditoria_humana: bool
     justificativa_roteamento: str
     regra_aplicada: str

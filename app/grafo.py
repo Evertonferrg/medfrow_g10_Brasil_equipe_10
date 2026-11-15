@@ -37,7 +37,7 @@ class Estado(TypedDict, total=False):
     problemas: list
     score: float
     score_global: float  # H4.1.1 T2: min(score_classificacao, media_scores_campos)
-    destino: Destino
+    destino: Destino | str
     regra: str  # id da regra aplicada (R-URGENCIA, R-RECEITA...)
     requer_revisao: bool
     motivo_revisao: str | None  # motivos unidos por "; " (compatibilidade)

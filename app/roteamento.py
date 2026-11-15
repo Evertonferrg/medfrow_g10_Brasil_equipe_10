@@ -113,11 +113,11 @@ def descricao_regra(regra: str) -> str:
 
 def decidir_destino(
     estado_ou_tipo: Mapping[str, Any] | str, *args, **kwargs
-) -> Destino:
+) -> Destino | str:
     """Função pura que devolve o destino aplicando estritamente a precedência:
-    urgência → revisão → tipo (H2.1.1 T2).
+    urgência → revisão → regras configuráveis → tipo (H2.1.1 T2 / H6.3.1 T3).
 
-    Retorna uma instância de Destino (que também é str).
+    Retorna uma instância de Destino ou str do destino configurado.
     """
     (
         tipo,
@@ -128,6 +128,7 @@ def decidir_destino(
         erro,
         _,
         _,
+        cid,
     ) = _extrair_atributos(estado_ou_tipo, *args, **kwargs)
 
     limite = float(kwargs.get("limite_confianca") or config.limiar_confianca())
@@ -153,6 +154,14 @@ def decidir_destino(
     # Precedência de Urgência: casos críticos sem pendência vão imediatamente para a emergência
     if urgente:
         return Destino.FILA_EMERGENCIA_MEDICA
+
+    # H6.3.1 T3: Precedência de Regras Configuráveis (depois da urgência/revisão e antes do tipo)
+    regras_custom = kwargs.get("regras_roteamento")
+    if regras_custom is None and isinstance(estado_ou_tipo, dict):
+        regras_custom = estado_ou_tipo.get("regras_roteamento")
+    regra_cfg = avaliar_regras_configuraveis(tipo_str, cid, regras_custom)
+    if regra_cfg is not None:
+        return regra_cfg[0]
 
     # Precedência de Tipo: encaminhamento por tipo de documento clínico
     if tipo_str == TipoDocumento.RECEITUARIO_MEDICO.value:
@@ -233,6 +242,7 @@ def justificativa(
     achado: str | None = None,
     problemas: list | None = None,
     erro: str | None = None,
+    descricao_custom: str | None = None,
 ) -> str:
     """Gera a justificativa textual explicativa da rota decidida."""
     destino_str = str(destino)
@@ -251,7 +261,15 @@ def justificativa(
         )
 
     tipo_str = str(tipo) if tipo else ""
-    descricao = ROTINA[tipo_str][2] if tipo_str in ROTINA else REGRA_PRONTUARIO[1]
+    if descricao_custom:
+        descricao = descricao_custom
+    elif tipo_str in ROTINA:
+        descricao = ROTINA[tipo_str][2]
+    elif regra in REGRAS:
+        descricao = REGRAS[regra]
+    else:
+        descricao = REGRA_PRONTUARIO[1]
+
     prio_str = prioridade or "Rotina"
     return (
         f"{tipo_str} com prioridade {prio_str} e confiança {score}; "
@@ -267,12 +285,100 @@ REGRA_PRONTUARIO = (
 )
 
 
+def avaliar_regras_configuraveis(
+    tipo: str | None,
+    cid: str | None,
+    regras_roteamento: list[Any] | None = None,
+) -> tuple[str, str, str] | None:
+    """H6.3.1 T3: avalia regras configuráveis do conjunto fechado (tipo igual / CID começa com).
+
+    Retorna (destino, id_regra, descricao) ou None se nenhuma regra coincidir.
+    """
+    if regras_roteamento is None:
+        try:
+            from app.regras import servico_regras
+
+            regras_roteamento = servico_regras().obter_regras().regras_roteamento
+        except Exception:  # noqa: BLE001
+            regras_roteamento = []
+
+    if not regras_roteamento:
+        return None
+
+    tipo_str = str(tipo).strip() if tipo else ""
+    cid_str = str(cid).strip().upper() if cid else ""
+
+    for regra in regras_roteamento:
+        if isinstance(regra, dict):
+            r_id = regra.get("id") or "R-CONFIG"
+            cond = regra.get("condicao") or {}
+            if isinstance(cond, dict):
+                c_tipo = str(cond.get("tipo", "")).strip().lower()
+                c_valor = str(cond.get("valor", "")).strip()
+            else:
+                c_tipo = str(regra.get("tipo_condicao", "")).strip().lower()
+                c_valor = str(regra.get("valor", "")).strip()
+            r_destino = regra.get("destino")
+            r_desc = regra.get("descricao")
+        else:
+            r_id = getattr(regra, "id", "R-CONFIG")
+            cond = getattr(regra, "condicao", None)
+            if hasattr(cond, "tipo"):
+                c_tipo = getattr(cond.tipo, "value", str(cond.tipo)).strip().lower()
+                c_valor = str(getattr(cond, "valor", "")).strip()
+            elif isinstance(cond, dict):
+                c_tipo = str(cond.get("tipo", "")).strip().lower()
+                c_valor = str(cond.get("valor", "")).strip()
+            else:
+                c_tipo = str(getattr(regra, "tipo_condicao", "")).strip().lower()
+                c_valor = str(getattr(regra, "valor", "")).strip()
+            r_destino = getattr(regra, "destino", None)
+            r_desc = getattr(regra, "descricao", None)
+
+        if not r_destino:
+            continue
+
+        casou = False
+        if c_tipo in (
+            "tipo_documento_igual",
+            "tipo_documento_igual_a",
+            "tipo_documento",
+        ):
+            if tipo_str and (
+                tipo_str.lower() == c_valor.lower()
+                or tipo_str.lower().startswith(c_valor.lower())
+            ):
+                casou = True
+        elif (
+            c_tipo in ("cid_comeca_com", "cid_inicia_com", "cid_comeca", "cid")
+            and cid_str
+            and cid_str.startswith(c_valor.upper())
+        ):
+            casou = True
+
+        if casou:
+            desc = r_desc or f"regra configurada {r_id}: encaminhar para {r_destino}"
+            return (str(r_destino), str(r_id), desc)
+
+    return None
+
+
 def _extrair_atributos(
     estado_ou_tipo: Mapping[str, Any] | str,
     *args,
     **kwargs,
-) -> tuple[str | None, float, bool, bool, list, str | None, str | None, str | None]:
-    """Extrai (tipo, score, urgente, pendencia, problemas, erro, achado, paciente)
+) -> tuple[
+    str | None,
+    float,
+    bool,
+    bool,
+    list,
+    str | None,
+    str | None,
+    str | None,
+    str | None,
+]:
+    """Extrai (tipo, score, urgente, pendencia, problemas, erro, achado, paciente, cid)
     seja de um dict de estado ou de argumentos posicionais/nomeados.
     """
     if isinstance(estado_ou_tipo, dict):
@@ -339,6 +445,17 @@ def _extrair_atributos(
                 paciente_nome = getattr(paciente, "nome", None)
         achado = achado or tipo or "Achado crítico"
 
+        # CID
+        cid = s.get("cid") or s.get("cid_sugerido")
+        if not cid and ext is not None:
+            cid = getattr(ext, "cid_sugerido", None) or getattr(ext, "cid", None)
+        if not cid and isinstance(s.get("dados_extraidos"), dict):
+            cid = s["dados_extraidos"].get("cid_sugerido") or s["dados_extraidos"].get(
+                "cid"
+            )
+        if not cid and cla is not None:
+            cid = getattr(cla, "cid_sugerido", None) or getattr(cla, "cid", None)
+
         return (
             tipo,
             score,
@@ -348,6 +465,7 @@ def _extrair_atributos(
             erro,
             achado,
             paciente_nome,
+            str(cid) if cid is not None else None,
         )
 
     # Argumentos posicionais / kwargs
@@ -400,6 +518,7 @@ def _extrair_atributos(
     erro = kwargs.get("erro")
     achado = kwargs.get("achado", tipo)
     paciente_nome = kwargs.get("paciente")
+    cid = kwargs.get("cid") or kwargs.get("cid_sugerido")
 
     return (
         tipo,
@@ -410,6 +529,7 @@ def _extrair_atributos(
         erro,
         achado,
         paciente_nome,
+        str(cid) if cid is not None else None,
     )
 
 
@@ -428,6 +548,7 @@ def criar_decisao_roteamento(
         erro,
         achado,
         paciente_nome,
+        cid,
     ) = _extrair_atributos(estado_ou_tipo, *args, **kwargs)
 
     destino = decidir_destino(estado_ou_tipo, *args, **kwargs)
@@ -437,6 +558,12 @@ def criar_decisao_roteamento(
     )
     if fora_das_categorias and "documento fora das categorias" not in problemas:
         problemas = ["documento fora das categorias", *problemas]
+
+    regras_custom = kwargs.get("regras_roteamento")
+    if regras_custom is None and isinstance(estado_ou_tipo, dict):
+        regras_custom = estado_ou_tipo.get("regras_roteamento")
+    regra_cfg = avaliar_regras_configuraveis(tipo, cid, regras_custom)
+    desc_custom = None
 
     if destino == Destino.FILA_EMERGENCIA_MEDICA:
         regra = "R-URGENCIA"
@@ -455,6 +582,11 @@ def criar_decisao_roteamento(
                 canal="Alerta_Plantao_Medico",
                 mensagem="Possível urgência com dados ambíguos: revisar com prioridade.",
             )
+    elif regra_cfg is not None and str(regra_cfg[0]) == str(destino):
+        regra = regra_cfg[1]
+        desc_custom = regra_cfg[2]
+        requer_auditoria = False
+        notificacao = None
     elif destino == Destino.FARMACIA_HOSPITALAR:
         regra = "R-RECEITA"
         requer_auditoria = False
@@ -468,7 +600,8 @@ def criar_decisao_roteamento(
         requer_auditoria = False
         notificacao = None
     else:
-        regra = REGRA_PRONTUARIO[0]
+        regra = regra_cfg[1] if regra_cfg else REGRA_PRONTUARIO[0]
+        desc_custom = regra_cfg[2] if regra_cfg else None
         requer_auditoria = False
         notificacao = None
 
@@ -482,6 +615,7 @@ def criar_decisao_roteamento(
         achado=achado,
         problemas=problemas,
         erro=erro,
+        descricao_custom=desc_custom,
     )
 
     return DecisaoRoteamento(

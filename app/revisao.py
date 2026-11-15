@@ -45,6 +45,19 @@ DESTINOS_REDIRECIONAVEIS = frozenset(
         "Fila_Emergencia_Medica",
     }
 )
+
+
+def obter_destinos_redirecionaveis() -> list[str]:
+    """H6.3.1 T5: lê os destinos configurados em ServicoRegras, excluindo a revisão humana."""
+    try:
+        from app.regras import servico_regras
+
+        destinos = servico_regras().obter_regras().destinos
+        return [d for d in destinos if d != "Fila_Revisao_Humana"]
+    except Exception:  # noqa: BLE001
+        return list(DESTINOS_REDIRECIONAVEIS)
+
+
 REGRA_AUDITORA = "R-AUDITORA"
 _TRAVA = threading.Lock()  # uma decisão por vez neste processo
 
@@ -275,7 +288,10 @@ def decidir_caso(
                     "corrija os dados ou redirecione"
                 )
         elif acao is AcaoAuditora.REDIRECIONAR:
-            if decisao.destino not in DESTINOS_REDIRECIONAVEIS:
+            destinos_permitidos = set(obter_destinos_redirecionaveis()) | set(
+                DESTINOS_REDIRECIONAVEIS
+            )
+            if decisao.destino not in destinos_permitidos:
                 raise DecisaoInvalida(f"destino inválido: {decisao.destino}", "destino")
             destino = decisao.destino
 
