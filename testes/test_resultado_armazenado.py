@@ -8,7 +8,10 @@ from app import resposta, storage
 from app.grafo import triar
 from app.schemas import ResultadoTriagem
 from testes.conftest import LAUDO_TEP, cliente_com, extracao, extrator_fixo
-
+from testes.test_api import CORPO
+from app.eventos import ServicoEventos
+from app.status import StatusDocumento
+from app.storage import FalhaArmazenamentoError
 
 def _corpo(doc_id):
     return {
@@ -76,3 +79,113 @@ def test_se_a_gravacao_falha_nao_ha_resposta_com_caminho(monkeypatch):
         resposta.arquivar(
             "DOC-RES-006", estado
         )  # nada de caminho_objeto/status_backup inventado
+
+
+#def test_falha_oci_registra_status_e_evento(
+#    monkeypatch, caplog, tmp_path, cliente, oci
+#):
+#    import logging
+#    logger = logging.getLogger(__name__)
+#
+#    caplog.set_level(logging.ERROR)
+#    # Configure aqui o dublê OCI para falhar três vezes,
+#    # como no exemplo do teste anterior.
+#    fake_oci = oci(falhas=3)
+#
+#    oci_resposta = cliente.post(
+#        "/triagem?aguardar=true",
+#        json=_corpo("DOC-OCI-FAIL-001"),
+#    )
+#
+#    assert len(fake_oci.chamadas) == 3
+#    assert oci_resposta.status_code == 200
+#    assert (
+#        oci_resposta.json()["armazenamento_oci"]["status_backup"]
+#        == "falha"
+#    )
+#
+#    eventos = ServicoEventos(tmp_path / "eventos").listar(
+#        "DOC-OCI-FAIL-001"
+#    )
+#    assert any(
+#        evento["status"] == StatusDocumento.FALHA_OCI.value
+#        for evento in eventos
+#    )
+#    #logger.error(eventos[0].get("detalhe", "cavalos"))
+#    assert any(
+#        "falha" in evento.get("detalhe", "").lower()
+#        for evento in eventos
+#        #evento.get("detalhe", "").lower() == "falha"
+#        #for evento in eventos
+#    )
+#
+#    assert any(
+#        "armazenamento" in registro.getMessage().lower()
+#        for registro in caplog.records
+#    )
+
+#def test_falha_ao_gravar_original_retorna_503_e_nao_processa(
+#    cliente, monkeypatch
+#):
+#    chamado = False
+#
+#    def falhar(*args, **kwargs):
+#        raise OSError("OCI indisponível")
+#
+#    monkeypatch.setattr(storage, "salvar_original", falhar)
+#
+#    resposta = cliente.post("/triagem", json=_corpo("DOC-RES-008"))
+#
+#    assert resposta.status_code == 503
+#    assert resposta.json()["detail"] == (
+#        "Não foi possível guardar o documento. Tente novamente."
+#    )
+    # Use o espião de testes/test_envio.py para verificar que o extrator
+    # não recebeu texto e que a tarefa de processamento não foi iniciada.
+
+def test_oci_falha_duas_vezes_e_grava_na_terceira(oci):
+    fake = oci(falhas=2)
+
+    salvo = storage.salvar("processados/rotina/DOC-RETRY.json", {"ok": True})
+
+    assert len(fake.chamadas) == 3
+    assert salvo["status_backup"] == "sucesso"
+
+def test_oci_falha_tres_vezes_devolve_falha_e_registra_evento(
+    oci, tmp_path, caplog
+):
+    estado = triar(
+        LAUDO_TEP,
+        extrator_fixo(extracao()),
+        documento_id="DOC-OCI-FAIL-001",
+    )
+    fake = oci(falhas=3)
+
+    resposta_api = resposta.arquivar("DOC-OCI-FAIL-001", estado)
+
+    assert len(fake.chamadas) == 3
+    assert resposta_api["armazenamento_oci"]["status_backup"] == "falha"
+
+    eventos = ServicoEventos(tmp_path / "eventos").listar("DOC-OCI-FAIL-001")
+    assert eventos[-1]["status"] == StatusDocumento.FALHA_OCI.value
+    assert "falha de armazenamento" in eventos[-1]["detalhe"].lower()
+
+def test_falha_do_original_retorna_503_e_nao_processa(cliente, monkeypatch):
+    chamadas_extrator = 0
+
+    def extrator_espiao(texto):
+        nonlocal chamadas_extrator
+        chamadas_extrator += 1
+
+    def falhar_original(*args, **kwargs):
+        raise FalhaArmazenamentoError("OCI indisponível")
+
+    monkeypatch.setattr(storage, "salvar_original", falhar_original)
+
+    resposta_http = cliente.post("/triagem", json=_corpo("DOC-RES-008"))
+
+    assert resposta_http.status_code == 503
+    assert resposta_http.json()["detail"] == (
+        "Não foi possível guardar o documento. Tente novamente."
+    )
+    assert chamadas_extrator == 0

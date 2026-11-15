@@ -1,9 +1,11 @@
 import io
 
+import oci as oci_sdk
 import pytest
 from fastapi.testclient import TestClient
 from reportlab.pdfgen import canvas
 
+from app import storage
 from app.api import criar_app
 
 # from app.schemas import Exame, Extracao, Medicamento, Medico, Paciente
@@ -93,3 +95,66 @@ def _eventos_em_tmp(tmp_path, monkeypatch):
 def _sem_webhook_nos_testes(monkeypatch):
     """H3.3.2: nenhum teste chama o n8n de verdade, mesmo com N8N_WEBHOOK_URL no .env."""
     monkeypatch.delenv("N8N_WEBHOOK_URL", raising=False)
+
+# ---- T2/T4 no OCI: content-type correto e escrita condicional (cliente falso, sem rede) ----
+class OCIFalso:
+    """Cliente OCI falso que registra chamadas e simula falhas transitórias."""
+
+    def __init__(
+        self,
+        falhas: int | None = None,
+        erro: Exception | None = None,
+        falhar_nome=None,
+    ):
+        self.erro = erro or oci_sdk.exceptions.ServiceError(
+            status=503, code="ServiceUnavailable", headers={}, message="OCI indisponível"
+        )
+        # erro explícito sem 'falhas' => falha sempre (ex.: 412)
+        self.falhas = falhas if falhas is not None else (10**6 if erro else 0)
+        self.falhar_nome = falhar_nome
+        self.chamadas = []
+
+    def get_object(self, namespace, bucket, nome, **kw):
+        # Preserve este stub se outros testes passarem a consultar OCI.
+        return None
+
+    def put_object(self, namespace, bucket, nome, corpo, retry_strategy=None, **kw):
+        def tentar():
+            self.chamadas.append(
+                {
+                    "namespace": namespace,
+                    "bucket": bucket,
+                    "nome": nome,
+                    "corpo": corpo,
+                    **kw,
+                }
+            )
+            deve_falhar = (
+                len(self.chamadas) <= self.falhas
+                if self.falhar_nome is None
+                else nome == self.falhar_nome
+            )
+            if deve_falhar:
+                raise self.erro
+
+        if retry_strategy is not None:
+            return retry_strategy.make_retrying_call(tentar)
+        return tentar()
+
+
+class Erro412(Exception):
+    status = 412
+
+
+@pytest.fixture
+def oci(monkeypatch):
+    """Factory de cliente OCI falso; cada chamada cria um dublê independente."""
+    monkeypatch.setattr("time.sleep", lambda s: None)  # sem espera real no retry
+
+    def criar(falhas: int | None = None, erro: Exception | None = None):
+        falso = OCIFalso(falhas=falhas, erro=erro)
+        monkeypatch.setenv("OCI_NAMESPACE", "ns-teste")
+        monkeypatch.setattr(storage, "_cliente_oci", lambda: falso)
+        return falso
+
+    return criar

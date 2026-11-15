@@ -91,6 +91,14 @@ class ServicoEventos:
             os.replace(tmp, caminho)  # escrita atômica
         return evento
 
+    def registrar_falha_armazenamento(self, documento_id: str, detalhe: str):
+
+        return self.registrar(
+            documento_id,
+            StatusDocumento.FALHA_OCI,
+            detalhe=detalhe,
+        )
+
     def registrar_decisao(
         self,
         documento_id: str,
