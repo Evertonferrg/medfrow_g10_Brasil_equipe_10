@@ -261,7 +261,7 @@ def criar_app(extrator=None) -> FastAPI:
 
     ligar_fila_revisao(app)  # H4.2.1: GET /filas/revisao
     ligar_decisao(app, colaboradores_padrao())  # H4.4.1: POST /documentos/{id}/decisao
-    ligar_historico(app)  # H5.3.2: GET /historico/exportar
+    ligar_historico(app)  # H5.2.1 GET /historico; H5.3.2 GET /historico/exportar
     return app
 
 
