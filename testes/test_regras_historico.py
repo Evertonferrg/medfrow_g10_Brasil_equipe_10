@@ -1,4 +1,3 @@
-
 """H6.4.1 — Testes do histórico e restauração de versões das regras."""
 
 import pytest
@@ -49,10 +48,7 @@ def test_alteracao_registra_nova_versao_e_diferencas():
     assert nova.atualizado_por == "Dra. Ana"
     assert nova.atualizado_em is not None
 
-    versao_nova = next(
-        item for item in historico
-        if item["versao"] == "v2"
-    )
+    versao_nova = next(item for item in historico if item["versao"] == "v2")
 
     assert versao_nova["autor"] == "Dra. Ana"
     assert versao_nova["data"] is not None
@@ -130,10 +126,7 @@ def test_api_lista_historico_de_versoes(cliente):
     dados = resposta.json()
 
     assert "versoes" in dados
-    assert any(
-        item["versao"] == "v1"
-        for item in dados["versoes"]
-    )
+    assert any(item["versao"] == "v1" for item in dados["versoes"])
 
 
 def test_api_restaura_versao_historica(cliente):

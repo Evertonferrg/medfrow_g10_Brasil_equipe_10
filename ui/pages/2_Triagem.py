@@ -14,12 +14,9 @@ from pathlib import Path
 import requests
 import streamlit as st
 
-
 PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
     sys.path.insert(0, PASTA_UI)
-
-from services.estilo import preparar_pagina
 
 from componentes.classificacao import (  # noqa: F401
     carregar_limite_confianca,
@@ -27,6 +24,7 @@ from componentes.classificacao import (  # noqa: F401
     formatar_confianca,
 )
 from componentes.fila import ROTULO_STATUS  # H2.3.2 T5
+from services.estilo import preparar_pagina
 
 try:
     from componentes.paciente import bloco_paciente

@@ -1,4 +1,3 @@
-
 """H6.1.1 T2 / H6.3.1 T1-T3 / H6.4.1 — Rotas de configuração, roteamento e histórico de regras."""
 
 from __future__ import annotations
@@ -29,21 +28,15 @@ class AtualizarLimiteRequest(BaseModel):
     @model_validator(mode="after")
     def _verificar_valor(self) -> AtualizarLimiteRequest:
         val = (
-            self.limite_confianca
-            if self.limite_confianca is not None
-            else self.limite
+            self.limite_confianca if self.limite_confianca is not None else self.limite
         )
         if val is None:
-            raise ValueError(
-                "limite_confianca ou limite deve ser informado"
-            )
+            raise ValueError("limite_confianca ou limite deve ser informado")
         return self
 
     def valor_limite(self) -> float:
         val = (
-            self.limite_confianca
-            if self.limite_confianca is not None
-            else self.limite
+            self.limite_confianca if self.limite_confianca is not None else self.limite
         )
         return float(val)
 
@@ -86,9 +79,7 @@ def ligar_regras(app: FastAPI) -> None:
     @app.get(
         "/regras",
         response_model=RegrasConfig,
-        responses={
-            200: {"description": "Configuração completa de regras ativas"}
-        },
+        responses={200: {"description": "Configuração completa de regras ativas"}},
     )
     def obter_regras():
         return servico_regras().obter_regras()
@@ -156,9 +147,7 @@ def ligar_regras(app: FastAPI) -> None:
 
     @app.get(
         "/regras/roteamento",
-        responses={
-            200: {"description": "Lista de regras de roteamento ativas"}
-        },
+        responses={200: {"description": "Lista de regras de roteamento ativas"}},
     )
     def listar_regras_roteamento():
         cfg = servico_regras().obter_regras()
@@ -172,9 +161,7 @@ def ligar_regras(app: FastAPI) -> None:
         response_model=RegrasConfig,
         responses={
             200: {"description": "Regra de roteamento criada com sucesso"},
-            422: {
-                "description": "Destino inexistente ou condição inválida"
-            },
+            422: {"description": "Destino inexistente ou condição inválida"},
         },
     )
     def criar_regra_roteamento(corpo: CriarRegraRequest):
@@ -186,11 +173,7 @@ def ligar_regras(app: FastAPI) -> None:
                 if not corpo.tipo_condicao or not corpo.valor:
                     return JSONResponse(
                         status_code=422,
-                        content={
-                            "detail": (
-                                "tipo_condicao e valor são obrigatórios"
-                            )
-                        },
+                        content={"detail": ("tipo_condicao e valor são obrigatórios")},
                     )
                 cond = CondicaoRegra(
                     tipo=corpo.tipo_condicao,
@@ -248,17 +231,11 @@ def ligar_regras(app: FastAPI) -> None:
     # H6.4.1 T3 — Consulta o histórico de versões.
     @app.get(
         "/regras/versoes",
-        responses={
-            200: {
-                "description": "Histórico de versões das regras"
-            }
-        },
+        responses={200: {"description": "Histórico de versões das regras"}},
     )
     def listar_versoes():
         """Retorna o histórico de alterações das regras."""
-        return {
-            "versoes": servico_regras().listar_versoes()
-        }
+        return {"versoes": servico_regras().listar_versoes()}
 
     # H6.4.1 T3 — Restaura uma versão histórica.
     @app.post(
@@ -266,11 +243,7 @@ def ligar_regras(app: FastAPI) -> None:
         response_model=RegrasConfig,
         responses={
             200: {"description": "Versão restaurada com sucesso"},
-            422: {
-                "description": (
-                    "Versão histórica não encontrada ou inválida"
-                )
-            },
+            422: {"description": ("Versão histórica não encontrada ou inválida")},
         },
     )
     def restaurar_versao(
@@ -293,11 +266,7 @@ def ligar_regras(app: FastAPI) -> None:
 
     @app.get(
         "/regras/limite",
-        responses={
-            200: {
-                "description": "Limite de confiança e versão atuais"
-            }
-        },
+        responses={200: {"description": "Limite de confiança e versão atuais"}},
     )
     def obter_limite():
         cfg = servico_regras().obter_regras()
@@ -312,14 +281,8 @@ def ligar_regras(app: FastAPI) -> None:
         "/regras/limite",
         response_model=RegrasConfig,
         responses={
-            200: {
-                "description": "Limite atualizado e nova versão criada"
-            },
-            422: {
-                "description": (
-                    "Limite inválido (deve estar entre 0.50 e 0.99)"
-                )
-            },
+            200: {"description": "Limite atualizado e nova versão criada"},
+            422: {"description": ("Limite inválido (deve estar entre 0.50 e 0.99)")},
         },
     )
     def atualizar_limite(
@@ -355,10 +318,7 @@ def ligar_regras(app: FastAPI) -> None:
             return JSONResponse(
                 status_code=422,
                 content={
-                    "detail": (
-                        "limite_confianca é obrigatório "
-                        "(entre 0.50 e 0.99)"
-                    )
+                    "detail": ("limite_confianca é obrigatório (entre 0.50 e 0.99)")
                 },
             )
 

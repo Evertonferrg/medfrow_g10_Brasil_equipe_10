@@ -144,13 +144,9 @@ class RegrasConfig(BaseModel):
         ]
     )
 
-    destinos: list[str] = Field(
-        default_factory=lambda: list(DESTINOS_OFICIAIS)
-    )
+    destinos: list[str] = Field(default_factory=lambda: list(DESTINOS_OFICIAIS))
 
-    formatos_aceitos: list[str] = Field(
-        default_factory=lambda: ["PDF", "JPG", "PNG"]
-    )
+    formatos_aceitos: list[str] = Field(default_factory=lambda: ["PDF", "JPG", "PNG"])
 
     tamanho_maximo_mb: int = Field(default=10)
     regras_roteamento: list[RegraRoteamento] = Field(default_factory=list)
@@ -221,11 +217,7 @@ class ServicoRegras:
             bruto = storage.ler(self.caminho_storage)
 
             if bruto:
-                texto = (
-                    bruto.decode("utf-8")
-                    if isinstance(bruto, bytes)
-                    else bruto
-                )
+                texto = bruto.decode("utf-8") if isinstance(bruto, bytes) else bruto
 
                 dados = json.loads(texto)
 
@@ -233,9 +225,7 @@ class ServicoRegras:
                     return RegrasConfig.model_validate(dados)
 
         except Exception:
-            logger.exception(
-                "Falha ao ler regras do storage; usando arquivo padrão"
-            )
+            logger.exception("Falha ao ler regras do storage; usando arquivo padrão")
 
         dados_repo = config.carregar_regras()
 
@@ -283,9 +273,7 @@ class ServicoRegras:
 
         diferencas = {}
 
-        for campo in sorted(
-            set(dados_anteriores) | set(dados_novos)
-        ):
+        for campo in sorted(set(dados_anteriores) | set(dados_novos)):
             valor_anterior = dados_anteriores.get(campo)
             valor_novo = dados_novos.get(campo)
 
@@ -305,9 +293,7 @@ class ServicoRegras:
 
         numeros = []
 
-        for caminho in storage.listar(
-            f"{CAMINHO_VERSOES_STORAGE}/"
-        ):
+        for caminho in storage.listar(f"{CAMINHO_VERSOES_STORAGE}/"):
             nome = caminho.rsplit("/", 1)[-1]
 
             match = re.fullmatch(r"v(\d+)\.json", nome)
@@ -408,11 +394,7 @@ class ServicoRegras:
                 continue
 
             try:
-                texto = (
-                    bruto.decode("utf-8")
-                    if isinstance(bruto, bytes)
-                    else bruto
-                )
+                texto = bruto.decode("utf-8") if isinstance(bruto, bytes) else bruto
 
                 dados = json.loads(texto)
 
@@ -426,21 +408,15 @@ class ServicoRegras:
                         "autor": configuracao.atualizado_por or "sistema",
                         "data": configuracao.atualizado_em,
                         "diferencas": {},
-                        "configuracao": configuracao.model_dump(
-                            mode="json"
-                        ),
+                        "configuracao": configuracao.model_dump(mode="json"),
                     }
 
                 else:
-                    configuracao = RegrasConfig.model_validate(
-                        dados["configuracao"]
-                    )
+                    configuracao = RegrasConfig.model_validate(dados["configuracao"])
 
                     registro = {
                         **dados,
-                        "configuracao": configuracao.model_dump(
-                            mode="json"
-                        ),
+                        "configuracao": configuracao.model_dump(mode="json"),
                     }
 
                 versoes.append(registro)
@@ -465,9 +441,7 @@ class ServicoRegras:
         """Restaura uma versão histórica criando uma nova versão."""
 
         if not re.fullmatch(r"v\d+", str(versao)):
-            raise ValueError(
-                f"Identificador de versão inválido: {versao}"
-            )
+            raise ValueError(f"Identificador de versão inválido: {versao}")
 
         historico = self.listar_versoes()
         registro = next(
@@ -476,13 +450,9 @@ class ServicoRegras:
         )
 
         if registro is None:
-            raise ValueError(
-                f"Versão histórica '{versao}' não encontrada"
-            )
+            raise ValueError(f"Versão histórica '{versao}' não encontrada")
 
-        configuracao_restaurada = RegrasConfig.model_validate(
-            registro["configuracao"]
-        )
+        configuracao_restaurada = RegrasConfig.model_validate(registro["configuracao"])
         atual = self.obter_regras()
         nova_versao = self._proxima_versao_disponivel(atual.versao)
 
@@ -512,15 +482,11 @@ class ServicoRegras:
         """Atualiza o limite de confiança e cria uma nova versão."""
 
         if novo_limite < 0.50 or novo_limite > 0.99:
-            raise ValueError(
-                "limite_confianca deve estar entre 0.50 e 0.99"
-            )
+            raise ValueError("limite_confianca deve estar entre 0.50 e 0.99")
 
         atual = self.obter_regras()
 
-        nova_versao = self._proxima_versao_disponivel(
-            atual.versao
-        )
+        nova_versao = self._proxima_versao_disponivel(atual.versao)
 
         agora = datetime.now(UTC).isoformat()
 
@@ -554,9 +520,7 @@ class ServicoRegras:
         if nome in atual.destinos:
             return atual
 
-        nova_versao = self._proxima_versao_disponivel(
-            atual.versao
-        )
+        nova_versao = self._proxima_versao_disponivel(atual.versao)
 
         agora = datetime.now(UTC).isoformat()
 
@@ -590,17 +554,11 @@ class ServicoRegras:
                 "na lista de destinos configurados"
             )
 
-        nova_versao = self._proxima_versao_disponivel(
-            atual.versao
-        )
+        nova_versao = self._proxima_versao_disponivel(atual.versao)
 
         agora = datetime.now(UTC).isoformat()
 
-        novas_regras = [
-            r
-            for r in atual.regras_roteamento
-            if r.id != regra.id
-        ]
+        novas_regras = [r for r in atual.regras_roteamento if r.id != regra.id]
 
         novas_regras.append(regra)
 
@@ -626,23 +584,14 @@ class ServicoRegras:
 
         atual = self.obter_regras()
 
-        if not any(
-            r.id == regra_id
-            for r in atual.regras_roteamento
-        ):
+        if not any(r.id == regra_id for r in atual.regras_roteamento):
             return atual
 
-        nova_versao = self._proxima_versao_disponivel(
-            atual.versao
-        )
+        nova_versao = self._proxima_versao_disponivel(atual.versao)
 
         agora = datetime.now(UTC).isoformat()
 
-        novas_regras = [
-            r
-            for r in atual.regras_roteamento
-            if r.id != regra_id
-        ]
+        novas_regras = [r for r in atual.regras_roteamento if r.id != regra_id]
 
         nova_config = atual.model_copy(
             update={
@@ -667,32 +616,20 @@ class ServicoRegras:
         nome = str(destino).strip()
 
         if nome in DESTINOS_OFICIAIS:
-            raise ValueError(
-                "Destinos oficiais do edital não podem ser removidos"
-            )
+            raise ValueError("Destinos oficiais do edital não podem ser removidos")
 
         atual = self.obter_regras()
 
         if nome not in atual.destinos:
             return atual
 
-        nova_versao = self._proxima_versao_disponivel(
-            atual.versao
-        )
+        nova_versao = self._proxima_versao_disponivel(atual.versao)
 
         agora = datetime.now(UTC).isoformat()
 
-        novos_destinos = [
-            d
-            for d in atual.destinos
-            if d != nome
-        ]
+        novos_destinos = [d for d in atual.destinos if d != nome]
 
-        novas_regras = [
-            r
-            for r in atual.regras_roteamento
-            if r.destino != nome
-        ]
+        novas_regras = [r for r in atual.regras_roteamento if r.destino != nome]
 
         nova_config = atual.model_copy(
             update={
@@ -707,6 +644,7 @@ class ServicoRegras:
         self._registrar_alteracao(atual, nova_config)
 
         return nova_config
+
 
 _instancia_servico: ServicoRegras | None = None
 

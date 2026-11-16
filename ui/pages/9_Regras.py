@@ -1,4 +1,3 @@
-
 """— Página de configuração de regras, limite de confiança e roteamento."""
 
 from __future__ import annotations
@@ -310,8 +309,7 @@ def carregar_historico() -> tuple[list | None, str | None]:
 
         if resposta.status_code != 200:
             return None, (
-                f"Erro ao consultar histórico: "
-                f"{resposta.status_code} - {resposta.text}"
+                f"Erro ao consultar histórico: {resposta.status_code} - {resposta.text}"
             )
 
         dados = resposta.json()
@@ -330,9 +328,7 @@ def carregar_historico() -> tuple[list | None, str | None]:
 
 @st.dialog("Confirmar restauração")
 def confirmar_restauracao(versao: str):
-    st.warning(
-        f"Você está prestes a restaurar a versão **{versao}** das regras."
-    )
+    st.warning(f"Você está prestes a restaurar a versão **{versao}** das regras.")
     st.write(
         "Essa operação criará uma nova versão com as configurações "
         "selecionadas, preservando o histórico existente."
@@ -350,11 +346,7 @@ def confirmar_restauracao(versao: str):
             try:
                 resposta = requests.post(
                     f"{API_URL}/regras/restaurar/{versao}",
-                    json={
-                        "auditora": st.session_state.get(
-                            "auditora", "Auditora"
-                        )
-                    },
+                    json={"auditora": st.session_state.get("auditora", "Auditora")},
                     timeout=10,
                 )
 
@@ -372,13 +364,9 @@ def confirmar_restauracao(versao: str):
                     )
 
             except requests.RequestException as erro:
-                st.error(
-                    f"Não foi possível conectar à API: {erro}"
-                )
+                st.error(f"Não foi possível conectar à API: {erro}")
             except ValueError as erro:
-                st.error(
-                    f"A API retornou uma resposta inválida: {erro}"
-                )
+                st.error(f"A API retornou uma resposta inválida: {erro}")
 
     with col_cancelar:
         if st.button(
@@ -408,12 +396,9 @@ else:
                 "Versão": item.get("versao", "—"),
                 "Autor": item.get("autor", "—"),
                 "Data": str(item.get("data", "—"))[:19].replace("T", " "),
-                "Limite de confiança": configuracao.get(
-                    "limite_confianca", "—"
-                ),
-                "Alterações": ", ".join(
-                    item.get("diferencas", {}).keys()
-                ) or "Versão inicial",
+                "Limite de confiança": configuracao.get("limite_confianca", "—"),
+                "Alterações": ", ".join(item.get("diferencas", {}).keys())
+                or "Versão inicial",
             }
         )
 
@@ -428,8 +413,7 @@ else:
     versoes_disponiveis = [
         item.get("versao")
         for item in historico
-        if item.get("versao")
-        and item.get("versao") != versao_atual
+        if item.get("versao") and item.get("versao") != versao_atual
     ]
 
     if versoes_disponiveis:
