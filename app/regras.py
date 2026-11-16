@@ -1,8 +1,9 @@
-"""H6.1.1 T1 / H6.3.1 T1-T2 — Serviço de regras dinâmicas e modelos RegrasConfig e RegraRoteamento.
-
-Gerencia as regras de triagem e roteamento do MediFlow. Lê a configuração ativa do storage
-(bucket OCI ou storage local) a cada execução do grafo, com fallback para o
-arquivo padrão do repositório (config/regras.json).
+"""
+H6.4.1:
+- Registra cada versão antes de atualizar a configuração ativa.
+- Guarda autor, data, configuração e diferenças campo a campo.
+- Lista versões anteriores.
+- Permite restaurar uma versão sem apagar o histórico.
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ class TipoCondicao(str, Enum):
 
 
 class CondicaoRegra(BaseModel):
-    """Condição restrita a um conjunto fechado: nunca executa código livre (H6.3.1 T2)."""
+    """Condição restrita a um conjunto fechado: nunca executa código livre."""
 
     tipo: TipoCondicao
     valor: str
@@ -51,7 +52,9 @@ class CondicaoRegra(BaseModel):
     def _normalizar_tipo(cls, v: Any) -> TipoCondicao:
         if isinstance(v, TipoCondicao):
             return v
+
         v_str = str(v).strip().lower()
+
         if v_str in (
             "tipo_documento_igual",
             "tipo_documento_igual_a",
@@ -59,6 +62,7 @@ class CondicaoRegra(BaseModel):
             "tipo",
         ):
             return TipoCondicao.TIPO_DOCUMENTO_IGUAL
+
         if v_str in (
             "cid_comeca_com",
             "cid_inicia_com",
@@ -66,21 +70,25 @@ class CondicaoRegra(BaseModel):
             "cid",
         ):
             return TipoCondicao.CID_COMECA_COM
+
         raise ValueError(
-            f"Tipo de condição '{v}' inválido. Condições permitidas: 'tipo_documento_igual', 'cid_comeca_com'."
+            f"Tipo de condição '{v}' inválido. Condições permitidas: "
+            "'tipo_documento_igual', 'cid_comeca_com'."
         )
 
     @field_validator("valor")
     @classmethod
     def _validar_valor(cls, v: str) -> str:
         v_limpo = str(v).strip()
+
         if not v_limpo:
             raise ValueError("O valor da condição não pode ser vazio.")
+
         return v_limpo
 
 
 class RegraRoteamento(BaseModel):
-    """Modelo da regra de roteamento configurável (H6.3.1 T2)."""
+    """Modelo da regra de roteamento configurável."""
 
     id: str = Field(default_factory=lambda: f"R-{uuid.uuid4().hex[:6].upper()}")
     condicao: CondicaoRegra
@@ -98,21 +106,25 @@ class RegraRoteamento(BaseModel):
             tipo = dados.get("tipo_condicao") or dados.get("tipo")
             valor = dados.get("valor", "")
             dados["condicao"] = {"tipo": tipo, "valor": valor}
+
         return dados
 
     @field_validator("destino")
     @classmethod
     def _validar_destino(cls, v: str) -> str:
         v_limpo = str(v).strip()
+
         if not v_limpo:
             raise ValueError("O destino da regra não pode ser vazio.")
+
         return v_limpo
 
 
 class RegrasConfig(BaseModel):
-    """Modelo das regras de triagem configuráveis (H6.1.1 T1 / H6.3.1 T1)."""
+    """Modelo das regras de triagem configuráveis."""
 
     limite_confianca: float = Field(default=0.80, ge=0.50, le=0.99)
+
     campos_criticos: list[str] = Field(
         default_factory=lambda: [
             "paciente.nome",
@@ -122,6 +134,7 @@ class RegrasConfig(BaseModel):
             "cid_sugerido",
         ]
     )
+
     canais_origem: list[str] = Field(
         default_factory=lambda: [
             "Pronto_Socorro",
@@ -130,10 +143,18 @@ class RegrasConfig(BaseModel):
             "Operadora",
         ]
     )
-    destinos: list[str] = Field(default_factory=lambda: list(DESTINOS_OFICIAIS))
-    formatos_aceitos: list[str] = Field(default_factory=lambda: ["PDF", "JPG", "PNG"])
+
+    destinos: list[str] = Field(
+        default_factory=lambda: list(DESTINOS_OFICIAIS)
+    )
+
+    formatos_aceitos: list[str] = Field(
+        default_factory=lambda: ["PDF", "JPG", "PNG"]
+    )
+
     tamanho_maximo_mb: int = Field(default=10)
     regras_roteamento: list[RegraRoteamento] = Field(default_factory=list)
+
     versao: str = "v1"
     atualizado_por: str | None = None
     atualizado_em: str | None = None
@@ -141,86 +162,346 @@ class RegrasConfig(BaseModel):
     @field_validator("destinos")
     @classmethod
     def _validar_destinos(cls, destinos: list[str]) -> list[str]:
-        # T1: os cinco destinos oficiais do edital ficam fixos e não podem ser removidos
         faltando = [d for d in DESTINOS_OFICIAIS if d not in destinos]
+
         if faltando:
             raise ValueError(
-                f"Os destinos oficiais do edital são fixos e não podem ser removidos: {', '.join(faltando)}"
+                "Os destinos oficiais do edital são fixos e não podem "
+                f"ser removidos: {', '.join(faltando)}"
             )
+
         destinos_limpos: list[str] = []
-        for d in destinos:
-            d_str = str(d).strip()
-            if not d_str:
+
+        for destino in destinos:
+            destino_str = str(destino).strip()
+
+            if not destino_str:
                 raise ValueError("Nome de destino não pode ser vazio")
-            if d_str not in destinos_limpos:
-                destinos_limpos.append(d_str)
+
+            if destino_str not in destinos_limpos:
+                destinos_limpos.append(destino_str)
+
         return destinos_limpos
 
     @model_validator(mode="after")
     def _validar_regras_roteamento(self) -> RegrasConfig:
         destinos_set = set(self.destinos)
+
         for regra in self.regras_roteamento:
             if regra.destino not in destinos_set:
                 raise ValueError(
-                    f"Destino '{regra.destino}' da regra '{regra.id}' não existe na lista de destinos configurados"
+                    f"Destino '{regra.destino}' da regra '{regra.id}' "
+                    "não existe na lista de destinos configurados"
                 )
+
         return self
 
 
 def _proxima_versao(versao_atual: str) -> str:
-    """Calcula o identificador da próxima versão (v1 -> v2, etc.)."""
-    m = re.match(r"^v(\d+)$", str(versao_atual).strip())
-    if m:
-        return f"v{int(m.group(1)) + 1}"
+    """Calcula o identificador da próxima versão."""
+
+    match = re.match(r"^v(\d+)$", str(versao_atual).strip())
+
+    if match:
+        return f"v{int(match.group(1)) + 1}"
+
     return "v2"
 
 
 class ServicoRegras:
-    """Serviço responsável por ler e atualizar as regras de triagem."""
+    """Serviço responsável por ler, atualizar e versionar as regras."""
 
     def __init__(self, caminho_storage: str = CAMINHO_REGRAS_STORAGE):
         self.caminho_storage = caminho_storage
 
     def obter_regras(self) -> RegrasConfig:
-        """Lê do bucket a cada chamada, com o arquivo do repositório como padrão."""
+        """Lê as regras do storage, usando o arquivo do repositório como fallback."""
+
         try:
             bruto = storage.ler(self.caminho_storage)
+
             if bruto:
-                texto = bruto.decode("utf-8") if isinstance(bruto, bytes) else bruto
+                texto = (
+                    bruto.decode("utf-8")
+                    if isinstance(bruto, bytes)
+                    else bruto
+                )
+
                 dados = json.loads(texto)
+
                 if isinstance(dados, dict):
                     return RegrasConfig.model_validate(dados)
-        except Exception:
-            logger.exception("Falha ao ler regras do storage; usando arquivo padrão")
 
-        # Fallback para o arquivo do repositório
+        except Exception:
+            logger.exception(
+                "Falha ao ler regras do storage; usando arquivo padrão"
+            )
+
         dados_repo = config.carregar_regras()
+
         if dados_repo:
             try:
                 dados_repo.setdefault("versao", "v1")
                 return RegrasConfig.model_validate(dados_repo)
+
             except Exception:
                 logger.exception("Arquivo de regras do repositório inválido")
 
         return RegrasConfig()
 
+    def _caminho_versao(self, versao: str) -> str:
+        """Monta o caminho seguro de uma versão."""
+
+        if not re.fullmatch(r"v\d+", str(versao)):
+            raise ValueError(f"Identificador de versão inválido: {versao}")
+
+        return f"{CAMINHO_VERSOES_STORAGE}/{versao}.json"
+
+    @staticmethod
+    def _dados_comparaveis(regras: RegrasConfig) -> dict:
+        """Retorna os campos de configuração, sem metadados da versão."""
+
+        return regras.model_dump(
+            mode="json",
+            exclude={
+                "versao",
+                "atualizado_por",
+                "atualizado_em",
+            },
+        )
+
+    @classmethod
+    def _calcular_diferencas(
+        cls,
+        anterior: RegrasConfig,
+        nova: RegrasConfig,
+    ) -> dict:
+        """Calcula as diferenças campo a campo entre duas configurações."""
+
+        dados_anteriores = cls._dados_comparaveis(anterior)
+        dados_novos = cls._dados_comparaveis(nova)
+
+        diferencas = {}
+
+        for campo in sorted(
+            set(dados_anteriores) | set(dados_novos)
+        ):
+            valor_anterior = dados_anteriores.get(campo)
+            valor_novo = dados_novos.get(campo)
+
+            if valor_anterior != valor_novo:
+                diferencas[campo] = {
+                    "anterior": valor_anterior,
+                    "novo": valor_novo,
+                }
+
+        return diferencas
+
+    def _proxima_versao_disponivel(
+        self,
+        versao_atual: str,
+    ) -> str:
+        """Evita reutilizar identificadores já existentes no histórico."""
+
+        numeros = []
+
+        for caminho in storage.listar(
+            f"{CAMINHO_VERSOES_STORAGE}/"
+        ):
+            nome = caminho.rsplit("/", 1)[-1]
+
+            match = re.fullmatch(r"v(\d+)\.json", nome)
+
+            if match:
+                numeros.append(int(match.group(1)))
+
+        match_atual = re.fullmatch(
+            r"v(\d+)",
+            str(versao_atual),
+        )
+
+        if match_atual:
+            numeros.append(int(match_atual.group(1)))
+
+        return f"v{max(numeros, default=1) + 1}"
+
+    def _gravar_registro_versao(
+        self,
+        regras: RegrasConfig,
+        diferencas: dict | None = None,
+    ) -> None:
+        """Grava uma versão histórica sem permitir sobrescrita."""
+
+        registro = {
+            "versao": regras.versao,
+            "autor": regras.atualizado_por or "sistema",
+            "data": regras.atualizado_em or datetime.now(UTC).isoformat(),
+            "diferencas": diferencas or {},
+            "configuracao": regras.model_dump(mode="json"),
+        }
+
+        storage.salvar(
+            self._caminho_versao(regras.versao),
+            registro,
+            sobrescrever=False,
+        )
+
     def salvar_regras(self, regras: RegrasConfig) -> None:
-        """Grava a configuração no storage e registra a versão."""
+        """Registra o histórico antes de atualizar a configuração ativa.
+
+        Mantém compatibilidade com a inicialização usada pelos testes.
+        """
+
+        self._gravar_registro_versao(regras)
+
         payload = regras.model_dump_json(indent=2).encode("utf-8")
-        storage.salvar(self.caminho_storage, payload, sobrescrever=True)
 
-        # Salva também no histórico de versões (H6.4.1)
-        caminho_versao = f"{CAMINHO_VERSOES_STORAGE}/{regras.versao}.json"
-        storage.salvar(caminho_versao, payload, sobrescrever=True)
+        storage.salvar(
+            self.caminho_storage,
+            payload,
+            sobrescrever=True,
+        )
 
-    def _arquivar_versao(self, atual: RegrasConfig) -> None:
-        caminho_v_anterior = f"{CAMINHO_VERSOES_STORAGE}/{atual.versao}.json"
-        if not storage.existe(caminho_v_anterior):
-            storage.salvar(
-                caminho_v_anterior,
-                atual.model_dump_json(indent=2).encode("utf-8"),
-                sobrescrever=True,
+    def _registrar_alteracao(
+        self,
+        atual: RegrasConfig,
+        nova: RegrasConfig,
+    ) -> None:
+        """Registra a alteração antes de atualizar as regras ativas."""
+
+        caminho_anterior = self._caminho_versao(atual.versao)
+
+        # Preserva a versão anterior caso ela ainda não esteja no histórico.
+        if not storage.existe(caminho_anterior):
+            self._gravar_registro_versao(atual)
+
+        diferencas = self._calcular_diferencas(atual, nova)
+
+        # Primeiro grava o histórico da nova versão.
+        self._gravar_registro_versao(nova, diferencas)
+
+        # Só depois atualiza a configuração ativa.
+        payload = nova.model_dump_json(indent=2).encode("utf-8")
+
+        storage.salvar(
+            self.caminho_storage,
+            payload,
+            sobrescrever=True,
+        )
+
+    def listar_versoes(self) -> list[dict]:
+        """Lista versões históricas, aceitando também arquivos antigos."""
+
+        prefixo = f"{CAMINHO_VERSOES_STORAGE}/"
+        versoes = []
+
+        for caminho in storage.listar(prefixo):
+            if not re.fullmatch(
+                rf"{re.escape(prefixo)}v\d+\.json",
+                caminho,
+            ):
+                continue
+
+            bruto = storage.ler(caminho)
+
+            if not bruto:
+                continue
+
+            try:
+                texto = (
+                    bruto.decode("utf-8")
+                    if isinstance(bruto, bytes)
+                    else bruto
+                )
+
+                dados = json.loads(texto)
+
+                # Compatibilidade com o histórico antigo, que salvava
+                # diretamente o JSON de RegrasConfig.
+                if "configuracao" not in dados:
+                    configuracao = RegrasConfig.model_validate(dados)
+
+                    registro = {
+                        "versao": configuracao.versao,
+                        "autor": configuracao.atualizado_por or "sistema",
+                        "data": configuracao.atualizado_em,
+                        "diferencas": {},
+                        "configuracao": configuracao.model_dump(
+                            mode="json"
+                        ),
+                    }
+
+                else:
+                    configuracao = RegrasConfig.model_validate(
+                        dados["configuracao"]
+                    )
+
+                    registro = {
+                        **dados,
+                        "configuracao": configuracao.model_dump(
+                            mode="json"
+                        ),
+                    }
+
+                versoes.append(registro)
+
+            except Exception:
+                logger.exception(
+                    "Não foi possível carregar a versão histórica: %s",
+                    caminho,
+                )
+
+        return sorted(
+            versoes,
+            key=lambda item: int(item["versao"][1:]),
+            reverse=True,
+        )
+
+    def restaurar_versao(
+        self,
+        versao: str,
+        auditora: str = "auditora",
+    ) -> RegrasConfig:
+        """Restaura uma versão histórica criando uma nova versão."""
+
+        if not re.fullmatch(r"v\d+", str(versao)):
+            raise ValueError(
+                f"Identificador de versão inválido: {versao}"
             )
+
+        historico = self.listar_versoes()
+        registro = next(
+            (item for item in historico if item["versao"] == versao),
+            None,
+        )
+
+        if registro is None:
+            raise ValueError(
+                f"Versão histórica '{versao}' não encontrada"
+            )
+
+        configuracao_restaurada = RegrasConfig.model_validate(
+            registro["configuracao"]
+        )
+        atual = self.obter_regras()
+        nova_versao = self._proxima_versao_disponivel(atual.versao)
+
+        nova_config = configuracao_restaurada.model_copy(
+            update={
+                "versao": nova_versao,
+                "atualizado_por": auditora,
+                "atualizado_em": datetime.now(UTC).isoformat(),
+            }
+        )
+
+        self._registrar_alteracao(atual, nova_config)
+        logger.info(
+            "Regras restauradas da versão %s para %s por %s",
+            versao,
+            nova_versao,
+            auditora,
+        )
+        return nova_config
 
     def atualizar_limite(
         self,
@@ -228,14 +509,20 @@ class ServicoRegras:
         auditora: str = "auditora",
         motivo: str | None = None,
     ) -> RegrasConfig:
-        """H6.1.1 T2: valida o novo valor, grava a configuração e cria uma nova versão."""
+        """Atualiza o limite de confiança e cria uma nova versão."""
+
         if novo_limite < 0.50 or novo_limite > 0.99:
-            raise ValueError("limite_confianca deve estar entre 0.50 e 0.99")
+            raise ValueError(
+                "limite_confianca deve estar entre 0.50 e 0.99"
+            )
 
         atual = self.obter_regras()
-        nova_versao = _proxima_versao(atual.versao)
+
+        nova_versao = self._proxima_versao_disponivel(
+            atual.versao
+        )
+
         agora = datetime.now(UTC).isoformat()
-        self._arquivar_versao(atual)
 
         nova_config = atual.model_copy(
             update={
@@ -245,7 +532,9 @@ class ServicoRegras:
                 "atualizado_em": agora,
             }
         )
-        self.salvar_regras(nova_config)
+
+        self._registrar_alteracao(atual, nova_config)
+
         return nova_config
 
     def criar_destino(
@@ -253,20 +542,26 @@ class ServicoRegras:
         novo_destino: str,
         auditora: str = "auditora",
     ) -> RegrasConfig:
-        """H6.3.1 T1: adiciona um novo destino à lista de destinos configuráveis."""
+        """Adiciona um novo destino à lista de destinos configuráveis."""
+
         nome = str(novo_destino).strip()
+
         if not nome:
             raise ValueError("Nome do destino não pode ser vazio")
 
         atual = self.obter_regras()
+
         if nome in atual.destinos:
             return atual
 
-        nova_versao = _proxima_versao(atual.versao)
+        nova_versao = self._proxima_versao_disponivel(
+            atual.versao
+        )
+
         agora = datetime.now(UTC).isoformat()
-        self._arquivar_versao(atual)
 
         novos_destinos = list(atual.destinos) + [nome]
+
         nova_config = atual.model_copy(
             update={
                 "destinos": novos_destinos,
@@ -275,7 +570,9 @@ class ServicoRegras:
                 "atualizado_em": agora,
             }
         )
-        self.salvar_regras(nova_config)
+
+        self._registrar_alteracao(atual, nova_config)
+
         return nova_config
 
     def adicionar_regra_roteamento(
@@ -283,18 +580,28 @@ class ServicoRegras:
         regra: RegraRoteamento,
         auditora: str = "auditora",
     ) -> RegrasConfig:
-        """H6.3.1 T2: adiciona ou atualiza uma regra de roteamento."""
+        """Adiciona ou atualiza uma regra de roteamento."""
+
         atual = self.obter_regras()
+
         if regra.destino not in atual.destinos:
             raise ValueError(
-                f"Destino '{regra.destino}' não existe na lista de destinos configurados"
+                f"Destino '{regra.destino}' não existe "
+                "na lista de destinos configurados"
             )
 
-        nova_versao = _proxima_versao(atual.versao)
-        agora = datetime.now(UTC).isoformat()
-        self._arquivar_versao(atual)
+        nova_versao = self._proxima_versao_disponivel(
+            atual.versao
+        )
 
-        novas_regras = [r for r in atual.regras_roteamento if r.id != regra.id]
+        agora = datetime.now(UTC).isoformat()
+
+        novas_regras = [
+            r
+            for r in atual.regras_roteamento
+            if r.id != regra.id
+        ]
+
         novas_regras.append(regra)
 
         nova_config = atual.model_copy(
@@ -305,7 +612,9 @@ class ServicoRegras:
                 "atualizado_em": agora,
             }
         )
-        self.salvar_regras(nova_config)
+
+        self._registrar_alteracao(atual, nova_config)
+
         return nova_config
 
     def remover_regra_roteamento(
@@ -314,15 +623,27 @@ class ServicoRegras:
         auditora: str = "auditora",
     ) -> RegrasConfig:
         """Remove uma regra de roteamento pelo identificador."""
+
         atual = self.obter_regras()
-        if not any(r.id == regra_id for r in atual.regras_roteamento):
+
+        if not any(
+            r.id == regra_id
+            for r in atual.regras_roteamento
+        ):
             return atual
 
-        nova_versao = _proxima_versao(atual.versao)
-        agora = datetime.now(UTC).isoformat()
-        self._arquivar_versao(atual)
+        nova_versao = self._proxima_versao_disponivel(
+            atual.versao
+        )
 
-        novas_regras = [r for r in atual.regras_roteamento if r.id != regra_id]
+        agora = datetime.now(UTC).isoformat()
+
+        novas_regras = [
+            r
+            for r in atual.regras_roteamento
+            if r.id != regra_id
+        ]
+
         nova_config = atual.model_copy(
             update={
                 "regras_roteamento": novas_regras,
@@ -331,7 +652,9 @@ class ServicoRegras:
                 "atualizado_em": agora,
             }
         )
-        self.salvar_regras(nova_config)
+
+        self._registrar_alteracao(atual, nova_config)
+
         return nova_config
 
     def remover_destino(
@@ -339,21 +662,37 @@ class ServicoRegras:
         destino: str,
         auditora: str = "auditora",
     ) -> RegrasConfig:
-        """Remove um destino configurado (destinos oficiais são protegidos)."""
+        """Remove um destino configurado, protegendo os destinos oficiais."""
+
         nome = str(destino).strip()
+
         if nome in DESTINOS_OFICIAIS:
-            raise ValueError("Destinos oficiais do edital não podem ser removidos")
+            raise ValueError(
+                "Destinos oficiais do edital não podem ser removidos"
+            )
 
         atual = self.obter_regras()
+
         if nome not in atual.destinos:
             return atual
 
-        nova_versao = _proxima_versao(atual.versao)
-        agora = datetime.now(UTC).isoformat()
-        self._arquivar_versao(atual)
+        nova_versao = self._proxima_versao_disponivel(
+            atual.versao
+        )
 
-        novos_destinos = [d for d in atual.destinos if d != nome]
-        novas_regras = [r for r in atual.regras_roteamento if r.destino != nome]
+        agora = datetime.now(UTC).isoformat()
+
+        novos_destinos = [
+            d
+            for d in atual.destinos
+            if d != nome
+        ]
+
+        novas_regras = [
+            r
+            for r in atual.regras_roteamento
+            if r.destino != nome
+        ]
 
         nova_config = atual.model_copy(
             update={
@@ -364,16 +703,20 @@ class ServicoRegras:
                 "atualizado_em": agora,
             }
         )
-        self.salvar_regras(nova_config)
-        return nova_config
 
+        self._registrar_alteracao(atual, nova_config)
+
+        return nova_config
 
 _instancia_servico: ServicoRegras | None = None
 
 
 def servico_regras() -> ServicoRegras:
     """Devolve a instância padrão do ServicoRegras."""
+
     global _instancia_servico
+
     if _instancia_servico is None:
         _instancia_servico = ServicoRegras()
+
     return _instancia_servico

@@ -13,12 +13,13 @@ from pathlib import Path
 
 import requests
 import streamlit as st
-from services.estilo import preparar_pagina
+
 
 PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
     sys.path.insert(0, PASTA_UI)
 
+from services.estilo import preparar_pagina
 
 from componentes.classificacao import (  # noqa: F401
     carregar_limite_confianca,
