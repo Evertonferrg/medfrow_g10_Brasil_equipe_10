@@ -1,4 +1,3 @@
-
 import pytest
 
 from app import notificacao, servico
@@ -41,8 +40,7 @@ def executar_processamento(monkeypatch, destino, notificacao_ativa=True):
     monkeypatch.setattr(
         notificacao,
         "notificar_responsavel_por_destino",
-        lambda resultado: chamadas.append(resultado)
-        or notificacao.ENVIADO,
+        lambda resultado: chamadas.append(resultado) or notificacao.ENVIADO,
     )
 
     servico.processar(

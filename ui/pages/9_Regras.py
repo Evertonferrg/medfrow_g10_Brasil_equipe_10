@@ -1,4 +1,4 @@
-""" — Página de configuração de regras, limite de confiança e roteamento."""
+"""— Página de configuração de regras, limite de confiança e roteamento."""
 
 from __future__ import annotations
 
