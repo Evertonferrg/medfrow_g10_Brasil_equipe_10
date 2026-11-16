@@ -75,10 +75,18 @@
       "type": "object"
     },
     "DecisaoRoteamento": {
-      "description": "Submodelo de decisão de roteamento (H2.1.1 T1).",
+      "description": "Submodelo de decisão de roteamento (H2.1.1 T1 / H6.3.1 T1).",
       "properties": {
         "destino_principal": {
-          "$ref": "#/$defs/Destino"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Destino"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Destino Principal"
         },
         "justificativa_roteamento": {
           "title": "Justificativa Roteamento",
@@ -213,6 +221,18 @@
     "status": {
       "title": "Status",
       "type": "string"
+    },
+    "versao_regras": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Versao Regras"
     }
   },
   "required": [

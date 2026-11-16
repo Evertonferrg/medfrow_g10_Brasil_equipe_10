@@ -6,6 +6,7 @@ from app import storage
 from app.storage import ObjetoJaExisteError
 from testes.conftest import (
     LAUDO_TEP,
+    Erro412,
     cliente_com,
     extracao,
     extrator_que_quebra,
@@ -107,37 +108,6 @@ def test_extensao_desconhecida_e_recusada():
         storage.salvar_original("DOC-ORI-009", b"x", ".exe")
 
 
-# ---- T2/T4 no OCI: content-type correto e escrita condicional (cliente falso, sem rede) ----
-class OCIFalso:
-    def __init__(self, erro=None):
-        self.erro, self.puts = erro, []
-
-    def put_object(self, namespace, bucket, nome, corpo, **kw):
-        if self.erro:
-            raise self.erro
-        self.puts.append(
-            {
-                "namespace": namespace,
-                "bucket": bucket,
-                "nome": nome,
-                "corpo": corpo,
-                **kw,
-            }
-        )
-
-
-class Erro412(Exception):
-    status = 412
-
-
-@pytest.fixture
-def oci(monkeypatch):
-    falso = OCIFalso()
-    monkeypatch.setenv("OCI_NAMESPACE", "ns-teste")
-    monkeypatch.setattr(storage, "_cliente_oci", lambda: falso)
-    return falso
-
-
 @pytest.mark.parametrize(
     "extensao,conteudo,tipo",
     [
@@ -148,17 +118,19 @@ def oci(monkeypatch):
     ],
 )
 def test_oci_recebe_content_type_e_escrita_condicional(oci, extensao, conteudo, tipo):
+    fake_oci = oci()
     r = storage.salvar_original("DOC-OCI-001", conteudo, extensao)
     assert (
         r["local"] == "oci"
         and r["caminho_objeto"] == f"recebidos/DOC-OCI-001{extensao}"
     )
-    put = oci.puts[0]
+    put = fake_oci.chamadas[0]
     assert put["content_type"] == tipo
     assert put["if_none_match"] == "*"
 
 
 def test_oci_412_vira_objeto_ja_existe(oci):
-    oci.erro = Erro412()
+    fake_oci = oci(erro=Erro412)
     with pytest.raises(ObjetoJaExisteError):
         storage.salvar_original("DOC-OCI-002", b"%PDF-1.4", ".pdf")
+    assert len(fake_oci.chamadas) == 1

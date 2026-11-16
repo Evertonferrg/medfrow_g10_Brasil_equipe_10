@@ -10,6 +10,7 @@ from pathlib import Path
 
 import requests
 import streamlit as st
+from services.estilo import preparar_pagina
 
 PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
@@ -142,9 +143,98 @@ def mostrar_extracao(res: dict) -> None:
             st.write(f"- {p}")
 
 
+def mostrar_trilha(documento_id: str) -> None:
+    """Exibe o histórico de decisões e a integridade da cadeia de eventos."""
+
+    st.divider()
+    st.subheader("Trilha de decisões")
+
+    try:
+        resposta = requests.get(
+            f"{API}/documentos/{documento_id}/trilha",
+            timeout=30,
+        )
+    except requests.RequestException:
+        st.error("Não foi possível consultar a trilha de decisões.")
+        return
+
+    if resposta.status_code == 404:
+        st.info("Ainda não existem eventos registrados para este documento.")
+        return
+
+    if resposta.status_code != 200:
+        st.warning("Não foi possível carregar o histórico de decisões.")
+        return
+
+    try:
+        dados = resposta.json()
+    except ValueError:
+        st.error("A API retornou uma resposta inválida para a trilha.")
+        return
+
+    eventos = dados.get("eventos", [])
+
+    if not eventos:
+        st.info("Ainda não existem eventos registrados para este documento.")
+        return
+
+    # Verificação da integridade da cadeia de eventos.
+    if dados.get("cadeia_integra", False):
+        st.success("Cadeia de eventos íntegra.")
+    else:
+        st.error("Atenção: foram encontrados problemas na cadeia de eventos.")
+
+        for problema in dados.get("problemas", []):
+            st.warning(problema)
+
+    st.caption(f"Total de eventos registrados: {len(eventos)}")
+
+    # Exibe primeiro os eventos mais recentes.
+    for indice, evento in reversed(list(enumerate(eventos))):
+        autor_tipo = evento.get("autor_tipo", "legado")
+        autor_nome = evento.get("autor_nome")
+
+        if autor_tipo == "agente":
+            responsavel = "Agente"
+        elif autor_tipo == "auditora":
+            responsavel = f"Auditora: {autor_nome or 'Nome não informado'}"
+        else:
+            responsavel = "Evento de histórico legado"
+
+        titulo = (
+            f"Evento {indice + 1} — "
+            f"{responsavel} — "
+            f"{evento.get('status', 'Status não informado')}"
+        )
+
+        with st.expander(titulo):
+            st.write("**Data e horário:**", evento.get("em", "Não informado"))
+            st.write("**Responsável:**", responsavel)
+            st.write(
+                "**Regra aplicada:**",
+                evento.get("regra_aplicada", "Não informada"),
+            )
+
+            if evento.get("detalhe"):
+                st.write("**Detalhe:**", evento["detalhe"])
+
+            if evento.get("campo"):
+                st.write("**Campo alterado:**", evento["campo"])
+
+                valor_anterior = evento.get("valor_anterior")
+                valor_novo = evento.get("valor_novo")
+
+                anterior = "(vazio)" if valor_anterior is None else str(valor_anterior)
+                novo = "(vazio)" if valor_novo is None else str(valor_novo)
+
+                st.write("**Valor anterior:**", anterior)
+                st.write("**Valor novo:**", novo)
+
+
 st.set_page_config(
     page_title="MediFlow — Revisão do caso", page_icon="🧐", layout="wide"
 )
+preparar_pagina()
 st.title("🧐 Revisão do caso")
 
 documento_id = str(st.query_params.get("id", "")).strip()
@@ -163,9 +253,101 @@ if resp.status_code != 200:
     st.stop()
 
 esquerda, direita = st.columns(2)
+
 with esquerda:
     st.subheader("Original")
     mostrar_original(documento_id)
+
 with direita:
     st.subheader("Extração")
     mostrar_extracao(resp.json())
+
+
+def carregar_destinos_auditora() -> list[str]:
+    """H6.3.1 T5: lê a lista de destinos do ServicoRegras para o seletor de redirecionamento."""
+    try:
+        r = requests.get(f"{API}/regras/destinos", timeout=5)
+        if r.status_code == 200:
+            destinos = r.json().get("destinos", [])
+            return [d for d in destinos if d != "Fila_Revisao_Humana"]
+    except requests.RequestException:
+        pass
+    try:
+        from app.revisao import obter_destinos_redirecionaveis
+
+        return obter_destinos_redirecionaveis()
+    except Exception:  # noqa: BLE001
+        return [
+            "Farmacia_Hospitalar",
+            "Auditoria_Autorizacoes",
+            "Prontuario_Eletronico",
+            "Fila_Emergencia_Medica",
+        ]
+
+
+def mostrar_painel_decisao(doc_id: str) -> None:
+    """H4.4.1 a H4.4.4 / H6.3.1 T5: formulário de decisão da auditora."""
+    st.divider()
+    st.subheader("Decisão da Auditora")
+
+    col_acao, col_detalhes = st.columns([1, 2])
+    with col_acao:
+        acao = st.radio(
+            "Ação",
+            options=["aprovar", "redirecionar", "rejeitar"],
+            format_func=lambda x: {
+                "aprovar": "Aprovar documento",
+                "redirecionar": "Redirecionar para outro setor",
+                "rejeitar": "Rejeitar documento",
+            }[x],
+        )
+
+    with col_detalhes:
+        destino_escolhido = None
+        motivo_rejeicao = None
+
+        if acao == "redirecionar":
+            destinos = carregar_destinos_auditora()
+            destino_escolhido = st.selectbox(
+                "Novo destino",
+                options=destinos,
+                help="Lista de destinos configurados no sistema (lidos do ServicoRegras).",
+            )
+        elif acao == "rejeitar":
+            motivo_rejeicao = st.text_input(
+                "Motivo da rejeição", placeholder="Ex.: Documento ilegível ou rasurado"
+            )
+
+    nome_auditora = st.session_state.get("auditora", "Dra. Renata Silveira")
+    if st.button("Confirmar decisão", type="primary"):
+        payload = {
+            "acao": acao,
+            "auditora": nome_auditora,
+        }
+        if acao == "redirecionar":
+            payload["destino"] = destino_escolhido
+        elif acao == "rejeitar":
+            if not motivo_rejeicao or not motivo_rejeicao.strip():
+                st.error("Motivo da rejeição é obrigatório.")
+                return
+            payload["motivo"] = motivo_rejeicao.strip()
+
+        try:
+            r = requests.post(
+                f"{API}/documentos/{doc_id}/decisao",
+                json=payload,
+                timeout=10,
+            )
+            if r.status_code == 200:
+                st.success(f"Decisão registrada com sucesso! Documento {acao}.")
+                st.rerun()
+            else:
+                st.error(f"Erro ao registrar decisão: {r.status_code} - {r.text}")
+        except requests.RequestException as e:
+            st.error(f"Falha de comunicação com a API: {e}")
+
+
+mostrar_painel_decisao(documento_id)
+
+# H5.3.1 T4 — Trilha de decisões
+mostrar_trilha(documento_id)

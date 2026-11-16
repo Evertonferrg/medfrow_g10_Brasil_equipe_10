@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()  # sem override: variável de ambiente real sempre vence o .env
+
+logger = logging.getLogger(__name__)
 
 ARQUIVO_REGRAS = Path(__file__).resolve().parents[1] / "config" / "regras.json"
 LIMITE_CONFIANCA_PADRAO = 0.80
@@ -20,22 +23,33 @@ def carregar_regras(caminho: Path | None = None) -> dict:
 
 
 def limite_confianca() -> float:
-    """Abaixo deste score o documento vai para revisão humana (H1.2.2 T2).
+    """Abaixo deste score o documento vai para revisão humana (H1.2.2 T2 / H6.1.1 T1).
 
-    Precedência: env LIMIAR_CONFIANCA > config/regras.json > 0.80.
+    Precedência: env LIMIAR_CONFIANCA > ServicoRegras (storage/bucket) > config/regras.json > 0.80.
     """
     bruto = os.getenv("LIMIAR_CONFIANCA")
-    if bruto is None:
-        bruto = carregar_regras().get("limite_confianca", LIMITE_CONFIANCA_PADRAO)
+    if bruto is not None:
+        try:
+            return min(1.0, max(0.0, float(bruto)))
+        except (TypeError, ValueError):
+            return LIMITE_CONFIANCA_PADRAO
     try:
-        valor = float(bruto)
-    except (TypeError, ValueError):
-        return LIMITE_CONFIANCA_PADRAO
-    return min(1.0, max(0.0, valor))
+        from app.regras import servico_regras
+
+        return servico_regras().obter_regras().limite_confianca
+    except Exception:
+        logger.exception(
+            "Falha ao ler o limite de confiança do ServicoRegras; usando fallback local"
+        )
+        bruto = carregar_regras().get("limite_confianca", LIMITE_CONFIANCA_PADRAO)
+        try:
+            return min(1.0, max(0.0, float(bruto)))
+        except (TypeError, ValueError):
+            return LIMITE_CONFIANCA_PADRAO
 
 
 def limiar_confianca() -> float:
-    """Nome antigo mantido para compatibilidade; use limite_confianca()."""
+    """Nome antigo mantido para compatibilidade."""
     return limite_confianca()
 
 
@@ -73,3 +87,24 @@ def tamanho_maximo_mb() -> int:
         return int(bruto)
     except (TypeError, ValueError):
         return 10
+
+
+# H4.1.1 T1: campos cujo score individual de confiança é verificado
+CAMPOS_CRITICOS_PADRAO = [
+    "paciente.nome",
+    "medico_solicitante.crm",
+    "medicamentos.nome",
+    "medicamentos.dose",
+    "cid_sugerido",
+]
+
+
+def campos_criticos() -> list[str]:
+    """Lista de caminhos (dotted) dos campos cuja confiança individual é verificada (H4.1.1 T1).
+
+    Precedência: config/regras.json > CAMPOS_CRITICOS_PADRAO.
+    """
+    raw = carregar_regras().get("campos_criticos")
+    if isinstance(raw, list) and raw:
+        return [str(c) for c in raw]
+    return list(CAMPOS_CRITICOS_PADRAO)

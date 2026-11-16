@@ -64,6 +64,18 @@ Um documento urgente com dados ambíguos vai para revisão humana, mas leva a no
 
 O limite de confiança padrão é **0.80**. Ele pode ser alterado em `config/regras.json` ou pela variável `LIMIAR_CONFIANCA`, que tem precedência.
 
+### Score Global e Confiança de Campos Críticos (H4.1.1)
+
+Para garantir que nenhum dado incerto siga desacompanhado de validação humana, o sistema calcula o **score global** combinando a classificação geral e a confiabilidade de cada campo extraído:
+
+$$\text{score global} = \min(\text{score\_classificacao}, \text{media\_scores\_campos})$$
+
+- **Campos Críticos** (`config/regras.json`): `paciente.nome`, `medico_solicitante.crm`, `medicamentos.nome`, `medicamentos.dose` e `cid_sugerido`.
+- **Regra de Barreira**:
+  1. Se o $\text{score global} < 0.80$, o documento é barrado e encaminhado para `Fila_Revisao_Humana`.
+  2. Mesmo com score global alto, se qualquer **campo crítico** apresentar confiança individual abaixo do limite (ex.: dose em $0.50$), o documento é encaminhado obrigatoriamente para revisão humana.
+
+
 ## 🧠 4. Arquitetura
 
 UI e API são um **monolito**: a mesma imagem de container roda a API (FastAPI) e, num segundo container, a interface (Streamlit).

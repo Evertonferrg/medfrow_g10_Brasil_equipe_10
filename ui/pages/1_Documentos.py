@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 import requests
 import streamlit as st
+from services.estilo import preparar_pagina
 
 ARQUIVO_REGRAS = Path(__file__).resolve().parents[2] / "config" / "regras.json"
 TIPO_ARQUIVO_TEXTO = "TEXTO"
@@ -96,7 +97,11 @@ def mensagem_do_servidor(resp) -> str:
 
 
 def _resposta_envio(resp, documento_id: str) -> tuple[bool, str]:
-    """Interpreta a resposta de /triagem e de /triagem/arquivo (mesmo formato)."""
+    """Interpreta a resposta de /triagem e de /triagem/arquivo (mesmo formato).
+
+    H1.4.2 T3: quando o resultado contém ilegivel=True, guarda o tipo_motivo na
+    sessão para que a UI mostre o aviso de nova foto.
+    """
     if resp.status_code == 202:
         try:
             corpo = resp.json()
@@ -105,6 +110,20 @@ def _resposta_envio(resp, documento_id: str) -> tuple[bool, str]:
         doc_id = corpo.get("documento_id") or documento_id
         status = corpo.get("status") or "recebido"
         return True, f"Documento **{doc_id}** recebido. Status: **{status}**."
+    if resp.status_code == 200:
+        try:
+            corpo = resp.json()
+        except ValueError:
+            corpo = {}
+        # Verifica se a triagem síncrona devolveu resultado com ilegibilidade
+        if corpo.get("ilegivel") or (
+            isinstance(corpo.get("problemas"), list)
+            and any("ilegível" in str(p) for p in corpo["problemas"])
+        ):
+            tipo_motivo = corpo.get("motivo_ilegibilidade")
+            st.session_state["_aviso_ilegibilidade"] = tipo_motivo
+        doc_id = corpo.get("documento_id") or documento_id
+        return True, f"Documento **{doc_id}** processado."
     return False, mensagem_do_servidor(resp)
 
 
@@ -148,11 +167,53 @@ def enviar_arquivo(
     return _resposta_envio(resp, documento_id)
 
 
+# H1.4.2 T3 — mensagens por motivo de ilegibilidade (problema de captura)
+_MENSAGEM_ILEGIBILIDADE: dict[str, str] = {
+    "inclinacao": (
+        "📐 **Foto inclinada.** Tire uma nova foto alinhando o documento com a câmera."
+    ),
+    "sombra": (
+        "🌑 **Sombra detectada.** Tire a foto em ambiente com boa iluminação, "
+        "evitando luz atrás do documento."
+    ),
+    "corte": (
+        "✂️ **Documento cortado.** Inclua o documento inteiro na foto, "
+        "garantindo que todas as bordas apareçam."
+    ),
+}
+_MENSAGEM_ILEGIBILIDADE_PADRAO = (
+    "🔍 **Documento ilegível.** Verifique se o arquivo está nítido e tente novamente."
+)
+_MOTIVOS_CAPTURA = set(_MENSAGEM_ILEGIBILIDADE.keys())
+
+
+def _exibir_aviso_ilegibilidade(tipo_motivo: str | None) -> None:
+    """H1.4.2 T3: exibe aviso com instrução específica e botão para nova foto ou revisão."""
+    msg = _MENSAGEM_ILEGIBILIDADE.get(tipo_motivo or "", _MENSAGEM_ILEGIBILIDADE_PADRAO)
+    st.warning(msg)
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📷 Enviar nova foto", key="btn_nova_foto"):
+            # Limpa o aviso e permite reenvio sem gerar novo ID
+            st.session_state.pop("_aviso_ilegibilidade", None)
+            st.rerun()
+    with col2:
+        if st.button("📋 Enviar para revisão assim mesmo", key="btn_revisao"):
+            # O documento já está em recebidos/ e sendo processado; apenas descarta o aviso.
+            st.session_state.pop("_aviso_ilegibilidade", None)
+            st.info("O documento foi encaminhado para a fila de revisão humana.")
+            st.rerun()
+
+
 def _enviar() -> None:
     """Roda ao clicar em 'Enviar', antes da página ser redesenhada."""
     ss = st.session_state
     n = ss.get("n_upload", 0)
     arquivo = ss.get(f"arquivo_{n}")  # None se nenhum arquivo foi escolhido
+    # H1.4.2 T5: câmera tem prioridade quando o uploader não tem nada
+    foto_camera = ss.get("foto_camera")
+    if arquivo is None and foto_camera is not None:
+        arquivo = foto_camera
     texto = ss.get("texto_documento", "")
     doc_id = (ss.get("documento_id") or "").strip()
 
@@ -186,37 +247,13 @@ def _enviar() -> None:
             ss["confirmo_sintetico"] = False
             ss["documento_id"] = novo_id()
             ss["n_upload"] = n + 1  # nova chave = uploader limpo
+            ss.pop("foto_camera", None)  # limpa foto da câmera
 
 
 st.set_page_config(
     page_title="Enviar documento · MediFlow", page_icon="🏥", layout="wide"
 )
-
-CAMINHO_LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
-if CAMINHO_LOGO.exists():
-    st.logo(str(CAMINHO_LOGO), size="large")
-
-st.markdown(
-    """
-<style>
-    [data-testid="stLogo"] {
-        height: 3.5rem !important;
-    }
-    [data-testid="stLogo"] img {
-        height: 3.5rem !important;
-        max-height: 3.5rem !important;
-        width: auto !important;
-    }
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-with st.sidebar:
-    st.markdown("<div style='height: 35vh;'></div>", unsafe_allow_html=True)
-    st.divider()
-    st.caption("⚙️ Configurações")
-    st.caption("🚪 Sair")
+preparar_pagina()
 
 st.title("📨 Enviar documento para triagem")
 
@@ -245,6 +282,11 @@ if "documento_id" not in st.session_state:
 resultado = st.session_state.pop("_resultado", None)
 if resultado:
     (st.success if resultado[0] else st.error)(resultado[1])
+
+# H1.4.2 T3: aviso de ilegibilidade com instruções específicas e opção de nova foto
+aviso_ilegibilidade = st.session_state.get("_aviso_ilegibilidade")
+if aviso_ilegibilidade is not None:
+    _exibir_aviso_ilegibilidade(aviso_ilegibilidade)
 
 
 # Selectbox para selecionar tipo de documento:
@@ -282,17 +324,34 @@ with st.form("envio"):
         # H1.1.3 T6: o uploader fica FORA do st.form, senão a prévia só apareceria depois do envio.
         # A chave muda a cada envio com sucesso (n_upload) para limpar o arquivo escolhido.
         n_upload = st.session_state.get("n_upload", 0)
-        arquivo = st.file_uploader(
-            "Foto, scan ou PDF",
-            type=TIPOS_ARQUIVO,
-            key=f"arquivo_{n_upload}",
-            max_upload_size=TAMANHO_MAXIMO_MB,
-        )
-        if arquivo is not None:
-            if (arquivo.type or "").startswith("image/"):
-                st.image(arquivo, caption=arquivo.name, width=400)
-            else:
-                st.caption(f"📄 {arquivo.name} ({arquivo.size // 1024} KB)")
+
+        col_up, col_cam = st.columns([3, 2], gap="medium")
+        with col_up:
+            arquivo = st.file_uploader(
+                "Foto, scan ou PDF",
+                type=TIPOS_ARQUIVO,
+                key=f"arquivo_{n_upload}",
+                max_upload_size=TAMANHO_MAXIMO_MB,
+            )
+            if arquivo is not None:
+                if (arquivo.type or "").startswith("image/"):
+                    st.image(arquivo, caption=arquivo.name, width=400)
+                else:
+                    st.caption(f"📄 {arquivo.name} ({arquivo.size // 1024} KB)")
+
+        # H1.4.2 T5: câmera do dispositivo ao lado do uploader
+        with col_cam:
+            foto_camera = st.camera_input(
+                "📷 Tirar foto com a câmera",
+                key=f"camera_{n_upload}",
+                help="Tire uma foto do documento com a câmera do seu dispositivo.",
+            )
+            if foto_camera is not None:
+                st.session_state["foto_camera"] = foto_camera
+                st.caption("✅ Foto capturada. Clique em **Enviar** para processar.")
+            elif arquivo is not None:
+                # arquivo do uploader foi escolhido: descarta a foto da câmera
+                st.session_state.pop("foto_camera", None)
     st.checkbox(
         "Confirmo que este documento contém apenas dados sintéticos (sem dados reais de pacientes).",
         key="confirmo_sintetico",

@@ -9,3 +9,4 @@ class StatusDocumento(str, Enum):
     PROCESSADO = "processado"
     EM_AUDITORIA_HUMANA = "em_auditoria_humana"
     REJEITADO = "rejeitado"
+    FALHA_OCI = "falha_armazenamento_oci"

@@ -62,7 +62,8 @@ def montar_resposta(documento_id: str, estado: Mapping[str, Any]) -> ResultadoTr
             notificacao_gerada=estado.get("notificacao"),
         )
 
-    if hasattr(extracao, "model_dump"):
+    # if hasattr(extracao, "model_dump"):
+    if extracao is not None and hasattr(extracao, "model_dump"):
         dados_extraidos = extracao.model_dump(exclude=CAMPOS_FORA)
     elif isinstance(extracao, dict):
         dados_extraidos = {k: v for k, v in extracao.items() if k not in CAMPOS_FORA}
@@ -97,6 +98,7 @@ def montar_resposta(documento_id: str, estado: Mapping[str, Any]) -> ResultadoTr
         dados_extraidos=dados_extraidos,
         problemas=estado.get("problemas", []),
         decisao_roteamento=decisao,
+        versao_regras=estado.get("versao_regras"),
     )
 
 
@@ -105,6 +107,7 @@ def falha_de_processamento(
     motivo: str,
     justificativa: str | None = None,
     notificacao: Notificacao | None = None,
+    versao_regras: str | None = None,
 ) -> ResultadoTriagem:
     """Resultado fora do formato nunca é entregue (H2.3.1): vai para a revisão humana
     com o motivo 'falha de processamento', sem dados parciais."""
@@ -122,6 +125,7 @@ def falha_de_processamento(
             regra_aplicada="R-REVISAO",
             notificacao_gerada=notificacao,
         ),
+        versao_regras=versao_regras,
     )
 
 
@@ -152,6 +156,8 @@ def salvar_resultado(
 
 
 def arquivar(documento_id: str, estado: dict) -> dict:
+    from app.eventos import servico_padrao
+
     """Pega o resultado montado pelo grafo (nó montar_resultado), salva e devolve a resposta."""
     if estado.get("resultado"):
         resultado = ResultadoTriagem.model_validate(estado["resultado"])
@@ -162,6 +168,11 @@ def arquivar(documento_id: str, estado: dict) -> dict:
             logger.exception("Falha ao montar o resultado de %s", documento_id)
             resultado = falha_de_processamento(documento_id, str(ex))
     resultado.armazenamento_oci = salvar_resultado(documento_id, resultado)
+    if resultado.armazenamento_oci.status_backup == "falha":
+        detalhe = "Falha de armazenamento do resultado após três tentativas."
+        logger.error("%s Documento: %s", detalhe, documento_id)
+        servico_padrao().registrar_falha_armazenamento(documento_id, detalhe)
+        return resultado.model_dump(mode="json")
     if resultado.decisao_roteamento.destino_principal == Destino.FILA_REVISAO_HUMANA:
         salvar_estado_revisao(documento_id, estado, storage)  # H4.4.1 T2
     registrar_desfecho(documento_id, resultado)

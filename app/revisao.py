@@ -45,6 +45,19 @@ DESTINOS_REDIRECIONAVEIS = frozenset(
         "Fila_Emergencia_Medica",
     }
 )
+
+
+def obter_destinos_redirecionaveis() -> list[str]:
+    """H6.3.1 T5: lê os destinos configurados em ServicoRegras, excluindo a revisão humana."""
+    try:
+        from app.regras import servico_regras
+
+        destinos = servico_regras().obter_regras().destinos
+        return [d for d in destinos if d != "Fila_Revisao_Humana"]
+    except Exception:  # noqa: BLE001
+        return list(DESTINOS_REDIRECIONAVEIS)
+
+
 REGRA_AUDITORA = "R-AUDITORA"
 _TRAVA = threading.Lock()  # uma decisão por vez neste processo
 
@@ -275,7 +288,10 @@ def decidir_caso(
                     "corrija os dados ou redirecione"
                 )
         elif acao is AcaoAuditora.REDIRECIONAR:
-            if decisao.destino not in DESTINOS_REDIRECIONAVEIS:
+            destinos_permitidos = set(obter_destinos_redirecionaveis()) | set(
+                DESTINOS_REDIRECIONAVEIS
+            )
+            if decisao.destino not in destinos_permitidos:
                 raise DecisaoInvalida(f"destino inválido: {decisao.destino}", "destino")
             destino = decisao.destino
 
@@ -322,6 +338,7 @@ def decidir_caso(
                 StatusDocumento.EM_AUDITORIA_HUMANA,
                 autor_tipo="auditora",
                 autor_nome=decisao.auditora,
+                regra_aplicada=REGRA_AUDITORA,
                 campo=alt.campo,
                 valor_anterior=alt.anterior,
                 valor_novo=alt.novo,
@@ -413,6 +430,32 @@ def calcular_destino_real(resultado: dict) -> str | None:
     return destino_sem_revisao(extracao, classificacao, limite)
 
 
+def _alertar_plantao_configurado(resultado: dict) -> None:
+    from app.destinatarios import buscar_responsavel
+    from app.notificacao import ServicoNotificacao, alertar_plantao
+
+    responsavel = buscar_responsavel("plantao")
+
+    if not responsavel or not responsavel.get("email"):
+        raise RuntimeError("Responsável pelo plantão não configurado.")
+
+    servico = ServicoNotificacao(
+        email_destino=responsavel["email"],
+        nome_destinatario=responsavel["nome"],
+        tratamento=responsavel["tratamento"],
+        funcao=responsavel["funcao"],
+    )
+
+    status = alertar_plantao(resultado, servico=servico, levantar_em_falha=True)
+
+    logger.info(
+        "Notificação do plantao: documento= %s, responsável=%s, status=%s",
+        resultado.get("documento_id"),
+        responsavel.get("nome"),
+        status,
+    )
+
+
 def colaboradores_padrao() -> Colaboradores:
     from app import storage
 
@@ -422,4 +465,5 @@ def colaboradores_padrao() -> Colaboradores:
         eventos=servico_padrao(),
         calcular_destino=calcular_destino_real,
         validar_correcoes=validar_correcoes_basico,
+        alerta_plantao=_alertar_plantao_configurado,
     )
