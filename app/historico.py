@@ -31,8 +31,14 @@ def _ler_json(caminho: str) -> dict:
         raise ExportacaoInvalida(f"{caminho}: objeto listado mas não encontrado.")
     try:
         dados = json.loads(bruto)
+    except UnicodeDecodeError as e:
+        raise ExportacaoInvalida(
+            f"{caminho}: arquivo com codificação inválida (UTF-8)."
+        ) from e
     except json.JSONDecodeError as e:
-        raise ExportacaoInvalida(f"{caminho}: JSON corrompido ({e.msg}).") from e
+        raise ExportacaoInvalida(
+            f"{caminho}: JSON corrompido ({e.msg})."
+        ) from e
     if not isinstance(dados, dict):
         raise ExportacaoInvalida(f"{caminho}: formato inesperado (não é um objeto).")
     return dados

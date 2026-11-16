@@ -1,11 +1,17 @@
 import json
 import os
+import sys
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
 import streamlit as st
+
+PASTA_UI = str(Path(__file__).resolve().parents[1])
+if PASTA_UI not in sys.path:
+    sys.path.insert(0, PASTA_UI)
+
 from services.estilo import preparar_pagina
 
 ARQUIVO_REGRAS = Path(__file__).resolve().parents[2] / "config" / "regras.json"

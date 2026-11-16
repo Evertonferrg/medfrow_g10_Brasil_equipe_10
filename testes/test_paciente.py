@@ -132,9 +132,10 @@ def test_bloco_paciente_exibe_nome_e_data_como_texto_puro():
         }
     }
     script = (
-        f"import sys; sys.path.insert(0, {str(RAIZ / 'ui')!r})\n"
+        "# -*- coding: utf-8 -*-\n"
+        f"import sys; sys.path.insert(0, {ascii(str(RAIZ / 'ui'))})\n"
         "from componentes.paciente import bloco_paciente\n"
-        f"bloco_paciente({dados!r})\n"
+        f"bloco_paciente({ascii(dados)})\n"
     )
     at = AppTest.from_string(script, default_timeout=10).run()
     assert not at.exception

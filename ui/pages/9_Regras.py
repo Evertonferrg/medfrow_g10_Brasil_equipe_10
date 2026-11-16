@@ -1,3 +1,4 @@
+
 """— Página de configuração de regras, limite de confiança e roteamento."""
 
 from __future__ import annotations
@@ -287,3 +288,163 @@ with st.expander("Campos Críticos e Parâmetros Ativos"):
     st.json(regras_atuais.get("canais_origem", []))
     st.write("**Destinos disponíveis:**")
     st.json(regras_atuais.get("destinos", []))
+
+# H6.4.1 — Histórico e restauração de versões das regras
+st.markdown("---")
+st.subheader("3. Histórico de Versões das Regras")
+
+st.markdown(
+    """
+    Consulte as versões anteriores das regras de triagem e roteamento.
+    A restauração cria uma nova versão, preservando todo o histórico.
+    """
+)
+
+
+def carregar_historico() -> tuple[list | None, str | None]:
+    try:
+        resposta = requests.get(
+            f"{API_URL}/regras/versoes",
+            timeout=5,
+        )
+
+        if resposta.status_code != 200:
+            return None, (
+                f"Erro ao consultar histórico: "
+                f"{resposta.status_code} - {resposta.text}"
+            )
+
+        dados = resposta.json()
+        versoes = dados.get("versoes")
+
+        if not isinstance(versoes, list):
+            return None, "A API retornou um formato inválido para o histórico."
+
+        return versoes, None
+
+    except requests.RequestException as erro:
+        return None, f"Não foi possível consultar o histórico: {erro}"
+    except ValueError as erro:
+        return None, f"A API retornou uma resposta JSON inválida: {erro}"
+
+
+@st.dialog("Confirmar restauração")
+def confirmar_restauracao(versao: str):
+    st.warning(
+        f"Você está prestes a restaurar a versão **{versao}** das regras."
+    )
+    st.write(
+        "Essa operação criará uma nova versão com as configurações "
+        "selecionadas, preservando o histórico existente."
+    )
+
+    col_confirmar, col_cancelar = st.columns(2)
+
+    with col_confirmar:
+        if st.button(
+            "Confirmar restauração",
+            type="primary",
+            key="confirmar_restauracao_regras",
+            use_container_width=True,
+        ):
+            try:
+                resposta = requests.post(
+                    f"{API_URL}/regras/restaurar/{versao}",
+                    json={
+                        "auditora": st.session_state.get(
+                            "auditora", "Auditora"
+                        )
+                    },
+                    timeout=10,
+                )
+
+                if resposta.status_code == 200:
+                    dados = resposta.json()
+                    st.success(
+                        f"Versão {versao} restaurada com sucesso! "
+                        f"Nova versão criada: {dados.get('versao')}."
+                    )
+                    st.rerun()
+                else:
+                    st.error(
+                        f"Erro ao restaurar versão: "
+                        f"{resposta.status_code} - {resposta.text}"
+                    )
+
+            except requests.RequestException as erro:
+                st.error(
+                    f"Não foi possível conectar à API: {erro}"
+                )
+            except ValueError as erro:
+                st.error(
+                    f"A API retornou uma resposta inválida: {erro}"
+                )
+
+    with col_cancelar:
+        if st.button(
+            "Cancelar",
+            key="cancelar_restauracao_regras",
+            use_container_width=True,
+        ):
+            st.rerun()
+
+
+historico, erro_historico = carregar_historico()
+
+if erro_historico:
+    st.error(erro_historico)
+
+elif not historico:
+    st.info("Nenhuma versão histórica foi encontrada.")
+
+else:
+    linhas_historico = []
+
+    for item in historico:
+        configuracao = item.get("configuracao", {})
+
+        linhas_historico.append(
+            {
+                "Versão": item.get("versao", "—"),
+                "Autor": item.get("autor", "—"),
+                "Data": str(item.get("data", "—"))[:19].replace("T", " "),
+                "Limite de confiança": configuracao.get(
+                    "limite_confianca", "—"
+                ),
+                "Alterações": ", ".join(
+                    item.get("diferencas", {}).keys()
+                ) or "Versão inicial",
+            }
+        )
+
+    st.dataframe(
+        linhas_historico,
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    st.markdown("#### Restaurar uma versão anterior")
+
+    versoes_disponiveis = [
+        item.get("versao")
+        for item in historico
+        if item.get("versao")
+        and item.get("versao") != versao_atual
+    ]
+
+    if versoes_disponiveis:
+        versao_escolhida = st.selectbox(
+            "Selecione a versão que deseja restaurar",
+            options=versoes_disponiveis,
+            key="versao_regras_restaurar",
+        )
+
+        if st.button(
+            "Restaurar versão selecionada",
+            type="secondary",
+            key="btn_restaurar_regras",
+        ):
+            confirmar_restauracao(versao_escolhida)
+
+    else:
+        st.info("Não há versões anteriores disponíveis para restauração.")
