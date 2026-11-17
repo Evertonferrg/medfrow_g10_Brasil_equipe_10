@@ -31,7 +31,17 @@ def test_urgente_grava_em_processados_urgentes(cliente):
     assert storage.existe(arm["caminho_objeto"])
 
 
-def test_rotina_grava_em_processados_rotina():
+def test_rotina_grava_em_processados_rotina(monkeypatch):
+    # este teste verifica a PASTA de gravação para um documento de rotina; a detecção de
+    # urgência (H3.1) é testada em test_urgencia.py, então aqui ela devolve "Rotina"
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "app.grafo.avaliar_urgencia",
+        lambda *a, **k: SimpleNamespace(
+            nivel="Rotina", sinal="nenhum sinal", achado=None
+        ),
+    )
     c = cliente_com(extrator_fixo(extracao(nivel_prioridade="Rotina")))
     arm = c.post("/triagem?aguardar=true", json=_corpo("DOC-RES-002")).json()[
         "armazenamento_oci"
