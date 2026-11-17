@@ -15,6 +15,47 @@
     "Fila_Emergencia_Medica",
     "Fila_Revisao_Humana"
   ],
+  "achados_criticos": [
+    {
+      "nome": "TEP",
+      "sinonimos": ["TEP", "tromboembolismo pulmonar", "embolia pulmonar"]
+    },
+    {
+      "nome": "IAM",
+      "sinonimos": ["IAM", "infarto agudo do miocárdio", "infarto do miocárdio"]
+    },
+    {
+      "nome": "AVC",
+      "sinonimos": [
+        "AVC",
+        "AVCI",
+        "AVCH",
+        "acidente vascular cerebral",
+        "acidente vascular encefálico"
+      ]
+    },
+    {
+      "nome": "Sepse",
+      "sinonimos": ["sepse", "choque séptico", "sepsis"]
+    },
+    {
+      "nome": "Dissecção de aorta",
+      "sinonimos": [
+        "dissecção de aorta",
+        "dissecção aórtica",
+        "dissecção aguda de aorta"
+      ]
+    },
+    {
+      "nome": "Hemorragia intracraniana",
+      "sinonimos": [
+        "hemorragia intracraniana",
+        "hemorragia intracerebral",
+        "hemorragia subaracnóidea",
+        "hematoma intracraniano"
+      ]
+    }
+  ],
   "formatos_aceitos": ["PDF", "JPG", "PNG"],
   "tamanho_maximo_mb": 10
 }

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any
 
-from fastapi import FastAPI, Query
+from fastapi import Body, FastAPI, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, model_validator
 
@@ -83,6 +83,66 @@ def ligar_regras(app: FastAPI) -> None:
     )
     def obter_regras():
         return servico_regras().obter_regras()
+
+    @app.get(
+        "/regras/achados",
+        responses={200: {"description": "Lista de achados críticos ativa"}},
+    )
+    def listar_achados():
+        cfg = servico_regras().obter_regras()
+        return {
+            "achados_criticos": [a.model_dump() for a in cfg.achados_criticos],
+            "versao": cfg.versao,
+        }
+
+    @app.put(
+        "/regras/achados",
+        response_model=RegrasConfig,
+        responses={
+            200: {"description": "Lista de achados críticos atualizada com sucesso"},
+            422: {"description": "A lista de achados críticos não pode ficar vazia"},
+        },
+    )
+    def atualizar_achados_criticos(
+        payload: Annotated[Any, Body()] = None,
+        auditora: Annotated[str | None, Query()] = None,
+    ):
+        nome_auditora = auditora or "auditora"
+        lista = None
+
+        if isinstance(payload, list):
+            lista = payload
+        elif isinstance(payload, dict):
+            if "achados_criticos" in payload:
+                lista = payload["achados_criticos"]
+            elif "achados" in payload:
+                lista = payload["achados"]
+            elif "nome" in payload:
+                lista = [payload]
+            nome_auditora = payload.get("auditora") or nome_auditora
+        else:
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "A lista de achados críticos não pode ficar vazia"},
+            )
+
+        if lista is None or (isinstance(lista, list) and len(lista) == 0):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "A lista de achados críticos não pode ficar vazia"},
+            )
+
+        try:
+            nova_cfg = servico_regras().atualizar_achados(
+                novos_achados=lista,
+                auditora=nome_auditora,
+            )
+            return nova_cfg
+        except ValueError as e:
+            return JSONResponse(
+                status_code=422,
+                content={"detail": str(e)},
+            )
 
     @app.get(
         "/regras/destinos",

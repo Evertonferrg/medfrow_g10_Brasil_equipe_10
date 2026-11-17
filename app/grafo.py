@@ -15,6 +15,7 @@ from .pdf import PDFSemTexto, extrair_texto_pdf, renderizar_paginas
 from .regras import servico_regras
 from .resposta import falha_de_processamento, montar_resposta
 from .schemas import Extracao
+from .urgencia import avaliar_urgencia
 from .validacao import validar
 from .validacao_obrigatorios import campos_faltantes
 
@@ -52,6 +53,23 @@ class Estado(TypedDict, total=False):
     decisao_roteamento: (
         DecisaoRoteamento | None
     )  # submodelo DecisaoRoteamento (H2.1.1 T1/T4)
+    canal_origem: str | None
+    nivel_prioridade: str
+    sinal_prioridade: str
+    achado_critico: str | None
+
+
+def _com_nivel(extracao, nivel: str):
+    """Cópia da extração com o nível final (sem revalidar o campo)."""
+    if extracao is None or getattr(extracao, "nivel_prioridade", None) == nivel:
+        return extracao
+    if hasattr(extracao, "model_copy"):
+        return extracao.model_copy(update={"nivel_prioridade": nivel})
+    try:
+        extracao.nivel_prioridade = nivel
+    except (AttributeError, ValueError):
+        logger.debug("Não foi possível atribuir nivel_prioridade à extração")
+    return extracao
 
 
 def montar_classificacao(extracao, score) -> Classificacao:
@@ -117,8 +135,13 @@ def destino_sem_revisao(extracao, classificacao, limite_confianca):
         return None
 
 
-def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor=None):
-    """'extrator', 'classificador' e 'leitor' podem ser trocados por versões falsas nos
+def construir_grafo(
+    extrator=extrair,
+    classificador=montar_classificacao,
+    leitor=None,
+    confirmador=None,
+):
+    """'extrator', 'classificador', 'leitor' e 'confirmador' podem ser trocados por versões falsas nos
     testes (sem LLM, sem rede)."""
     # Resolvido na chamada (e não na assinatura) para que os testes possam trocar
     # app.grafo.ler_imagem com monkeypatch.
@@ -234,6 +257,38 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
             ]
             saida["motivo_revisao"] = "; ".join(saida["motivos_revisao"])
         return saida
+
+    def n_avaliar_urgencia(s: Estado):
+        """Avalia urgência clínica com base nas regras dinâmicas do ServicoRegras (H6.2.1 T4)."""
+        e = s.get("extracao")
+        texto = s.get("texto", "")
+        canal = s.get("canal_origem")
+        nivel_leitura = getattr(e, "nivel_prioridade", None) if e is not None else None
+
+        aval = avaliar_urgencia(
+            texto=texto,
+            canal=canal,
+            nivel_atual=nivel_leitura,
+            confirmador=confirmador,
+        )
+        nivel = aval.nivel.value if hasattr(aval.nivel, "value") else str(aval.nivel)
+
+        novo_e = e
+        if e is not None and nivel == "Urgente":
+            novo_e = _com_nivel(e, "Urgente")
+        elif (
+            e is not None
+            and getattr(e, "nivel_prioridade", None) in (None, "Rotina")
+            and nivel == "Prioritário"
+        ):
+            novo_e = _com_nivel(e, "Prioritário")
+
+        return {
+            "nivel_prioridade": nivel,
+            "sinal_prioridade": aval.sinal,
+            "achado_critico": aval.achado,
+            "extracao": novo_e,
+        }
 
     def n_classificar(s: Estado):
         if s.get("erro") or s.get("extracao") is None:
@@ -388,6 +443,7 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         ("ler_entrada", n_ler_entrada),
         ("extrair", n_extrair),
         ("validar", n_validar),
+        ("avaliar_urgencia", n_avaliar_urgencia),
         ("classificar", n_classificar),
         ("decidir", n_decidir),
         ("rotear", n_rotear),
@@ -397,14 +453,19 @@ def construir_grafo(extrator=extrair, classificador=montar_classificacao, leitor
         g.add_node(nome, fn)
 
     g.set_entry_point("ler_entrada")
-    # T5: ilegível vai direto para a revisão, sem passar por extrair/validar/classificar
+    # T5: ilegível pula extrair/validar, mas passa por avaliar_urgencia (piso de prioridade do canal)
     g.add_conditional_edges(
         "ler_entrada",
-        lambda s: "decidir" if s.get("ilegivel") else "extrair",
-        {"decidir": "decidir", "extrair": "extrair"},
+        lambda s: "avaliar_urgencia" if s.get("ilegivel") else "extrair",
+        {"avaliar_urgencia": "avaliar_urgencia", "extrair": "extrair"},
     )
     g.add_edge("extrair", "validar")
-    g.add_edge("validar", "classificar")
+    g.add_edge("validar", "avaliar_urgencia")
+    g.add_conditional_edges(
+        "avaliar_urgencia",
+        lambda s: "decidir" if s.get("ilegivel") else "classificar",
+        {"decidir": "decidir", "classificar": "classificar"},
+    )
     g.add_edge("classificar", "decidir")
     g.add_conditional_edges(
         "decidir",
@@ -424,7 +485,14 @@ def triar(
     classificador=montar_classificacao,
     leitor=None,
     documento_id: str = "",
+    canal_origem: str | None = None,
+    confirmador=None,
 ) -> dict:
-    return construir_grafo(extrator, classificador, leitor).invoke(
-        {"texto": texto, "pdf_bytes": pdf_bytes, "documento_id": documento_id}
+    return construir_grafo(extrator, classificador, leitor, confirmador).invoke(
+        {
+            "texto": texto,
+            "pdf_bytes": pdf_bytes,
+            "documento_id": documento_id,
+            "canal_origem": canal_origem,
+        }
     )

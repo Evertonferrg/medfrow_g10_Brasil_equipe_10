@@ -288,9 +288,98 @@ with st.expander("Campos Críticos e Parâmetros Ativos"):
     st.write("**Destinos disponíveis:**")
     st.json(regras_atuais.get("destinos", []))
 
+# H6.2.1 T3 — Editar a lista de achados críticos
+st.markdown("---")
+st.subheader("3. Achados Críticos (Critérios de Urgência)")
+st.markdown(
+    """
+    Edite a lista de achados clínicos que tornam o documento **Urgente**,
+    encaminhando-o imediatamente para a **Fila de Emergência Médica**.
+    Adicione sinônimos separados por vírgula. A lista não pode ficar vazia.
+    """
+)
+
+achados_raw = regras_atuais.get("achados_criticos", [])
+dados_tabela = []
+for a in achados_raw:
+    nome = a.get("nome", "")
+    sin = a.get("sinonimos", [])
+    sin_str = ", ".join(sin) if isinstance(sin, list) else str(sin)
+    dados_tabela.append({"Achado": nome, "Sinônimos": sin_str})
+
+if not dados_tabela:
+    dados_tabela = [{"Achado": "", "Sinônimos": ""}]
+
+dados_editados = st.data_editor(
+    dados_tabela,
+    num_rows="dynamic",
+    key="editor_achados_criticos",
+    use_container_width=True,
+    column_config={
+        "Achado": st.column_config.TextColumn(
+            "Nome do Achado Crítico",
+            help="Nome principal do achado (ex: pneumotórax hipertensivo, TEP)",
+            required=True,
+        ),
+        "Sinônimos": st.column_config.TextColumn(
+            "Sinônimos (separados por vírgula)",
+            help="Termos alternativos ou abreviações (ex: pneumotorax hipertensivo, pneumotórax)",
+        ),
+    },
+)
+
+btn_salvar_achados = st.button("Salvar achados", type="primary")
+
+if btn_salvar_achados:
+    lista_para_salvar = []
+    for linha in dados_editados:
+        nome = str(linha.get("Achado", "")).strip()
+        if not nome:
+            continue
+        sin_raw = linha.get("Sinônimos", "")
+        if isinstance(sin_raw, list):
+            sin_lista = [str(x).strip() for x in sin_raw if str(x).strip()]
+        else:
+            sin_lista = [s.strip() for s in str(sin_raw).split(",") if s.strip()]
+        if nome not in sin_lista:
+            sin_lista = [nome, *sin_lista]
+        lista_para_salvar.append({"nome": nome, "sinonimos": sin_lista})
+
+    if not lista_para_salvar:
+        st.error("A lista de achados críticos não pode ficar vazia.")
+    else:
+        try:
+            auditora_atual = st.session_state.get("auditora", "Auditora")
+            resp_achados = requests.put(
+                f"{API_URL}/regras/achados",
+                json={
+                    "achados_criticos": lista_para_salvar,
+                    "auditora": auditora_atual,
+                },
+                timeout=5,
+            )
+            if resp_achados.status_code == 200:
+                dados = resp_achados.json()
+                st.success(
+                    f"Achados críticos salvos com sucesso! "
+                    f"Nova versão gerada: **{dados.get('versao')}**."
+                )
+                st.rerun()
+            else:
+                msg_erro = resp_achados.text
+                try:
+                    detalhe = resp_achados.json().get("detail")
+                    if detalhe:
+                        msg_erro = detalhe
+                except (ValueError, KeyError):
+                    pass
+                st.error(f"Erro ao salvar achados críticos: {msg_erro}")
+        except requests.RequestException as e:
+            st.error(f"Não foi possível conectar à API: {e}")
+
 # H6.4.1 — Histórico e restauração de versões das regras
 st.markdown("---")
-st.subheader("3. Histórico de Versões das Regras")
+st.subheader("4. Histórico de Versões das Regras")
 
 st.markdown(
     """
