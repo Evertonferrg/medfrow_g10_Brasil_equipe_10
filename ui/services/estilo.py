@@ -4,8 +4,8 @@ import streamlit as st
 
 CAMINHO_LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 
-PAGINA_LISTA = "pages/2_Documentos2.py"
-PAGINA_NOVO = "pages/novo_documento.py"
+PAGINA_LISTA = "pages/2_Lista_Documentos.py"
+PAGINA_NOVO = "pages/1_Novo_Documento.py"
 PAGINA_DASHBOARD = "pages/3_Dashboard.py"
 
 CSS = """
@@ -107,6 +107,11 @@ CSS = """
 
 def preparar_pagina() -> None:
     """Logo, sidebar e CSS padrão. Chame logo depois do st.set_page_config."""
+    # Devolve à URL o ID do caso que a navegação marcou (o switch_page limpa a URL)
+    pendente = st.session_state.pop("_id_para_url", None)
+    if pendente and not st.query_params.get("id"):
+        st.query_params["id"] = pendente
+        
     if CAMINHO_LOGO.exists():
         st.logo(str(CAMINHO_LOGO), size="large")
     st.markdown(CSS, unsafe_allow_html=True)
