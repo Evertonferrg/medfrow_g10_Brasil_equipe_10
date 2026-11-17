@@ -4,9 +4,9 @@ import streamlit as st
 
 CAMINHO_LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 
-PAGINA_LISTA = "pages/2_Documentos2.py"
-PAGINA_NOVO = "pages/novo_documento.py"
-PAGINA_DASHBOARD = "pages/3_Dashboard.py"
+PAGINA_LISTA = "pages/11_UI_Lista_Documentos.py"
+PAGINA_NOVO = "pages/12_UI_Novo_Documento.py"
+PAGINA_DASHBOARD = "pages/10_UI_Dashboard.py"
 
 CSS = """
 <style>

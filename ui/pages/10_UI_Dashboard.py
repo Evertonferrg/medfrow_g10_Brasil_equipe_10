@@ -1,6 +1,7 @@
 import base64
 import json
 from pathlib import Path
+from services.estilo import preparar_pagina
 
 import streamlit as st
 
@@ -9,9 +10,9 @@ st.set_page_config(
     page_icon="🩺",
     layout="wide",
 )
+preparar_pagina()
 
 RAIZ = Path(__file__).resolve().parents[1]
-CAMINHO_LOGO = RAIZ / "assets" / "logo.png"
 CAMINHO_EXAME = RAIZ / "assets" / "exame_torax.png"
 
 # ------------------------------------------------------------------
@@ -151,19 +152,6 @@ def imagem_base64(caminho: Path) -> str:
         f'<img src="data:image/png;base64,{b64}" alt="Imagem do exame">'
         "</div>"
     )
-
-
-# ------------------------------------------------------------------
-# SIDEBAR
-# ------------------------------------------------------------------
-if CAMINHO_LOGO.exists():
-    st.logo(str(CAMINHO_LOGO), size="large")
-
-with st.sidebar:
-    st.markdown("<div style='height: 35vh;'></div>", unsafe_allow_html=True)
-    st.divider()
-    st.caption("⚙️ Configurações")
-    st.caption("🚪 Sair")
 
 # ------------------------------------------------------------------
 # CABEÇALHO
