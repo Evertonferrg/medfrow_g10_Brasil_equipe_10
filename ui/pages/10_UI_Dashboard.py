@@ -1,9 +1,9 @@
 import base64
 import json
 from pathlib import Path
-from services.estilo import preparar_pagina
 
 import streamlit as st
+from services.estilo import preparar_pagina
 
 st.set_page_config(
     page_title="MediFlow HealthTech - Dashboard",
@@ -152,6 +152,7 @@ def imagem_base64(caminho: Path) -> str:
         f'<img src="data:image/png;base64,{b64}" alt="Imagem do exame">'
         "</div>"
     )
+
 
 # ------------------------------------------------------------------
 # CABEÇALHO
