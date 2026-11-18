@@ -8,13 +8,13 @@ import os
 import requests
 import streamlit as st
 from services.estilo import pill, preparar_pagina
+from services.navegacao import abrir_caso
 
 from componentes.fila import (
     minutos_de_espera,
     texto_dose_destacada,
     texto_espera,
 )
-from fila_abrir_caso_snippet import botao_abrir_caso
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
@@ -93,8 +93,15 @@ def fila():
                     st.markdown(f":red[**{texto_dose_destacada(destaque)}**]")
 
             with acao:
-                # Abre a tela resumida do caso (mesmo botão de antes)
-                botao_abrir_caso(documento_id)
+                # Abre o caso no Dashboard (porta única de navegação)
+                if st.button(
+                    "Abrir caso",
+                    key=f"abrir_{documento_id}",
+                    type="primary",
+                    icon=":material/open_in_new:",
+                    use_container_width=True,
+                ):
+                    abrir_caso(documento_id)
 
 
 fila()
