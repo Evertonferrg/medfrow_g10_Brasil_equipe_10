@@ -1,8 +1,7 @@
 import math
 import os
-import sys
 from pathlib import Path
-from services.navegacao import abrir_caso
+import sys
 
 import requests
 import streamlit as st
@@ -12,8 +11,8 @@ RAIZ_UI = Path(__file__).resolve().parents[1]
 if str(RAIZ_UI) not in sys.path:
     sys.path.insert(0, str(RAIZ_UI))
 
-from services.detalhe import mostrar_detalhe
-from services.estilo import PAGINA_DASHBOARD, PAGINA_NOVO, pill, preparar_pagina
+from services.estilo import PAGINA_NOVO, pill, preparar_pagina
+from services.navegacao import abrir_caso
 
 # ------------------------------------------------------------------
 # CONFIGURAÇÃO DA PÁGINA
@@ -69,24 +68,6 @@ def buscar_lista(canal: str) -> list | None:
     except (requests.RequestException, ValueError):
         return None
     return dados if isinstance(dados, list) else None
-
-
-def buscar_detalhe(doc_id: str) -> tuple[str, dict | None]:
-    """GET /documentos/{id}. Estados: ok, processando, nao_encontrado, erro."""
-    try:
-        det = requests.get(f"{API}/documentos/{doc_id}", timeout=30)
-    except requests.RequestException:
-        return "erro", None
-    if det.status_code == 200:
-        try:
-            return "ok", det.json()
-        except ValueError:
-            return "erro", None
-    if det.status_code == 202:
-        return "processando", None
-    if det.status_code == 404:
-        return "nao_encontrado", None
-    return "erro", None
 
 
 # ------------------------------------------------------------------
@@ -168,8 +149,6 @@ pagina = min(st.session_state.get("pagina", 1), total_paginas)
 inicio = (pagina - 1) * POR_PAGINA
 itens = filtrados[inicio : inicio + POR_PAGINA]
 
-doc_selecionado = st.session_state.get("doc_selecionado")
-
 with st.container(key="card_lista"):
     if not itens:
         st.info("Nenhum documento encontrado com o termo pesquisado.")
@@ -183,17 +162,15 @@ with st.container(key="card_lista"):
         for d in itens:
             c1, c2, c3, c4, c5, c6 = st.columns(LARGURAS, vertical_alignment="center")
 
-            marcador = "🔵 " if d["id"] == doc_selecionado else ""
-            c1.markdown(f"<span style='font-size:.9rem;font-weight:600'>{marcador}{d['id']}</span>", unsafe_allow_html=True)
+            c1.markdown(f"<span style='font-size:.9rem;font-weight:600'>{d['id']}</span>", unsafe_allow_html=True)
             c2.markdown(f"<span style='font-size:.9rem'>{d['tipo']}</span>", unsafe_allow_html=True)
             c3.markdown(f"<span style='font-size:.9rem'>{d['destino']}</span>", unsafe_allow_html=True)
             c4.markdown(pill(d["prioridade"], COR_PRIORIDADE.get(d["prioridade"].lower(), "gray")), unsafe_allow_html=True)
             c5.markdown(pill(rotulo_status(d["status"]), cor_status(d["status"])), unsafe_allow_html=True)
 
-            lbl_btn = "Detalhes" if d["id"] != doc_selecionado else "Ocultar"
-            if c6.button(lbl_btn, key=f"sel_{d['id']}", icon=":material/visibility:", use_container_width=True):
-                st.session_state["doc_selecionado"] = None if d["id"] == doc_selecionado else d["id"]
-                st.rerun()
+            # Botão direto para o Dashboard
+            if c6.button("Abrir", key=f"abrir_{d['id']}", type="primary", icon=":material/open_in_new:", use_container_width=True):
+                abrir_caso(d["id"])
 
             st.markdown("<hr style='margin:.4rem 0;opacity:.15'>", unsafe_allow_html=True)
 
@@ -209,27 +186,3 @@ with st.container(key="card_lista"):
             if st.button("", icon=":material/chevron_right:", disabled=pagina >= total_paginas, key="pg_prox", use_container_width=True):
                 st.session_state["pagina"] = pagina + 1
                 st.rerun()
-
-# ------------------------------------------------------------------
-# DETALHE DO DOCUMENTO SELECIONADO + "ABRIR CASO"
-# ------------------------------------------------------------------
-if doc_selecionado:
-    st.divider()
-    col_detalhe_tit, col_detalhe_btn = st.columns([4, 1], vertical_alignment="center")
-    with col_detalhe_tit:
-        st.subheader(f"Detalhe: {doc_selecionado}")
-    with col_detalhe_btn:
-        if st.button("Abrir caso", key=f"abrir_{doc_selecionado}", type="primary", icon=":material/open_in_new:", use_container_width=True):
-            abrir_caso(doc_selecionado)
-
-    with st.spinner("Carregando detalhes do documento..."):
-        estado, res = buscar_detalhe(doc_selecionado)
-
-    if estado == "ok":
-        mostrar_detalhe(res)
-    elif estado == "processando":
-        st.info("Este documento ainda está sendo processado. Atualize a página em instantes.")
-    elif estado == "nao_encontrado":
-        st.warning("Documento não encontrado.")
-    else:
-        st.error("Não foi possível carregar os detalhes. Verifique se a API está no ar.")
