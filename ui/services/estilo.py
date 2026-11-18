@@ -1,12 +1,15 @@
+import sys
 from pathlib import Path
 
 import streamlit as st
 
-CAMINHO_LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
+RAIZ_UI = Path(__file__).resolve().parents[1]
+CAMINHO_LOGO = RAIZ_UI / "assets" / "logo.png"
 
 PAGINA_LISTA = "pages/2_Lista_Documentos.py"
 PAGINA_NOVO = "pages/1_Novo_Documento.py"
 PAGINA_DASHBOARD = "pages/3_Dashboard.py"
+PAGINA_FILA = "pages/6_Fila_de_Revisao.py"
 PAGINA_CONFIG = "pages/99_Configuracoes.py"
 
 CSS = """
@@ -126,12 +129,125 @@ CSS = """
         color: #FFFFFF !important;
         font-weight: 600;
     }
+
+    /* Botão secundário "Voltar": contorno azul, sem preenchimento */
+    div[class*="st-key-btn_voltar"] a[data-testid="stPageLink-NavLink"] {
+        border: 1px solid #3B82F6;
+        border-radius: 8px;
+        min-height: 2.5rem;
+        justify-content: center;
+        padding: 0.5rem 1rem;
+        transition: background .15s;
+    }
+    div[class*="st-key-btn_voltar"] a[data-testid="stPageLink-NavLink"]:hover {
+        background: rgba(59, 130, 246, .12);
+    }
+    div[class*="st-key-btn_voltar"] a[data-testid="stPageLink-NavLink"] *,
+    div[class*="st-key-btn_voltar"] a[data-testid="stPageLink-NavLink"] p,
+    div[class*="st-key-btn_voltar"] a[data-testid="stPageLink-NavLink"] span {
+        color: #3B82F6 !important;
+        font-weight: 600;
+    }
+
+    /* Botão secundário nas linhas da Lista de Documentos ("Detalhes"): contorno azul */
+    div[class*="st-key-sel_"] button {
+        background: transparent !important;
+        border: 1px solid #3B82F6 !important;
+        border-radius: 8px;
+        transition: background .15s;
+    }
+    div[class*="st-key-sel_"] button:hover {
+        background: rgba(59, 130, 246, .12) !important;
+    }
+    div[class*="st-key-sel_"] button * {
+        color: #3B82F6 !important;
+        font-weight: 600;
+    }
+</style>
+"""
+
+# Só é aplicado na página "Revisão do caso" (da equipe): estilo, sem mexer no conteúdo.
+CSS_REVISAO = """
+<style>
+    /* Original e Extração viram dois cards do mesmo tamanho */
+    .block-container > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] {
+        align-items: stretch !important;
+    }
+    .block-container > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"]
+        > :is([data-testid="stColumn"], [data-testid="column"]) {
+        box-sizing: border-box;
+        min-width: 0;
+        background: color-mix(in srgb, currentColor 7%, transparent);
+        background: rgb(from currentColor 255 255 255 / calc(1 - r / 255));
+        border: 1px solid rgba(128, 128, 128, .25);
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+        padding: 1.1rem 1.25rem;
+    }
+    /* Os blocos seguintes (ex.: Decisão da Auditora) não viram card */
+    .block-container > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"]
+        ~ [data-testid="stHorizontalBlock"]
+        > :is([data-testid="stColumn"], [data-testid="column"]) {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+    }
+
+    /* Títulos de seção no mesmo estilo dos títulos dos cards */
+    .block-container h3 {
+        font-size: .95rem; font-weight: 700; letter-spacing: .02em;
+        text-transform: uppercase; padding: .75rem 0 .25rem;
+    }
+    .block-container hr { margin: 1.5rem 0; opacity: .3; }
+
+    /* Trilha de decisões: expansores como cartões */
+    [data-testid="stExpander"] {
+        border: 1px solid rgba(128, 128, 128, .25);
+        border-radius: 10px;
+        background: color-mix(in srgb, currentColor 7%, transparent);
+        background: rgb(from currentColor 255 255 255 / calc(1 - r / 255));
+    }
 </style>
 """
 
 
+def _e_revisao_de_caso(nome_arquivo: str) -> bool:
+    """A página 'Revisão do caso' (e não a 'Fila de revisão')."""
+    nome = nome_arquivo.lower()
+    return "revisao" in nome and "fila" not in nome
+
+
+def _barra_revisao() -> None:
+    """Navegação no topo da Revisão do caso: voltar à fila e abrir o caso no Dashboard."""
+    doc_id = str(st.query_params.get("id") or "").strip()
+    fila_existe = (RAIZ_UI / PAGINA_FILA).exists()
+    with st.container(key="barra_revisao"):
+        c1, c2, _ = st.columns([2, 2.4, 5], vertical_alignment="center")
+        if fila_existe:
+            with c1, st.container(key="btn_voltar"):
+                st.page_link(
+                    PAGINA_FILA, label="Voltar para a Fila", icon=":material/arrow_back:"
+                )
+        if doc_id:
+            with c2:
+                if st.button(
+                    "Ver caso no Dashboard",
+                    key="rev_ver_dashboard",
+                    type="primary",
+                    icon=":material/open_in_new:",
+                    use_container_width=True,
+                ):
+                    from services.navegacao import abrir_caso  # evita import circular
+
+                    abrir_caso(doc_id)
+
+
 def preparar_pagina() -> None:
     """Logo, sidebar e CSS padrão. Chame logo depois do st.set_page_config."""
+    # Arquivo da página que chamou (usado para estilos específicos de uma tela)
+    chamador = Path(sys._getframe(1).f_globals.get("__file__", "")).name
+
     # Devolve à URL o ID do caso que a navegação marcou (o switch_page limpa a URL)
     pendente = st.session_state.pop("_id_para_url", None)
     if pendente and not st.query_params.get("id"):
@@ -141,7 +257,7 @@ def preparar_pagina() -> None:
         st.logo(str(CAMINHO_LOGO), size="large")
     st.markdown(CSS, unsafe_allow_html=True)
 
-    pagina_config = Path(__file__).resolve().parents[1] / PAGINA_CONFIG
+    pagina_config = RAIZ_UI / PAGINA_CONFIG
     if pagina_config.exists():
         # O item sai da lista do menu e passa a ficar só no rodapé
         st.markdown(
@@ -161,6 +277,10 @@ def preparar_pagina() -> None:
             st.page_link(PAGINA_CONFIG, label="Configurações", icon=":material/settings:")
         else:
             st.caption("⚙️ Configurações")
+
+    if _e_revisao_de_caso(chamador):
+        st.markdown(CSS_REVISAO, unsafe_allow_html=True)
+        _barra_revisao()
 
 
 def pill(texto: str, cor: str = "gray") -> str:
