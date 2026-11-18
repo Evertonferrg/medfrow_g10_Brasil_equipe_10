@@ -25,7 +25,7 @@ def caso_atual() -> str | None:
     valor = str(valor).strip() if valor else ""
     return valor or None
 
-PAGINA_REVISAO = "pages/7_Revisao_caso.py"
+PAGINA_REVISAO = "pages/7_Revisao_de_caso.py"
 
 def abrir_revisao(documento_id: str) -> None:
     """Abre o painel de revisão da equipe, que só lê o ID da URL (?id=...).

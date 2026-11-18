@@ -42,14 +42,22 @@ COR_PRIORIDADE = {
 
 CSS = """
 <style>
-    .card-title { font-size: .95rem; font-weight: 700; letter-spacing: .02em; margin: 0; }
+    .card-title { font-size: .95rem; font-weight: 700; letter-spacing: .02em;
+                  color: inherit; margin: 0; }
     .topo { display: flex; justify-content: space-between; align-items: center;
             margin-bottom: .6rem; gap: .5rem; }
-    .linha { margin: .35rem 0; font-size: .95rem; }
+    .linha { margin: .35rem 0; font-size: .95rem; color: inherit; }
+    .linha b { color: inherit; }
     .grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
              gap: .9rem 1.2rem; }
     .grade .rot { display: block; font-size: .8rem; opacity: .7; }
     .grade .val { font-size: 1.1rem; font-weight: 600; }
+
+    /* JSON com um leve tom próprio, para não sumir dentro do card branco */
+    div[class*="st-key-card_json"] [data-testid="stCode"],
+    div[class*="st-key-card_json"] pre {
+        background: color-mix(in srgb, currentColor 3%, transparent) !important;
+    }
 </style>
 """
 
@@ -331,12 +339,21 @@ def mostrar_detalhe(res: dict) -> None:
             )
 
     # ---------------- JSON ----------------
-    with st.expander("Ver JSON completo"):
-        st.json(res)
-    st.download_button(
-        "Baixar resultado (JSON)",
-        json.dumps(res, ensure_ascii=False, indent=2),
-        file_name=f"{res.get('documento_id') or 'resultado'}.json",
-        mime="application/json",
-        key=f"dl_{res.get('documento_id') or 'resultado'}",
-    )
+    with st.container(key="card_json"):
+        st.markdown(
+            '<p class="card-title" style="margin-bottom:.5rem">VISUALIZAÇÃO DO JSON</p>',
+            unsafe_allow_html=True,
+        )
+        st.code(
+            json.dumps(res, indent=2, ensure_ascii=False),
+            language="json",
+            height=340,
+        )
+        st.download_button(
+            "Baixar resultado (JSON)",
+            json.dumps(res, ensure_ascii=False, indent=2),
+            file_name=f"{res.get('documento_id') or 'resultado'}.json",
+            mime="application/json",
+            type="primary",
+            key=f"dl_{res.get('documento_id') or 'resultado'}",
+        )
