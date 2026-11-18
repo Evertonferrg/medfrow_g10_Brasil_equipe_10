@@ -7,6 +7,7 @@ CAMINHO_LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 PAGINA_LISTA = "pages/2_Lista_Documentos.py"
 PAGINA_NOVO = "pages/1_Novo_Documento.py"
 PAGINA_DASHBOARD = "pages/3_Dashboard.py"
+PAGINA_CONFIG = "pages/99_Configuracoes.py"
 
 CSS = """
 <style>
@@ -101,6 +102,30 @@ CSS = """
     .barras-rotulos { display: flex; justify-content: space-around;
                       font-size: .8rem; opacity: .7; padding-top: 6px; }
     .barras-rotulos span { width: 28%; text-align: center; }
+
+    /* Fila de revisão: faixa pela prioridade e botão azul de abrir caso */
+    div[class*="st-key-card_fila_red"]    { border-left: 5px solid #EF4444; }
+    div[class*="st-key-card_fila_orange"] { border-left: 5px solid #F97316; }
+    div[class*="st-key-card_fila_green"]  { border-left: 5px solid #22C55E; }
+    div[class*="st-key-card_fila_gray"]   { border-left: 5px solid #94A3B8; }
+
+    div[class*="st-key-card_fila_"] button,
+    div[class*="st-key-card_fila_"] a[data-testid="stPageLink-NavLink"] {
+        background: #2563EB !important;
+        border: none;
+        border-radius: 8px;
+        min-height: 2.5rem;
+        transition: background .15s;
+    }
+    div[class*="st-key-card_fila_"] button:hover,
+    div[class*="st-key-card_fila_"] a[data-testid="stPageLink-NavLink"]:hover {
+        background: #1D4ED8 !important;
+    }
+    div[class*="st-key-card_fila_"] button *,
+    div[class*="st-key-card_fila_"] a[data-testid="stPageLink-NavLink"] * {
+        color: #FFFFFF !important;
+        font-weight: 600;
+    }
 </style>
 """
 
@@ -111,15 +136,31 @@ def preparar_pagina() -> None:
     pendente = st.session_state.pop("_id_para_url", None)
     if pendente and not st.query_params.get("id"):
         st.query_params["id"] = pendente
-        
+
     if CAMINHO_LOGO.exists():
         st.logo(str(CAMINHO_LOGO), size="large")
     st.markdown(CSS, unsafe_allow_html=True)
+
+    pagina_config = Path(__file__).resolve().parents[1] / PAGINA_CONFIG
+    if pagina_config.exists():
+        # O item sai da lista do menu e passa a ficar só no rodapé
+        st.markdown(
+            """
+<style>
+    [data-testid="stSidebarNav"] li:has(a[href$="Configuracoes"]) { display: none; }
+    [data-testid="stSidebarNav"] a[href$="Configuracoes"] { display: none; }
+</style>
+""",
+            unsafe_allow_html=True,
+        )
+
     with st.sidebar:
         st.markdown("<div style='height: 35vh;'></div>", unsafe_allow_html=True)
         st.divider()
-        st.caption("⚙️ Configurações")
-        st.caption("🚪 Sair")
+        if pagina_config.exists():
+            st.page_link(PAGINA_CONFIG, label="Configurações", icon=":material/settings:")
+        else:
+            st.caption("⚙️ Configurações")
 
 
 def pill(texto: str, cor: str = "gray") -> str:
