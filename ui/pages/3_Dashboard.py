@@ -26,33 +26,36 @@ st.title("Dashboard")
 doc_id = caso_atual()
 
 # ------------------------------------------------------------------
-# TOPO: voltar à lista e buscar por ID (substitui a busca da tela Triagem)
+# TOPO: comportamento diferente para tela vazia vs. caso aberto
 # ------------------------------------------------------------------
-c_voltar, c_busca = st.columns([1, 3], vertical_alignment="bottom")
-with c_voltar:
-    st.page_link(PAGINA_LISTA, label="Voltar para a lista", icon=":material/arrow_back:")
-with c_busca, st.form("buscar_caso", border=False):
-    f1, f2 = st.columns([4, 1], vertical_alignment="bottom")
-    texto = f1.text_input(
-        "ID do documento",
-        value=doc_id or "",
-        placeholder="DOC-CLIN-2026-8942",
-        label_visibility="collapsed",
-    )
-    buscar = f2.form_submit_button("Abrir caso", use_container_width=True)
-
-if buscar and texto.strip():
-    definir_caso(texto.strip())
-    st.query_params["id"] = texto.strip()
-    st.rerun()
-
 if not doc_id:
+    # Tela vazia: exibe busca manual para o usuário digitar um ID diretamente
     st.info("Digite o ID de um documento ou abra um caso pela lista de documentos.")
+    with st.form("buscar_caso", border=False):
+        f1, f2 = st.columns([4, 1], vertical_alignment="bottom")
+        texto = f1.text_input(
+            "ID do documento",
+            placeholder="DOC-CLIN-2026-8942",
+            label_visibility="collapsed",
+        )
+        buscar = f2.form_submit_button(
+            "Abrir caso",
+            type="primary",
+            icon=":material/open_in_new:",
+            use_container_width=True,
+        )
+    if buscar and texto.strip():
+        definir_caso(texto.strip())
+        st.query_params["id"] = texto.strip()
+        st.rerun()
     st.stop()
 
-if st.query_params.get("id") != doc_id:
-    st.query_params["id"] = doc_id  # o link da página passa a apontar para este caso
+# Caso já carregado: só o link discreto de voltar à lista
+with st.container(key="btn_voltar"):
+    st.page_link(PAGINA_LISTA, label="Voltar para a lista", icon=":material/arrow_back:")
 
+if st.query_params.get("id") != doc_id:
+    st.query_params["id"] = doc_id  # garante que a URL sempre reflete o caso aberto
 
 # ------------------------------------------------------------------
 # CONSULTA (GET /documentos/{id})
@@ -94,7 +97,7 @@ if dec.get("requer_auditoria_humana"):
     with st.container(key="card_revisao"):
         a, b = st.columns([4, 1], vertical_alignment="center")
         a.markdown("**Este caso precisa de revisão humana.** Confira os pontos de atenção e decida.")
-        if b.button("Revisar caso", type="primary", use_container_width=True, key="btn_revisar"):
+        if b.button("Revisar caso", type="primary", icon=":material/open_in_new:", use_container_width=True, key="btn_revisar"):
             abrir_revisao(doc_id)
 
 col_esq, col_dir = st.columns([5, 6], gap="large")
