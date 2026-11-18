@@ -52,7 +52,7 @@ if not doc_id:
 
 # Caso já carregado: só o link discreto de voltar à lista
 with st.container(key="btn_voltar"):
-    st.page_link(PAGINA_LISTA, label="Voltar para a lista", icon=":material/arrow_back:")
+    st.page_link(PAGINA_LISTA, label="Voltar para a Lista", icon=":material/arrow_back:")
 
 if st.query_params.get("id") != doc_id:
     st.query_params["id"] = doc_id  # garante que a URL sempre reflete o caso aberto
