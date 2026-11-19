@@ -1,7 +1,9 @@
+import html
 import math
 import os
-from pathlib import Path
 import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import requests
 import streamlit as st
@@ -23,6 +25,7 @@ preparar_pagina()
 API = os.getenv("API_URL", "http://localhost:8000")
 CANAIS = ["Todos", "Pronto_Socorro", "Ambulatorio", "Laboratorio", "Operadora"]
 POR_PAGINA = 5
+FUSO_HORAS = -3  # horário de Brasília; use None para mostrar o horário como a API devolveu
 
 COR_PRIORIDADE = {
     "urgente": "red",
@@ -34,9 +37,12 @@ COR_PRIORIDADE = {
 }
 
 # Larguras das 6 colunas da tabela
-LARGURAS = [2.6, 2.2, 2.2, 1.4, 1.4, 1.4]
+LARGURAS = [2.6, 2.1, 2.2, 1.3, 1.9, 1.3]
 
 
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
 def cor_status(status: str) -> str:
     s = status.lower()
     if "erro" in s or "rejeit" in s:
@@ -54,6 +60,34 @@ def rotulo_status(status: str) -> str:
     return status.replace("_", " ").capitalize()
 
 
+def formatar_data(valor) -> str:
+    texto = str(valor or "").strip()
+    if not texto:
+        return ""
+    try:
+        dt = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+    except ValueError:
+        return texto[:16].replace("T", " ")
+    if FUSO_HORAS is not None and dt.tzinfo is not None:
+        dt = dt.astimezone(timezone(timedelta(hours=FUSO_HORAS)))
+    return dt.strftime("%d/%m/%Y %H:%M")
+
+
+def celula(texto, negrito: bool = False) -> str:
+    """Texto de uma célula (escapado para HTML)."""
+    peso = "font-weight:600;" if negrito else ""
+    return f"<span style='font-size:.9rem;{peso}'>{html.escape(str(texto))}</span>"
+
+
+def linha_pequena(texto: str) -> str:
+    """Linha secundária em letra pequena: uma linha só, com reticências se for longa."""
+    seguro = html.escape(texto)
+    return (
+        "<span style='display:block;font-size:.75rem;opacity:.7;overflow:hidden;"
+        f"text-overflow:ellipsis;white-space:nowrap' title='{seguro}'>{seguro}</span>"
+    )
+
+
 def voltar_pagina_1() -> None:
     st.session_state["pagina"] = 1
 
@@ -69,6 +103,21 @@ def buscar_lista(canal: str) -> list | None:
         return None
     return dados if isinstance(dados, list) else None
 
+@st.cache_data(ttl=60, show_spinner=False)
+def buscar_motivo_rejeicao(doc_id: str) -> str:
+    """Busca o motivo no detalhe caso o resumo da API devolva nulo."""
+    try:
+        r = requests.get(f"{API}/documentos/{doc_id}", timeout=5)
+        if r.status_code == 200:
+            dados = r.json()
+            if dados.get("motivo_rejeicao"):
+                return str(dados["motivo_rejeicao"]).strip()
+            just = (dados.get("decisao_roteamento") or {}).get("justificativa_roteamento") or ""
+            if "Motivo:" in just:
+                return just.split("Motivo:")[-1].strip()
+    except Exception:
+        pass
+    return ""
 
 # ------------------------------------------------------------------
 # CABEÇALHO (Título + Botão "+ Novo Documento")
@@ -120,6 +169,13 @@ if not itens_api:
     st.info("Nenhum documento encontrado para este canal de origem.")
     st.stop()
 
+
+def motivo_de(item: dict) -> str:
+    motivo = item.get("motivo_rejeicao")
+    texto = str(motivo).strip() if motivo is not None else ""
+    return "" if texto.lower() == "none" else texto
+
+
 DOCUMENTOS = [
     {
         "id": str(item.get("documento_id", "—")),
@@ -128,16 +184,24 @@ DOCUMENTOS = [
         "prioridade": item.get("nivel_prioridade") or "Rotina",
         "status": str(item.get("status") or "processado"),
         "canal_origem": item.get("canal_origem", ""),
+        "data_bruta": str(item.get("data") or ""),
+        "motivo": motivo_de(item),
     }
     for item in itens_api
+    if isinstance(item, dict)
 ]
+DOCUMENTOS.sort(key=lambda d: d["data_bruta"], reverse=True)  # mais recentes primeiro
 
 termo = busca.strip().lower()
 filtrados = [
     d
     for d in DOCUMENTOS
     if not termo
-    or termo in f"{d['id']} {d['tipo']} {d['destino']} {d['status']} {d['canal_origem']}".lower()
+    or termo
+    in (
+        f"{d['id']} {d['tipo']} {d['destino']} {d['status']} "
+        f"{d['canal_origem']} {d['motivo']}"
+    ).lower()
 ]
 
 # ------------------------------------------------------------------
@@ -154,7 +218,7 @@ with st.container(key="card_lista"):
         st.info("Nenhum documento encontrado com o termo pesquisado.")
     else:
         cab = st.columns(LARGURAS)
-        titulos = ["ID", "Tipo de Documento", "Destino / Origem", "Prioridade", "Status", "Ação"]
+        titulos = ["ID / Data", "Tipo de Documento", "Destino / Origem", "Prioridade", "Status", "Ação"]
         for col, texto in zip(cab, titulos):
             col.markdown(f"<b style='font-size:.85rem'>{texto}</b>", unsafe_allow_html=True)
         st.markdown("<hr style='margin:.25rem 0 .5rem;opacity:.3'>", unsafe_allow_html=True)
@@ -162,15 +226,38 @@ with st.container(key="card_lista"):
         for d in itens:
             c1, c2, c3, c4, c5, c6 = st.columns(LARGURAS, vertical_alignment="center")
 
-            c1.markdown(f"<span style='font-size:.9rem;font-weight:600'>{d['id']}</span>", unsafe_allow_html=True)
-            c2.markdown(f"<span style='font-size:.9rem'>{d['tipo']}</span>", unsafe_allow_html=True)
-            c3.markdown(f"<span style='font-size:.9rem'>{d['destino']}</span>", unsafe_allow_html=True)
-            c4.markdown(pill(d["prioridade"], COR_PRIORIDADE.get(d["prioridade"].lower(), "gray")), unsafe_allow_html=True)
-            c5.markdown(pill(rotulo_status(d["status"]), cor_status(d["status"])), unsafe_allow_html=True)
+            data_txt = formatar_data(d["data_bruta"])
+            c1.markdown(
+                celula(d["id"], negrito=True) + (linha_pequena(data_txt) if data_txt else ""),
+                unsafe_allow_html=True,
+            )
+            c2.markdown(celula(d["tipo"]), unsafe_allow_html=True)
+            c3.markdown(celula(str(d["destino"]).replace("_", " ")), unsafe_allow_html=True)
+            c4.markdown(
+                pill(
+                    html.escape(str(d["prioridade"])),
+                    COR_PRIORIDADE.get(str(d["prioridade"]).lower(), "gray"),
+                ),
+                unsafe_allow_html=True,
+            )
+            motivo = d["motivo"]
+            if not motivo and d["status"].lower() == "rejeitado":
+                motivo = buscar_motivo_rejeicao(d["id"])
 
-            # Botão direto para o Dashboard
-            if c6.button("Abrir", key=f"abrir_{d['id']}", type="primary", icon=":material/open_in_new:", use_container_width=True):
-                abrir_caso(d["id"])
+            c5.markdown(
+                pill(html.escape(rotulo_status(d["status"])), cor_status(d["status"]))
+                + (linha_pequena(f"Motivo: {motivo}") if motivo else ""),
+                unsafe_allow_html=True,
+            )
+            if c6.button(
+                "Abrir",
+                key=f"lista_abrir_{d['id']}",
+                type="primary",
+                icon=":material/open_in_new:",
+                use_container_width=True,
+                help="Abrir no Dashboard",
+            ):
+                abrir_caso(d["id"])  # porta única: guarda o caso e vai ao Dashboard
 
             st.markdown("<hr style='margin:.4rem 0;opacity:.15'>", unsafe_allow_html=True)
 
