@@ -148,21 +148,6 @@ CSS = """
         color: #3B82F6 !important;
         font-weight: 600;
     }
-
-    /* Botão secundário nas linhas da Lista de Documentos ("Detalhes"): contorno azul */
-    div[class*="st-key-sel_"] button {
-        background: transparent !important;
-        border: 1px solid #3B82F6 !important;
-        border-radius: 8px;
-        transition: background .15s;
-    }
-    div[class*="st-key-sel_"] button:hover {
-        background: rgba(59, 130, 246, .12) !important;
-    }
-    div[class*="st-key-sel_"] button * {
-        color: #3B82F6 !important;
-        font-weight: 600;
-    }
 </style>
 """
 
@@ -211,11 +196,84 @@ CSS_REVISAO = """
 </style>
 """
 
+# Só é aplicado na página "Configurações" (da equipe): estilo, sem mexer no conteúdo.
+CSS_CONFIG = """
+<style>
+    /* Métricas do topo viram cards */
+    [data-testid="stMetric"] {
+        background: color-mix(in srgb, currentColor 7%, transparent);
+        background: rgb(from currentColor 255 255 255 / calc(1 - r / 255));
+        border: 1px solid rgba(128, 128, 128, .25);
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+        padding: 1rem 1.25rem;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: .8rem; opacity: .75; text-transform: uppercase; letter-spacing: .03em;
+    }
+    [data-testid="stMetricValue"] { font-size: 1.7rem; font-weight: 700; }
+
+    /* Títulos das seções: barra azul à esquerda, no lugar das divisórias soltas */
+    .block-container h3 {
+        font-size: 1.05rem; font-weight: 700; letter-spacing: .02em;
+        text-transform: uppercase;
+        border-left: 4px solid #2563EB;
+        padding: .15rem 0 .15rem .7rem;
+        margin-top: .5rem;
+    }
+    .block-container h4, .block-container h5 {
+        font-size: .95rem; font-weight: 700; letter-spacing: .02em;
+    }
+    .block-container hr { margin: 1.75rem 0; opacity: .25; }
+
+    /* Slider, formulário, tabelas e expansor como cartões */
+    [data-testid="stSlider"],
+    [data-testid="stForm"],
+    [data-testid="stExpander"] {
+        background: color-mix(in srgb, currentColor 7%, transparent);
+        background: rgb(from currentColor 255 255 255 / calc(1 - r / 255));
+        border: 1px solid rgba(128, 128, 128, .25);
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+    }
+    [data-testid="stSlider"] { padding: 1rem 1.5rem .5rem; }
+    [data-testid="stForm"] { padding: 1.25rem 1.5rem; }
+    [data-testid="stDataFrame"] {
+        border: 1px solid rgba(128, 128, 128, .25);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    /* Botão secundário (ex.: "Restaurar versão selecionada"): contorno azul */
+    button[data-testid="stBaseButton-secondary"],
+    button[kind="secondary"] {
+        background: transparent !important;
+        border: 1px solid #3B82F6 !important;
+        border-radius: 8px;
+        transition: background .15s;
+    }
+    button[data-testid="stBaseButton-secondary"]:hover,
+    button[kind="secondary"]:hover {
+        background: rgba(59, 130, 246, .12) !important;
+    }
+    button[data-testid="stBaseButton-secondary"] *,
+    button[kind="secondary"] * {
+        color: #3B82F6 !important;
+        font-weight: 600;
+    }
+</style>
+"""
+
 
 def _e_revisao_de_caso(nome_arquivo: str) -> bool:
     """A página 'Revisão do caso' (e não a 'Fila de revisão')."""
     nome = nome_arquivo.lower()
     return "revisao" in nome and "fila" not in nome
+
+
+def _e_configuracoes(nome_arquivo: str) -> bool:
+    """A página 'Configurações' (antes 'Regras')."""
+    return "configuracoes" in nome_arquivo.lower()
 
 
 def _barra_revisao() -> None:
@@ -281,6 +339,8 @@ def preparar_pagina() -> None:
     if _e_revisao_de_caso(chamador):
         st.markdown(CSS_REVISAO, unsafe_allow_html=True)
         _barra_revisao()
+    elif _e_configuracoes(chamador):
+        st.markdown(CSS_CONFIG, unsafe_allow_html=True)
 
 
 def pill(texto: str, cor: str = "gray") -> str:
