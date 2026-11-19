@@ -72,7 +72,7 @@ preparar_pagina()
 
 c_voltar, _ = st.columns([1, 4])
 with c_voltar, st.container(key="btn_voltar"):
-    st.page_link(PAGINA_LISTA, label="Voltar para Lista", icon=":material/arrow_back:")
+    st.page_link(PAGINA_LISTA, label="Voltar para Lista Documentos", icon=":material/arrow_back:")
 st.title("Novo Documento Clínico")
 
 st.info(
