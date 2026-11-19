@@ -436,10 +436,11 @@ def _extrair_atributos(
             tem_pendencia = True
 
         # Achado e paciente para mensagens
-        achado = None
+        achado = s.get("achado_critico")
         paciente_nome = None
         if ext is not None:
-            achado = getattr(ext, "diagnostico_principal", None) or tipo
+            if not achado:
+                achado = getattr(ext, "diagnostico_principal", None) or tipo
             paciente = getattr(ext, "paciente", None)
             if paciente is not None:
                 paciente_nome = getattr(paciente, "nome", None)

@@ -34,6 +34,79 @@ DESTINOS_OFICIAIS: list[str] = [
 ]
 
 
+class AchadoCritico(BaseModel):
+    """Achado crítico que torna um documento Urgente (H6.2.1)."""
+
+    nome: str
+    sinonimos: list[str] = Field(default_factory=list)
+
+    @field_validator("nome")
+    @classmethod
+    def _validar_nome(cls, v: Any) -> str:
+        s = str(v).strip()
+        if not s:
+            raise ValueError("Nome do achado crítico não pode ser vazio")
+        return s
+
+    @field_validator("sinonimos", mode="before")
+    @classmethod
+    def _normalizar_sinonimos(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            return [p.strip() for p in v.split(",") if p.strip()]
+        if isinstance(v, (list, tuple, set)):
+            return [str(p).strip() for p in v if str(p).strip()]
+        return []
+
+    @model_validator(mode="after")
+    def _garantir_nome_em_sinonimos(self) -> AchadoCritico:
+        if self.nome and self.nome not in self.sinonimos:
+            self.sinonimos = [self.nome, *self.sinonimos]
+        return self
+
+
+ACHADOS_CRITICOS_PADRAO: list[AchadoCritico] = [
+    AchadoCritico(
+        nome="TEP",
+        sinonimos=["TEP", "tromboembolismo pulmonar", "embolia pulmonar"],
+    ),
+    AchadoCritico(
+        nome="IAM",
+        sinonimos=["IAM", "infarto agudo do miocárdio", "infarto do miocárdio"],
+    ),
+    AchadoCritico(
+        nome="AVC",
+        sinonimos=[
+            "AVC",
+            "AVCI",
+            "AVCH",
+            "acidente vascular cerebral",
+            "acidente vascular encefálico",
+        ],
+    ),
+    AchadoCritico(
+        nome="Sepse",
+        sinonimos=["sepse", "choque séptico", "sepsis"],
+    ),
+    AchadoCritico(
+        nome="Dissecção de aorta",
+        sinonimos=[
+            "dissecção de aorta",
+            "dissecção aórtica",
+            "dissecção aguda de aorta",
+        ],
+    ),
+    AchadoCritico(
+        nome="Hemorragia intracraniana",
+        sinonimos=[
+            "hemorragia intracraniana",
+            "hemorragia intracerebral",
+            "hemorragia subaracnóidea",
+            "hematoma intracraniano",
+        ],
+    ),
+]
+
+
 class TipoCondicao(str, Enum):
     """Conjunto fechado de condições de regras de roteamento (H6.3.1 T2)."""
 
@@ -151,9 +224,42 @@ class RegrasConfig(BaseModel):
     tamanho_maximo_mb: int = Field(default=10)
     regras_roteamento: list[RegraRoteamento] = Field(default_factory=list)
 
+    achados_criticos: list[AchadoCritico] = Field(
+        default_factory=lambda: [a.model_copy() for a in ACHADOS_CRITICOS_PADRAO],
+        min_length=1,
+    )
+
     versao: str = "v1"
     atualizado_por: str | None = None
     atualizado_em: str | None = None
+
+    @field_validator("achados_criticos", mode="before")
+    @classmethod
+    def _pre_validar_achados(cls, v: Any) -> Any:
+        if v is None:
+            return v
+        if isinstance(v, list):
+            if len(v) == 0:
+                raise ValueError("A lista de achados críticos não pode ficar vazia")
+            return v
+        if isinstance(v, dict):
+            itens = []
+            for k, val in v.items():
+                sin = val if isinstance(val, list) else [str(val)]
+                itens.append({"nome": k, "sinonimos": sin})
+            if not itens:
+                raise ValueError("A lista de achados críticos não pode ficar vazia")
+            return itens
+        return v
+
+    @field_validator("achados_criticos")
+    @classmethod
+    def _validar_achados_criticos(
+        cls, achados: list[AchadoCritico]
+    ) -> list[AchadoCritico]:
+        if not achados or len(achados) == 0:
+            raise ValueError("A lista de achados críticos não pode ficar vazia")
+        return achados
 
     @field_validator("destinos")
     @classmethod
@@ -643,6 +749,57 @@ class ServicoRegras:
 
         self._registrar_alteracao(atual, nova_config)
 
+        return nova_config
+
+    def atualizar_achados(
+        self,
+        novos_achados: list[AchadoCritico | dict[str, Any] | str],
+        auditora: str = "auditora",
+        motivo: str | None = None,
+    ) -> RegrasConfig:
+        """H6.2.1 T2: Grava a lista de achados críticos e cria uma versão."""
+        if not novos_achados or len(novos_achados) == 0:
+            raise ValueError("A lista de achados críticos não pode ficar vazia")
+
+        cfg_atual = self.obter_regras()
+        achados_convertidos: list[AchadoCritico] = []
+        for item in novos_achados:
+            if isinstance(item, AchadoCritico):
+                achados_convertidos.append(item)
+            elif isinstance(item, dict):
+                if "nome" in item:
+                    nome = str(item["nome"]).strip()
+                    if not nome:
+                        continue
+                    sin = item.get("sinonimos") or []
+                    if isinstance(sin, str):
+                        sin = [s.strip() for s in sin.split(",") if s.strip()]
+                    achados_convertidos.append(AchadoCritico(nome=nome, sinonimos=sin))
+                else:
+                    for k, v in item.items():
+                        sin = v if isinstance(v, list) else [str(v)]
+                        achados_convertidos.append(AchadoCritico(nome=k, sinonimos=sin))
+            elif isinstance(item, str) and item.strip():
+                achados_convertidos.append(
+                    AchadoCritico(nome=item.strip(), sinonimos=[item.strip()])
+                )
+
+        if not achados_convertidos or len(achados_convertidos) == 0:
+            raise ValueError("A lista de achados críticos não pode ficar vazia")
+
+        nova_versao = self._proxima_versao_disponivel(cfg_atual.versao)
+        agora = datetime.now(UTC).isoformat()
+
+        nova_config = cfg_atual.model_copy(
+            update={
+                "achados_criticos": achados_convertidos,
+                "versao": nova_versao,
+                "atualizado_por": auditora,
+                "atualizado_em": agora,
+            }
+        )
+
+        self._registrar_alteracao(cfg_atual, nova_config)
         return nova_config
 
 
