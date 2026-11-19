@@ -3,7 +3,7 @@
 import streamlit as st
 
 from services.estilo import PAGINA_DASHBOARD
-
+from datetime import datetime, timedelta, timezone
 
 def definir_caso(documento_id: str) -> None:
     """Guarda o caso atual na sessão (as chaves antigas continuam valendo)."""
@@ -25,7 +25,7 @@ def caso_atual() -> str | None:
     valor = str(valor).strip() if valor else ""
     return valor or None
 
-PAGINA_REVISAO = "pages/7_Revisao_de_caso.py"
+PAGINA_REVISAO = "pages/13_UI_Revisao_de_Caso.py"
 
 def abrir_revisao(documento_id: str) -> None:
     """Abre o painel de revisão da equipe, que só lê o ID da URL (?id=...).
