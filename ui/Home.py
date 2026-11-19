@@ -12,18 +12,25 @@ RAIZ_UI = Path(__file__).resolve().parent
 if str(RAIZ_UI) not in sys.path:
     sys.path.insert(0, str(RAIZ_UI))
 
-from services.estilo import PAGINA_LISTA, pill, preparar_pagina
+from services.estilo import PAGINA_FILA, PAGINA_LISTA, pill, preparar_pagina
 from services.navegacao import abrir_caso
+
+try:
+    from componentes.fila import minutos_de_espera, texto_espera
+except ImportError:  # sem o componente, a faixa só não mostra o tempo de espera
+    minutos_de_espera = texto_espera = None
 
 st.set_page_config(page_title="Home · MediFlow", page_icon="🩺", layout="wide")
 preparar_pagina()
 
 API = os.getenv("API_URL", "http://localhost:8000")
 
-# TEMPORÁRIO: mostra, no fim da página, os valores reais que a API devolve.
-# Coloque True para mostrar.
+# Mostra, no fim da página, os valores reais que a API devolve (só para testes).
 MOSTRAR_DIAGNOSTICO = False
 
+# Ajuste fino do alinhamento dos dois cards (em pixels)
+# Se a lista (com 5 casos) ficar maior que o gráfico, aumente ALTURA_CARDS;
+# se ficar menor, diminua. Mexa de 10 em 10.
 ALTURA_CARDS = 430  # altura mínima do gráfico e da lista de casos
 ALTURA_BARRAS = 280  # altura da área das barras (acompanhe ALTURA_CARDS)
 
@@ -32,8 +39,14 @@ ALTURA_BARRAS = 280  # altura da área das barras (acompanhe ALTURA_CARDS)
 # ------------------------------------------------------------------
 URGENCIAS = {
     "U": {"nome": "Urgente", "cor": "#EF4444", "pill": "red"},
-    "A": {"nome": "Atenção", "cor": "#EAB308", "pill": "yellow"},
+    "A": {"nome": "Em revisão", "cor": "#EAB308", "pill": "yellow"},
     "R": {"nome": "Rotina", "cor": "#22C55E", "pill": "green"},
+}
+# Dica que aparece ao passar o mouse em cada botão
+DICAS = {
+    "U": "Casos com prioridade urgente ou destinados à fila de emergência.",
+    "A": "Casos em revisão humana ou com prioridade alta.",
+    "R": "Casos de rotina, seguindo o fluxo normal.",
 }
 # Casos que não cabem nas três (sem prioridade, em processamento, erro, rejeitado)
 OUTROS = {"nome": "Outros", "cor": "#94A3B8", "pill": "gray"}
@@ -56,6 +69,7 @@ st.markdown(
     div[class*="st-key-card_grafico"], div[class*="st-key-card_casos"] {{
         min-height: {ALTURA_CARDS}px;
     }}
+    div[class*="st-key-card_home_revisao"] {{ border-left: 5px solid #EAB308; }}
     .barras {{ height: {ALTURA_BARRAS}px; }}
     .celula {{
         display: block; overflow: hidden; text-overflow: ellipsis;
@@ -129,6 +143,17 @@ def buscar_documentos() -> list:
     return [d for d in dados if isinstance(d, dict)]
 
 
+@st.cache_data(ttl=15, show_spinner=False)
+def buscar_fila() -> list:
+    """GET /filas/revisao: a mesma fonte da tela Fila de Revisão."""
+    r = requests.get(f"{API}/filas/revisao", timeout=5)
+    r.raise_for_status()
+    dados = r.json()
+    if not isinstance(dados, list):
+        raise ValueError("resposta inesperada")
+    return [c for c in dados if isinstance(c, dict)]
+
+
 try:
     documentos_brutos = buscar_documentos()
 except (requests.RequestException, ValueError):
@@ -158,6 +183,25 @@ for item in documentos_brutos:
 
 CASOS.sort(key=lambda c: c["data"], reverse=True)  # mais recentes primeiro
 
+# Faixa "Aguardando revisão humana": usa a mesma fonte da Fila de Revisão
+try:
+    fila_casos = buscar_fila()
+except (requests.RequestException, ValueError):
+    fila_casos = None
+
+if fila_casos is None:
+    qtd_fila = CONTAGENS["A"]  # fila fora do ar: usa a contagem do botão
+    mais_antigo = None
+else:
+    qtd_fila = len(fila_casos)
+    mais_antigo = None
+    chegadas = [str(c["chegada_em"]) for c in fila_casos if c.get("chegada_em")]
+    if chegadas and minutos_de_espera and texto_espera:
+        try:
+            mais_antigo = texto_espera(minutos_de_espera(min(chegadas)))
+        except Exception:  # noqa: BLE001 - o tempo de espera é opcional
+            mais_antigo = None
+
 # ------------------------------------------------------------------
 # CABEÇALHO E BOTÕES DE URGÊNCIA
 # ------------------------------------------------------------------
@@ -174,12 +218,39 @@ for coluna, (chave, u) in zip(colunas, URGENCIAS.items()):
             key=f"urg_{chave}",
             on_click=alternar_filtro,
             args=(chave,),
+            help=DICAS[chave],
             use_container_width=True,
         )
-st.caption(
-    "Atenção = em revisão humana (ou prioridade alta). "
-    "Outros = sem prioridade, em processamento, com erro ou rejeitados."
-)
+
+# ------------------------------------------------------------------
+# FAIXA: CASOS AGUARDANDO REVISÃO HUMANA (porta de entrada da Fila)
+# ------------------------------------------------------------------
+st.write("")
+if qtd_fila > 0:
+    with st.container(key="card_home_revisao"):
+        c_txt, c_btn = st.columns([5, 2], vertical_alignment="center")
+        if mais_antigo:
+            sub = f"O mais antigo espera há {html.escape(str(mais_antigo))}."
+        else:
+            sub = "Esses casos precisam de uma decisão da auditora."
+        c_txt.markdown(
+            '<div style="display:flex;align-items:baseline;gap:.75rem;flex-wrap:wrap">'
+            f'<span style="font-size:1.8rem;font-weight:700">{qtd_fila}</span>'
+            '<span style="font-size:1rem;font-weight:600">'
+            "caso(s) aguardando revisão humana</span></div>"
+            f'<p style="margin:.2rem 0 0;font-size:.85rem;opacity:.75">{sub}</p>',
+            unsafe_allow_html=True,
+        )
+        if c_btn.button(
+            "Ir para a Fila de Revisão",
+            key="home_ir_fila",
+            type="primary",
+            icon=":material/arrow_forward:",
+            use_container_width=True,
+        ):
+            st.switch_page(PAGINA_FILA)
+else:
+    st.caption("Nenhum caso aguardando revisão humana no momento.")
 
 st.write("")
 col_graf, col_lista = st.columns([5, 7], gap="large")
@@ -198,7 +269,12 @@ with col_graf, st.container(key="card_grafico"):
         for k, u in URGENCIAS.items()
     )
     rotulos = "".join(f"<span>{u['nome']}</span>" for u in URGENCIAS.values())
-    nota_outros = f" ({OUTROS_TOTAL} em outros)" if OUTROS_TOTAL else ""
+    nota_outros = (
+        f" · <b>{OUTROS_TOTAL}</b> em outros "
+        "(sem prioridade, em processamento, com erro ou rejeitados)"
+        if OUTROS_TOTAL
+        else ""
+    )
 
     st.markdown(
         '<p class="card-title" style="font-weight:700;margin:0 0 12px">CASOS POR URGÊNCIA</p>'
@@ -270,7 +346,7 @@ with col_lista, st.container(key="card_casos"):
         )
 
 # ------------------------------------------------------------------
-# DIAGNÓSTICO TEMPORÁRIO (para o teste exploratório)
+# DIAGNÓSTICO (só para testes: MOSTRAR_DIAGNOSTICO = True)
 # ------------------------------------------------------------------
 if MOSTRAR_DIAGNOSTICO:
     st.write("")
