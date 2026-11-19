@@ -106,7 +106,7 @@ CSS = """
                       font-size: .8rem; opacity: .7; padding-top: 6px; }
     .barras-rotulos span { width: 28%; text-align: center; }
 
-    /* Fila de revisão: faixa pela prioridade e botão azul de abrir caso */
+    /* Fila de revisão: faixa pela prioridade e botões azuis */
     div[class*="st-key-card_fila_red"]    { border-left: 5px solid #EF4444; }
     div[class*="st-key-card_fila_orange"] { border-left: 5px solid #F97316; }
     div[class*="st-key-card_fila_green"]  { border-left: 5px solid #22C55E; }
@@ -130,6 +130,19 @@ CSS = """
         font-weight: 600;
     }
 
+    /* Fila de revisão: "Abrir caso" é secundário (contorno azul). Vem depois da regra
+       acima e é mais específico, por isso vence. */
+    div[class*="st-key-card_fila_"] div[class*="st-key-fila_abrir_"] button {
+        background: transparent !important;
+        border: 1px solid #3B82F6 !important;
+    }
+    div[class*="st-key-card_fila_"] div[class*="st-key-fila_abrir_"] button:hover {
+        background: rgba(59, 130, 246, .12) !important;
+    }
+    div[class*="st-key-card_fila_"] div[class*="st-key-fila_abrir_"] button * {
+        color: #3B82F6 !important;
+    }
+
     /* Botão secundário "Voltar": contorno azul, sem preenchimento */
     div[class*="st-key-btn_voltar"] a[data-testid="stPageLink-NavLink"] {
         border: 1px solid #3B82F6;
@@ -151,7 +164,7 @@ CSS = """
 </style>
 """
 
-# Só é aplicado na página "Revisão do caso" (da equipe): estilo, sem mexer no conteúdo.
+# Só é aplicado na página "Revisão do caso" da equipe: estilo, sem mexer no conteúdo.
 CSS_REVISAO = """
 <style>
     /* Original e Extração viram dois cards do mesmo tamanho */
@@ -266,9 +279,9 @@ CSS_CONFIG = """
 
 
 def _e_revisao_de_caso(nome_arquivo: str) -> bool:
-    """A página 'Revisão do caso' (e não a 'Fila de revisão')."""
+    """A página 'Revisão do caso' da equipe (não a 'Fila' nem a versão nova 'UI_')."""
     nome = nome_arquivo.lower()
-    return "revisao" in nome and "fila" not in nome
+    return "revisao" in nome and "fila" not in nome and "ui_" not in nome
 
 
 def _e_configuracoes(nome_arquivo: str) -> bool:
@@ -277,7 +290,7 @@ def _e_configuracoes(nome_arquivo: str) -> bool:
 
 
 def _barra_revisao() -> None:
-    """Navegação no topo da Revisão do caso: voltar à fila e abrir o caso no Dashboard."""
+    """Navegação no topo da Revisão do caso da equipe: voltar à fila e abrir o caso no Dashboard."""
     doc_id = str(st.query_params.get("id") or "").strip()
     fila_existe = (RAIZ_UI / PAGINA_FILA).exists()
     with st.container(key="barra_revisao"):
@@ -291,7 +304,7 @@ def _barra_revisao() -> None:
             with c2:
                 if st.button(
                     "Ver caso no Dashboard",
-                    key="rev_ver_dashboard",
+                    key="rev_ver_dashboard_equipe",
                     type="primary",
                     icon=":material/open_in_new:",
                     use_container_width=True,
@@ -301,8 +314,12 @@ def _barra_revisao() -> None:
                     abrir_caso(doc_id)
 
 
-def preparar_pagina() -> None:
-    """Logo, sidebar e CSS padrão. Chame logo depois do st.set_page_config."""
+def preparar_pagina(estilo_especifico: bool = True) -> None:
+    """Logo, sidebar e CSS padrão. Chame logo depois do st.set_page_config.
+
+    estilo_especifico=False desliga os estilos que só valem para as páginas da equipe
+    (Revisão do caso e Configurações). As páginas novas passam False e cuidam do próprio layout.
+    """
     # Arquivo da página que chamou (usado para estilos específicos de uma tela)
     chamador = Path(sys._getframe(1).f_globals.get("__file__", "")).name
 
@@ -336,6 +353,8 @@ def preparar_pagina() -> None:
         else:
             st.caption("⚙️ Configurações")
 
+    if not estilo_especifico:
+        return
     if _e_revisao_de_caso(chamador):
         st.markdown(CSS_REVISAO, unsafe_allow_html=True)
         _barra_revisao()

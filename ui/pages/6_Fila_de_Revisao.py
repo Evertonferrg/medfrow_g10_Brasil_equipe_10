@@ -8,7 +8,7 @@ import os
 import requests
 import streamlit as st
 from services.estilo import pill, preparar_pagina
-from services.navegacao import abrir_caso
+from services.navegacao import abrir_caso, abrir_revisao
 
 from componentes.fila import (
     minutos_de_espera,
@@ -70,7 +70,7 @@ def fila():
         chegada = caso["chegada_em"][:16].replace("T", " ")
 
         with st.container(key=f"card_fila_{cor}_{documento_id}"):
-            info, acao = st.columns([4, 1], vertical_alignment="top")
+            info, acao = st.columns([4, 1.4], vertical_alignment="top")
 
             with info:
                 st.markdown(
@@ -93,15 +93,25 @@ def fila():
                     st.markdown(f":red[**{texto_dose_destacada(destaque)}**]")
 
             with acao:
-                # Abre o caso no Dashboard (porta única de navegação)
+                # Principal: vai direto à tela de decisão da auditora
                 if st.button(
-                    "Abrir caso",
-                    key=f"abrir_{documento_id}",
+                    "Revisar agora",
+                    key=f"revisar_{documento_id}",
                     type="primary",
                     icon=":material/open_in_new:",
                     use_container_width=True,
                 ):
-                    abrir_caso(documento_id)
+                    abrir_revisao(documento_id)
+
+                # Secundário: entender o caso no Dashboard antes de decidir
+                with st.container(key=f"fila_abrir_{documento_id}"):
+                    if st.button(
+                        "Abrir caso",
+                        key=f"abrir_{documento_id}",
+                        icon=":material/open_in_new:",
+                        use_container_width=True,
+                    ):
+                        abrir_caso(documento_id)
 
 
 fila()
