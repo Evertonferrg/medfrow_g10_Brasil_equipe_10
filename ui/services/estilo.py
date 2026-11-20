@@ -298,7 +298,9 @@ def _barra_revisao() -> None:
         if fila_existe:
             with c1, st.container(key="btn_voltar"):
                 st.page_link(
-                    PAGINA_FILA, label="Voltar para a Fila", icon=":material/arrow_back:"
+                    PAGINA_FILA,
+                    label="Voltar para a Fila",
+                    icon=":material/arrow_back:",
                 )
         if doc_id:
             with c2:
@@ -349,8 +351,12 @@ def preparar_pagina(estilo_especifico: bool = True) -> None:
         st.markdown("<div style='height: 35vh;'></div>", unsafe_allow_html=True)
         st.divider()
         if pagina_config.exists():
-            #st.page_link(PAGINA_CONFIG, label="Configurações", icon=":material/settings:")
-            st.page_link(st.Page(f"{RAIZ_UI}/{PAGINA_CONFIG}"), label="Configurações", icon=":material/settings:")
+            # st.page_link(PAGINA_CONFIG, label="Configurações", icon=":material/settings:")
+            st.page_link(
+                st.Page(f"{RAIZ_UI}/{PAGINA_CONFIG}"),
+                label="Configurações",
+                icon=":material/settings:",
+            )
         else:
             st.caption("⚙️ Configurações")
 

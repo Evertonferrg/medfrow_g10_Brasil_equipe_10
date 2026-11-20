@@ -25,7 +25,9 @@ preparar_pagina()
 API = os.getenv("API_URL", "http://localhost:8000")
 CANAIS = ["Todos", "Pronto_Socorro", "Ambulatorio", "Laboratorio", "Operadora"]
 POR_PAGINA = 5
-FUSO_HORAS = -3  # horário de Brasília; use None para mostrar o horário como a API devolveu
+FUSO_HORAS = (
+    -3
+)  # horário de Brasília; use None para mostrar o horário como a API devolveu
 
 COR_PRIORIDADE = {
     "urgente": "red",
@@ -65,7 +67,7 @@ def formatar_data(valor) -> str:
     if not texto:
         return ""
     try:
-        dt = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(texto)
     except ValueError:
         return texto[:16].replace("T", " ")
     if FUSO_HORAS is not None and dt.tzinfo is not None:
@@ -103,6 +105,7 @@ def buscar_lista(canal: str) -> list | None:
         return None
     return dados if isinstance(dados, list) else None
 
+
 @st.cache_data(ttl=60, show_spinner=False)
 def buscar_motivo_rejeicao(doc_id: str) -> str:
     """Busca o motivo no detalhe caso o resumo da API devolva nulo."""
@@ -112,12 +115,15 @@ def buscar_motivo_rejeicao(doc_id: str) -> str:
             dados = r.json()
             if dados.get("motivo_rejeicao"):
                 return str(dados["motivo_rejeicao"]).strip()
-            just = (dados.get("decisao_roteamento") or {}).get("justificativa_roteamento") or ""
+            just = (dados.get("decisao_roteamento") or {}).get(
+                "justificativa_roteamento"
+            ) or ""
             if "Motivo:" in just:
                 return just.split("Motivo:")[-1].strip()
-    except Exception:
+    except (requests.RequestException, ValueError, KeyError):
         pass
     return ""
+
 
 # ------------------------------------------------------------------
 # CABEÇALHO (Título + Botão "+ Novo Documento")
@@ -218,21 +224,35 @@ with st.container(key="card_lista"):
         st.info("Nenhum documento encontrado com o termo pesquisado.")
     else:
         cab = st.columns(LARGURAS)
-        titulos = ["ID / Data", "Tipo de Documento", "Destino / Origem", "Prioridade", "Status", "Ação"]
+        titulos = [
+            "ID / Data",
+            "Tipo de Documento",
+            "Destino / Origem",
+            "Prioridade",
+            "Status",
+            "Ação",
+        ]
         for col, texto in zip(cab, titulos):
-            col.markdown(f"<b style='font-size:.85rem'>{texto}</b>", unsafe_allow_html=True)
-        st.markdown("<hr style='margin:.25rem 0 .5rem;opacity:.3'>", unsafe_allow_html=True)
+            col.markdown(
+                f"<b style='font-size:.85rem'>{texto}</b>", unsafe_allow_html=True
+            )
+        st.markdown(
+            "<hr style='margin:.25rem 0 .5rem;opacity:.3'>", unsafe_allow_html=True
+        )
 
         for d in itens:
             c1, c2, c3, c4, c5, c6 = st.columns(LARGURAS, vertical_alignment="center")
 
             data_txt = formatar_data(d["data_bruta"])
             c1.markdown(
-                celula(d["id"], negrito=True) + (linha_pequena(data_txt) if data_txt else ""),
+                celula(d["id"], negrito=True)
+                + (linha_pequena(data_txt) if data_txt else ""),
                 unsafe_allow_html=True,
             )
             c2.markdown(celula(d["tipo"]), unsafe_allow_html=True)
-            c3.markdown(celula(str(d["destino"]).replace("_", " ")), unsafe_allow_html=True)
+            c3.markdown(
+                celula(str(d["destino"]).replace("_", " ")), unsafe_allow_html=True
+            )
             c4.markdown(
                 pill(
                     html.escape(str(d["prioridade"])),
@@ -259,17 +279,34 @@ with st.container(key="card_lista"):
             ):
                 abrir_caso(d["id"])  # porta única: guarda o caso e vai ao Dashboard
 
-            st.markdown("<hr style='margin:.4rem 0;opacity:.15'>", unsafe_allow_html=True)
+            st.markdown(
+                "<hr style='margin:.4rem 0;opacity:.15'>", unsafe_allow_html=True
+            )
 
         # Paginação
         _, p1, p2, p3, _ = st.columns([3, 1, 2, 1, 3], vertical_alignment="center")
         with p1:
-            if st.button("", icon=":material/chevron_left:", disabled=pagina <= 1, key="pg_ant", use_container_width=True):
+            if st.button(
+                "",
+                icon=":material/chevron_left:",
+                disabled=pagina <= 1,
+                key="pg_ant",
+                use_container_width=True,
+            ):
                 st.session_state["pagina"] = pagina - 1
                 st.rerun()
         with p2:
-            st.markdown(f"<div style='text-align:center'>Página {pagina} de {total_paginas}</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='text-align:center'>Página {pagina} de {total_paginas}</div>",
+                unsafe_allow_html=True,
+            )
         with p3:
-            if st.button("", icon=":material/chevron_right:", disabled=pagina >= total_paginas, key="pg_prox", use_container_width=True):
+            if st.button(
+                "",
+                icon=":material/chevron_right:",
+                disabled=pagina >= total_paginas,
+                key="pg_prox",
+                use_container_width=True,
+            ):
                 st.session_state["pagina"] = pagina + 1
                 st.rerun()

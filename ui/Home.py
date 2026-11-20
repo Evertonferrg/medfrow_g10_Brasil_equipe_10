@@ -139,7 +139,7 @@ def buscar_documentos() -> list:
     r.raise_for_status()
     dados = r.json()
     if not isinstance(dados, list):
-        raise ValueError("resposta inesperada")
+        raise TypeError("resposta inesperada")
     return [d for d in dados if isinstance(d, dict)]
 
 
@@ -150,7 +150,7 @@ def buscar_fila() -> list:
     r.raise_for_status()
     dados = r.json()
     if not isinstance(dados, list):
-        raise ValueError("resposta inesperada")
+        raise TypeError("resposta inesperada")
     return [c for c in dados if isinstance(c, dict)]
 
 

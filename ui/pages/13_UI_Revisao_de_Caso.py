@@ -25,7 +25,9 @@ from services.navegacao import abrir_caso, caso_atual, definir_caso
 API = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 MAX_PAGINAS = 10
 ALTURA_ORIGINAL = 640
-FUSO_HORAS = -3  # horário de Brasília; use None para mostrar o horário como a API devolveu
+FUSO_HORAS = (
+    -3
+)  # horário de Brasília; use None para mostrar o horário como a API devolveu
 
 CSS_PAGINA = """
 <style>
@@ -85,7 +87,11 @@ ROTULO_ACAO = {
     "redirecionar": "Redirecionar para outro setor",
     "rejeitar": "Rejeitar documento",
 }
-PASSADO_ACAO = {"aprovar": "aprovado", "redirecionar": "redirecionado", "rejeitar": "rejeitado"}
+PASSADO_ACAO = {
+    "aprovar": "aprovado",
+    "redirecionar": "redirecionado",
+    "rejeitar": "rejeitado",
+}
 
 
 # ------------------------------------------------------------------
@@ -121,7 +127,9 @@ def evidencia(dados: dict, *nomes):
 # ------------------------------------------------------------------
 def mostrar_original(documento_id: str) -> None:
     try:
-        r = requests.get(f"{API}/documentos/{quote(documento_id, safe='')}/original", timeout=30)
+        r = requests.get(
+            f"{API}/documentos/{quote(documento_id, safe='')}/original", timeout=30
+        )
     except requests.RequestException:
         st.error("Não consegui buscar o original agora.")
         return
@@ -166,7 +174,9 @@ def campo_html(rotulo, valor, ident, ruins, ev, exibido=None) -> str:
     classe = "rv-campo rv-alerta" if (ausente or ident in ruins) else "rv-campo"
     texto_ev = ""
     if isinstance(ev, str) and ev.strip():
-        texto_ev = f'<span class="rv-ev">Evidência: {html.escape(ev.strip()[:140])}</span>'
+        texto_ev = (
+            f'<span class="rv-ev">Evidência: {html.escape(ev.strip()[:140])}</span>'
+        )
     mostrado = valor if exibido is None else exibido
     return (
         f'<div class="{classe}"><span class="rv-rot">{rotulo}</span>'
@@ -175,9 +185,17 @@ def campo_html(rotulo, valor, ident, ruins, ev, exibido=None) -> str:
 
 
 def mostrar_conferencia(res: dict) -> None:
-    dados = res.get("dados_extraidos") if isinstance(res.get("dados_extraidos"), dict) else {}
+    dados = (
+        res.get("dados_extraidos")
+        if isinstance(res.get("dados_extraidos"), dict)
+        else {}
+    )
     pac = dados.get("paciente") if isinstance(dados.get("paciente"), dict) else {}
-    med = dados.get("medico_solicitante") if isinstance(dados.get("medico_solicitante"), dict) else {}
+    med = (
+        dados.get("medico_solicitante")
+        if isinstance(dados.get("medico_solicitante"), dict)
+        else {}
+    )
     ruins = campos_inconsistentes(res.get("problemas"))
 
     idade = pac.get("idade")
@@ -186,23 +204,60 @@ def mostrar_conferencia(res: dict) -> None:
 
     paciente = "".join(
         [
-            campo_html("Nome", pac.get("nome"), "nome", ruins, evidencia(dados, "nome_paciente", "paciente.nome")),
-            campo_html("Idade", idade, "idade", ruins, evidencia(dados, "idade", "paciente.idade"), idade_txt),
-            campo_html("Data de nascimento", pac.get("data_nascimento"), "data_nascimento", ruins,
-                       evidencia(dados, "data_nascimento")),
+            campo_html(
+                "Nome",
+                pac.get("nome"),
+                "nome",
+                ruins,
+                evidencia(dados, "nome_paciente", "paciente.nome"),
+            ),
+            campo_html(
+                "Idade",
+                idade,
+                "idade",
+                ruins,
+                evidencia(dados, "idade", "paciente.idade"),
+                idade_txt,
+            ),
+            campo_html(
+                "Data de nascimento",
+                pac.get("data_nascimento"),
+                "data_nascimento",
+                ruins,
+                evidencia(dados, "data_nascimento"),
+            ),
         ]
     )
     medico = "".join(
         [
-            campo_html("Nome", med.get("nome"), "medico", ruins, evidencia(dados, "medico_solicitante.nome")),
-            campo_html("CRM", med.get("crm"), "crm", ruins, evidencia(dados, "crm", "medico_solicitante.crm")),
+            campo_html(
+                "Nome",
+                med.get("nome"),
+                "medico",
+                ruins,
+                evidencia(dados, "medico_solicitante.nome"),
+            ),
+            campo_html(
+                "CRM",
+                med.get("crm"),
+                "crm",
+                ruins,
+                evidencia(dados, "crm", "medico_solicitante.crm"),
+            ),
         ]
     )
     diagnostico = "".join(
         [
-            campo_html("Diagnóstico principal", dados.get("diagnostico_principal"), "diagnostico", ruins,
-                       evidencia(dados, "diagnostico_principal")),
-            campo_html("CID", cid, "cid", ruins, evidencia(dados, "cid", "cid_sugerido")),
+            campo_html(
+                "Diagnóstico principal",
+                dados.get("diagnostico_principal"),
+                "diagnostico",
+                ruins,
+                evidencia(dados, "diagnostico_principal"),
+            ),
+            campo_html(
+                "CID", cid, "cid", ruins, evidencia(dados, "cid", "cid_sugerido")
+            ),
         ]
     )
 
@@ -337,7 +392,7 @@ def formatar_data(valor) -> str:
     if not texto:
         return "Não informado"
     try:
-        dt = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(texto)
     except ValueError:
         return texto[:19].replace("T", " ")
     if FUSO_HORAS is not None and dt.tzinfo is not None:
@@ -403,7 +458,10 @@ def mostrar_trilha(documento_id: str) -> None:
             if tipo == "agente":
                 classe, quem = "tl-agente", "Agente"
             elif tipo == "auditora":
-                classe, quem = "tl-auditora", f"Auditora: {ev.get('autor_nome') or 'Nome não informado'}"
+                classe, quem = (
+                    "tl-auditora",
+                    f"Auditora: {ev.get('autor_nome') or 'Nome não informado'}",
+                )
             else:
                 classe, quem = "tl-legado", "Histórico legado"
 
@@ -418,7 +476,11 @@ def mostrar_trilha(documento_id: str) -> None:
             if ev.get("detalhe"):
                 html_ev += f'<p class="tl-linha">{_e(ev["detalhe"])}</p>'
             if ev.get("campo"):
-                antes = "(vazio)" if ev.get("valor_anterior") is None else ev["valor_anterior"]
+                antes = (
+                    "(vazio)"
+                    if ev.get("valor_anterior") is None
+                    else ev["valor_anterior"]
+                )
                 depois = "(vazio)" if ev.get("valor_novo") is None else ev["valor_novo"]
                 html_ev += (
                     f'<div class="tl-mud">Campo <b>{_e(ev["campo"])}</b>: '
@@ -433,7 +495,9 @@ def mostrar_trilha(documento_id: str) -> None:
 # ------------------------------------------------------------------
 # PÁGINA
 # ------------------------------------------------------------------
-st.set_page_config(page_title="MediFlow — Revisão de Caso", page_icon="🩺", layout="wide")
+st.set_page_config(
+    page_title="MediFlow — Revisão de Caso", page_icon="🩺", layout="wide"
+)
 preparar_pagina(estilo_especifico=False)  # esta página cuida do próprio layout
 st.markdown(CSS_PAGINA, unsafe_allow_html=True)
 
@@ -495,8 +559,14 @@ if not isinstance(res, dict):
 cl = res.get("classificacao") if isinstance(res.get("classificacao"), dict) else {}
 score = cl.get("score_confianca_classificacao")
 limite = limite_confianca()
-abaixo = isinstance(score, (int, float)) and not isinstance(score, bool) and score < limite
-score_txt = f"{score:.2f}" if isinstance(score, (int, float)) and not isinstance(score, bool) else "—"
+abaixo = (
+    isinstance(score, (int, float)) and not isinstance(score, bool) and score < limite
+)
+score_txt = (
+    f"{score:.2f}"
+    if isinstance(score, (int, float)) and not isinstance(score, bool)
+    else "—"
+)
 status_bruto = res.get("status_documento") or res.get("status")
 
 st.markdown(
@@ -510,7 +580,9 @@ st.markdown(
 # ------------------------------------------------------------------
 problemas = [p for p in (res.get("problemas") or []) if p]
 with st.container(key="card_rv_motivos"):
-    selo_conf = pill(f"Confiança {score_txt} (limite {limite:.2f})", "orange" if abaixo else "gray")
+    selo_conf = pill(
+        f"Confiança {score_txt} (limite {limite:.2f})", "orange" if abaixo else "gray"
+    )
     st.markdown(
         '<p class="card-title" style="font-weight:700;margin:0 0 .3rem">POR QUE ESTÁ EM REVISÃO</p>'
         f"<p class='rv-meta'>Tipo: <b>{_e(cl.get('tipo_documento'))}</b> · {selo_conf}</p>",

@@ -163,8 +163,11 @@ def canal_de_origem(doc_id: str) -> str | None:
     if not isinstance(lista, list):
         return None
     return next(
-        (d.get("canal_origem") for d in lista
-         if isinstance(d, dict) and d.get("documento_id") == doc_id),
+        (
+            d.get("canal_origem")
+            for d in lista
+            if isinstance(d, dict) and d.get("documento_id") == doc_id
+        ),
         None,
     )
 
@@ -173,7 +176,9 @@ def canal_de_origem(doc_id: str) -> str | None:
 def buscar_original(doc_id: str):
     """GET /documentos/{id}/original: (bytes, content-type) ou None."""
     try:
-        r = requests.get(f"{API}/documentos/{quote(doc_id, safe='')}/original", timeout=15)
+        r = requests.get(
+            f"{API}/documentos/{quote(doc_id, safe='')}/original", timeout=15
+        )
         r.raise_for_status()
     except requests.RequestException:
         return None
@@ -213,7 +218,8 @@ def mostrar_detalhe(res: dict) -> None:
     med = _dict(dados.get("medico_solicitante"))
     medicamentos = [m for m in (dados.get("medicamentos") or []) if isinstance(m, dict)]
     exames = [
-        e for e in (dados.get("exames") or dados.get("exames_solicitados") or [])
+        e
+        for e in (dados.get("exames") or dados.get("exames_solicitados") or [])
         if isinstance(e, dict)
     ]
     problemas = res.get("problemas") or []
@@ -246,7 +252,9 @@ def mostrar_detalhe(res: dict) -> None:
                 "separado para revisão humana."
             )
         with st.container(key="card_det_classificacao"):
-            st.markdown('<p class="card-title">CLASSIFICAÇÃO</p>', unsafe_allow_html=True)
+            st.markdown(
+                '<p class="card-title">CLASSIFICAÇÃO</p>', unsafe_allow_html=True
+            )
             if exibir_classificacao:
                 # componente da equipe: score formatado e aviso de confiança abaixo do limite
                 exibir_classificacao(cl)
@@ -309,12 +317,16 @@ def mostrar_detalhe(res: dict) -> None:
         with st.container(key="card_det_medicamentos"):
             st.markdown(
                 '<p class="card-title" style="margin-bottom:.5rem">MEDICAMENTOS</p>'
-                + _tabela(["Medicamento", "Dose", "Via", "Frequência", "Duração"], linhas),
+                + _tabela(
+                    ["Medicamento", "Dose", "Via", "Frequência", "Duração"], linhas
+                ),
                 unsafe_allow_html=True,
             )
     elif cl.get("tipo_documento") == "Receituário Médico":
         with st.container(key="card_det_medicamentos"):
-            st.markdown('<p class="card-title">MEDICAMENTOS</p>', unsafe_allow_html=True)
+            st.markdown(
+                '<p class="card-title">MEDICAMENTOS</p>', unsafe_allow_html=True
+            )
             st.caption("Nenhum medicamento identificado nesta receita.")
 
     # ---------------- EXAMES ----------------
@@ -333,7 +345,7 @@ def mostrar_detalhe(res: dict) -> None:
         with st.container(key="card_det_problemas"):
             st.markdown(
                 f'<div class="topo"><p class="card-title">PONTOS DE ATENÇÃO</p>'
-                f'{pill(str(len(problemas)), "orange")}</div>'
+                f"{pill(str(len(problemas)), 'orange')}</div>"
                 f'<ul class="linha" style="padding-left:1.2rem">{itens}</ul>',
                 unsafe_allow_html=True,
             )

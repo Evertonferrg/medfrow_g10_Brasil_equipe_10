@@ -7,14 +7,13 @@ import os
 
 import requests
 import streamlit as st
-from services.estilo import pill, preparar_pagina
-from services.navegacao import abrir_caso, abrir_revisao
-
 from componentes.fila import (
     minutos_de_espera,
     texto_dose_destacada,
     texto_espera,
 )
+from services.estilo import pill, preparar_pagina
+from services.navegacao import abrir_caso, abrir_revisao
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 

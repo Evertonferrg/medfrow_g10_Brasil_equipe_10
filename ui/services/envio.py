@@ -164,7 +164,9 @@ def enviar_documento(url_base: str, payload: dict) -> ResultadoEnvio:
     return _resposta_envio(resp, payload["documento_id"])
 
 
-def enviar_arquivo(url_base: str, documento_id: str, canal: str, arquivo) -> ResultadoEnvio:
+def enviar_arquivo(
+    url_base: str, documento_id: str, canal: str, arquivo
+) -> ResultadoEnvio:
     """H1.1.3 T6: envia PDF, JPG ou PNG para POST /triagem/arquivo."""
     try:
         resp = requests.post(
