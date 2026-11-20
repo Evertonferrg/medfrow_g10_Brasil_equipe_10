@@ -349,7 +349,8 @@ def preparar_pagina(estilo_especifico: bool = True) -> None:
         st.markdown("<div style='height: 35vh;'></div>", unsafe_allow_html=True)
         st.divider()
         if pagina_config.exists():
-            st.page_link(PAGINA_CONFIG, label="Configurações", icon=":material/settings:")
+            #st.page_link(PAGINA_CONFIG, label="Configurações", icon=":material/settings:")
+            st.page_link(st.Page(f"{RAIZ_UI}/{PAGINA_CONFIG}"), label="Configurações", icon=":material/settings:")
         else:
             st.caption("⚙️ Configurações")
 
