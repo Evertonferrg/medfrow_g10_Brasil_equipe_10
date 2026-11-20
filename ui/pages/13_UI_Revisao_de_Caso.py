@@ -433,13 +433,13 @@ def mostrar_trilha(documento_id: str) -> None:
 # ------------------------------------------------------------------
 # PÁGINA
 # ------------------------------------------------------------------
-st.set_page_config(page_title="MediFlow — Revisão do caso", page_icon="🩺", layout="wide")
+st.set_page_config(page_title="MediFlow — Revisão de Caso", page_icon="🩺", layout="wide")
 preparar_pagina(estilo_especifico=False)  # esta página cuida do próprio layout
 st.markdown(CSS_PAGINA, unsafe_allow_html=True)
 
 documento_id = str(st.query_params.get("id") or caso_atual() or "").strip()
 if not documento_id:
-    st.title("Revisão do caso")
+    st.title("Revisão de Caso")
     st.info("Abra um caso pela fila de revisão.")
     st.stop()
 

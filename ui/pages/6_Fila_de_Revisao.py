@@ -18,10 +18,10 @@ from componentes.fila import (
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
-st.set_page_config(page_title="Fila de revisão", layout="wide")
+st.set_page_config(page_title="Fila de Revisão", layout="wide")
 preparar_pagina()  # logo, menu lateral e estilo padrão
 
-st.title("Fila de revisão")
+st.title("Fila de Revisão")
 
 # Cor da faixa e da pílula conforme a prioridade do caso
 COR_PRIORIDADE = {

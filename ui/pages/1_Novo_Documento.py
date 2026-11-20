@@ -67,7 +67,7 @@ def _enviar() -> None:
 # ------------------------------------------------------------------
 # PÁGINA
 # ------------------------------------------------------------------
-st.set_page_config(page_title="Novo documento · MediFlow", page_icon="🩺", layout="wide")
+st.set_page_config(page_title="Novo Documento · MediFlow", page_icon="🩺", layout="wide")
 preparar_pagina()
 
 c_voltar, _ = st.columns([1, 4])
