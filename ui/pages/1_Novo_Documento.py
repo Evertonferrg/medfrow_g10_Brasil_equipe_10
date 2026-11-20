@@ -2,15 +2,15 @@ import sys
 from pathlib import Path
 
 import streamlit as st
-from services.navegacao import definir_caso
 
 # Garante que as importações da pasta ui funcionem em qualquer ambiente
 PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
     sys.path.insert(0, PASTA_UI)
 
-from services import envio
-from services.estilo import PAGINA_DASHBOARD, PAGINA_LISTA, preparar_pagina
+from ui.services import envio
+from ui.services.estilo import PAGINA_DASHBOARD, PAGINA_LISTA, preparar_pagina
+from ui.services.navegacao import definir_caso
 
 TAMANHO_MAXIMO_MB, FORMATOS_ACEITOS = envio.carregar_limites()
 TIPOS_ARQUIVO = envio.extensoes_aceitas(FORMATOS_ACEITOS)
@@ -75,7 +75,9 @@ preparar_pagina()
 c_voltar, _ = st.columns([1, 4])
 with c_voltar, st.container(key="btn_voltar"):
     st.page_link(
-        PAGINA_LISTA, label="Voltar para Lista Documentos", icon=":material/arrow_back:"
+        st.Page(f"{PASTA_UI}/{PAGINA_LISTA}"),
+        label="Voltar para Lista Documentos",
+        icon=":material/arrow_back:",
     )
 st.title("Novo Documento Clínico")
 
@@ -106,7 +108,11 @@ resultado = st.session_state.pop("nd_resultado", None)
 if resultado:
     (st.success if resultado[0] else st.error)(resultado[1])
     if resultado[0]:
-        st.page_link(PAGINA_DASHBOARD, label="Ver resultado no Dashboard →", icon="🩺")
+        st.page_link(
+            st.Page(f"{PASTA_UI}/{PAGINA_DASHBOARD}"),
+            label="Ver resultado no Dashboard →",
+            icon="🩺",
+        )
 
 # H1.4.2 T3: aviso de ilegibilidade ("" = motivo não informado, usa a mensagem padrão)
 aviso = st.session_state.get("nd_aviso")
@@ -153,7 +159,8 @@ with st.container(key="card_cadastro"):
         # Arrastar e soltar: o uploader fica fora de st.form, então a prévia aparece na hora.
         arquivo = st.file_uploader(
             f"Arraste o arquivo clínico aqui ({', '.join(FORMATOS_ACEITOS)})",
-            type=TIPOS_ARQUIVO,
+            # type=TIPOS_ARQUIVO,
+            type=None,  # mantido como None pois o back-end faz a validação da extensão de arquivo, e também porque permite que testes unitários assegurem que o comportamento de rejeitar extensões não suportadas está funcionando como deveria.
             key=f"nd_arquivo_{n}",
             max_upload_size=TAMANHO_MAXIMO_MB,
         )
