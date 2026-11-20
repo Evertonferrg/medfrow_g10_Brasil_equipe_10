@@ -1,9 +1,9 @@
 """H5.2.1 T2 — histórico de triagens com filtros (GET /historico)."""
 
 import os
-from pathlib import Path
 import sys
 from datetime import timedelta
+from pathlib import Path
 
 import requests
 import streamlit as st
@@ -46,10 +46,12 @@ def buscar_motivo_rejeicao(doc_id: str) -> str:
             dados = r.json()
             if dados.get("motivo_rejeicao"):
                 return str(dados["motivo_rejeicao"]).strip()
-            just = (dados.get("decisao_roteamento") or {}).get("justificativa_roteamento") or ""
+            just = (dados.get("decisao_roteamento") or {}).get(
+                "justificativa_roteamento"
+            ) or ""
             if "Motivo:" in just:
                 return just.split("Motivo:")[-1].strip()
-    except Exception:
+    except (requests.RequestException, ValueError, KeyError):
         pass
     return ""
 
@@ -75,25 +77,24 @@ v = st.session_state.get("filtro_versao", 0)
 # ------------------------------------------------------------------
 # FILTROS
 # ------------------------------------------------------------------
-with st.container(key="card_filtros"):
-    with st.form("filtros_historico", border=False):
-        periodo = st.date_input(
-            "Período de chegada",
-            value=(hoje() - timedelta(days=DIAS_PADRAO), hoje()),
-            format="DD/MM/YYYY",
-            key=f"hist_periodo_{v}",
-        )
-        c1, c2 = st.columns(2)
-        tipos = c1.multiselect("Tipo de documento", TIPOS, key=f"hist_tipos_{v}")
-        prioridades = c2.multiselect("Prioridade", PRIORIDADES, key=f"hist_prioridades_{v}")
-        destinos = c1.multiselect("Destino", DESTINOS, key=f"hist_destinos_{v}")
-        status = c2.multiselect(
-            "Status",
-            STATUS,
-            format_func=lambda s: ROTULO_STATUS.get(s, s),
-            key=f"hist_status_{v}",
-        )
-        st.form_submit_button("Filtrar", type="primary", icon=":material/search:")
+with st.container(key="card_filtros"), st.form("filtros_historico", border=False):
+    periodo = st.date_input(
+        "Período de chegada",
+        value=(hoje() - timedelta(days=DIAS_PADRAO), hoje()),
+        format="DD/MM/YYYY",
+        key=f"hist_periodo_{v}",
+    )
+    c1, c2 = st.columns(2)
+    tipos = c1.multiselect("Tipo de documento", TIPOS, key=f"hist_tipos_{v}")
+    prioridades = c2.multiselect("Prioridade", PRIORIDADES, key=f"hist_prioridades_{v}")
+    destinos = c1.multiselect("Destino", DESTINOS, key=f"hist_destinos_{v}")
+    status = c2.multiselect(
+        "Status",
+        STATUS,
+        format_func=lambda s: ROTULO_STATUS.get(s, s),
+        key=f"hist_status_{v}",
+    )
+    st.form_submit_button("Filtrar", type="primary", icon=":material/search:")
 
 if not isinstance(periodo, (list, tuple)) or len(periodo) != 2:
     st.info("Escolha a data final do período.")
@@ -134,7 +135,12 @@ if not itens:
     st.info(MENSAGEM_VAZIO)
     col_limpar, _ = st.columns([1, 4])
     with col_limpar:
-        if st.button("Limpar filtros", icon=":material/filter_alt_off:", type="secondary", use_container_width=True):
+        if st.button(
+            "Limpar filtros",
+            icon=":material/filter_alt_off:",
+            type="secondary",
+            use_container_width=True,
+        ):
             resetar_filtros()
     st.stop()
 
@@ -145,19 +151,24 @@ linhas = []
 for i in itens:
     try:
         from datetime import datetime
+
         chegada = datetime.fromisoformat(i["chegada_em"]).astimezone(FUSO)
         data_formatada = chegada.strftime("%d/%m/%Y %H:%M")
-    except Exception:
+    except (ValueError, KeyError):
         data_formatada = str(i.get("chegada_em", "—"))
 
-    linhas.append({
-        "Documento": i.get("documento_id", "—"),
-        "Chegada": data_formatada,
-        "Tipo": i.get("tipo") or "—",
-        "Prioridade": i.get("prioridade") or "—",
-        "Destino": str(i.get("destino") or "—").replace("_", " "),
-        "Status": formatar_status_com_motivo(i.get("documento_id"), i.get("status")),
-    })
+    linhas.append(
+        {
+            "Documento": i.get("documento_id", "—"),
+            "Chegada": data_formatada,
+            "Tipo": i.get("tipo") or "—",
+            "Prioridade": i.get("prioridade") or "—",
+            "Destino": str(i.get("destino") or "—").replace("_", " "),
+            "Status": formatar_status_com_motivo(
+                i.get("documento_id"), i.get("status")
+            ),
+        }
+    )
 
 # ------------------------------------------------------------------
 # RESULTADOS
@@ -167,5 +178,7 @@ with st.container(key="card_historico_lista"):
         '<p class="card-title" style="font-weight:700;margin:0">RESULTADOS</p>',
         unsafe_allow_html=True,
     )
-    st.caption(f"{len(linhas)} documento(s) encontrado(s), do mais recente ao mais antigo.")
+    st.caption(
+        f"{len(linhas)} documento(s) encontrado(s), do mais recente ao mais antigo."
+    )
     st.dataframe(linhas, hide_index=True, width="stretch")

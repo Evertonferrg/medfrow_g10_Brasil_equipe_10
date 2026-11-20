@@ -52,10 +52,15 @@ if not doc_id:
 
 # Caso já carregado: só o link discreto de voltar à lista
 with st.container(key="btn_voltar"):
-    st.page_link(PAGINA_LISTA, label="Voltar para a Lista Documentos", icon=":material/arrow_back:")
+    st.page_link(
+        PAGINA_LISTA,
+        label="Voltar para a Lista Documentos",
+        icon=":material/arrow_back:",
+    )
 
 if st.query_params.get("id") != doc_id:
     st.query_params["id"] = doc_id  # garante que a URL sempre reflete o caso aberto
+
 
 # ------------------------------------------------------------------
 # CONSULTA (GET /documentos/{id})
@@ -96,8 +101,16 @@ dec = res.get("decisao_roteamento") or {}
 if dec.get("requer_auditoria_humana"):
     with st.container(key="card_revisao"):
         a, b = st.columns([4, 1], vertical_alignment="center")
-        a.markdown("**Este caso precisa de revisão humana.** Confira os pontos de atenção e decida.")
-        if b.button("Revisar Caso", type="primary", icon=":material/open_in_new:", use_container_width=True, key="btn_revisar"):
+        a.markdown(
+            "**Este caso precisa de revisão humana.** Confira os pontos de atenção e decida."
+        )
+        if b.button(
+            "Revisar Caso",
+            type="primary",
+            icon=":material/open_in_new:",
+            use_container_width=True,
+            key="btn_revisar",
+        ):
             abrir_revisao(doc_id)
 
 col_esq, col_dir = st.columns([5, 6], gap="large")

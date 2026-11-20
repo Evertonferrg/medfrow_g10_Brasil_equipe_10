@@ -1,8 +1,8 @@
 import sys
 from pathlib import Path
-from services.navegacao import definir_caso
 
 import streamlit as st
+from services.navegacao import definir_caso
 
 # Garante que as importações da pasta ui funcionem em qualquer ambiente
 PASTA_UI = str(Path(__file__).resolve().parents[1])
@@ -67,12 +67,16 @@ def _enviar() -> None:
 # ------------------------------------------------------------------
 # PÁGINA
 # ------------------------------------------------------------------
-st.set_page_config(page_title="Novo Documento · MediFlow", page_icon="🩺", layout="wide")
+st.set_page_config(
+    page_title="Novo Documento · MediFlow", page_icon="🩺", layout="wide"
+)
 preparar_pagina()
 
 c_voltar, _ = st.columns([1, 4])
 with c_voltar, st.container(key="btn_voltar"):
-    st.page_link(PAGINA_LISTA, label="Voltar para Lista Documentos", icon=":material/arrow_back:")
+    st.page_link(
+        PAGINA_LISTA, label="Voltar para Lista Documentos", icon=":material/arrow_back:"
+    )
 st.title("Novo Documento Clínico")
 
 st.info(
@@ -168,7 +172,9 @@ with st.container(key="card_cadastro"):
                 help="Tire uma foto do documento com a câmera do seu dispositivo.",
             )
             if foto is not None:
-                st.caption("✅ Foto capturada. Clique em **Enviar para Triagem** para processar.")
+                st.caption(
+                    "✅ Foto capturada. Clique em **Enviar para Triagem** para processar."
+                )
         else:
             st.caption("Ligue a câmera para fotografar o documento.")
 
@@ -181,7 +187,9 @@ with st.container(key="card_cadastro"):
             # O limite é checado em validar_envio, que mostra um erro claro.
             placeholder="Cole aqui o texto do laudo, receita, guia, alta ou atestado.",
         )
-        st.caption("Se houver arquivo ou foto anexados, eles têm prioridade sobre o texto.")
+        st.caption(
+            "Se houver arquivo ou foto anexados, eles têm prioridade sobre o texto."
+        )
 
     st.checkbox(
         "Confirmo que este documento contém apenas dados sintéticos (sem dados reais de pacientes).",
