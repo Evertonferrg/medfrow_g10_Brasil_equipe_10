@@ -340,6 +340,10 @@ def preparar_pagina(estilo_especifico: bool = True) -> None:
 <style>
     [data-testid="stSidebarNav"] li:has(a[href$="Configuracoes"]) { display: none; }
     [data-testid="stSidebarNav"] a[href$="Configuracoes"] { display: none; }
+
+    /* Oculta Revisao de Caso do menu lateral */
+    [data-testid="stSidebarNav"] li:has(a[href*="Revisao_de_Caso"]) { display: none; }
+    [data-testid="stSidebarNav"] a[href*="Revisao_de_Caso"] { display: none; }
 </style>
 """,
             unsafe_allow_html=True,
