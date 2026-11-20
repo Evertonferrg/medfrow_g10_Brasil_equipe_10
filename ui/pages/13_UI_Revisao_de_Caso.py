@@ -25,9 +25,7 @@ from services.navegacao import abrir_caso, caso_atual, definir_caso
 API = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 MAX_PAGINAS = 10
 ALTURA_ORIGINAL = 640
-FUSO_HORAS = (
-    -3
-)  # horário de Brasília; use None para mostrar o horário como a API devolveu
+FUSO_HORAS = -3  # horário de Brasília; use None para mostrar o horário como a API devolveu
 
 CSS_PAGINA = """
 <style>
@@ -41,29 +39,13 @@ CSS_PAGINA = """
     .rv-rot { font-size: .75rem; opacity: .7; }
     .rv-val { font-size: .95rem; font-weight: 600; word-break: break-word; }
     .rv-ev { font-size: .75rem; opacity: .7; font-style: italic; }
-    .rv-motivos { columns: 2; column-gap: 2rem; margin: .5rem 0 0; padding-left: 1.1rem;
+    .rv-motivos { columns: 2; column-gap: 2rem; margin: .5rem 0 0; padding: 0 0 .25rem 1.1rem;
                   font-size: .9rem; }
+    .rv-motivos li { break-inside: avoid; margin-bottom: .3rem; }
+    .rv-just { font-size: .9rem; margin: .5rem 0 0; }
     .rv-meta { font-size: .85rem; opacity: .8; margin: 0 0 .25rem; }
 
-    /* Trilha de decisões: linha do tempo */
-    .tl { margin: .6rem 0 0 .5rem; padding-left: 1.5rem;
-          border-left: 2px solid rgba(128, 128, 128, .3); }
-    .tl-item { position: relative; padding-bottom: 1.1rem; --c: #94A3B8; }
-    .tl-item::before { content: ""; position: absolute; left: calc(-1.5rem - 7px); top: .3rem;
-                       width: 12px; height: 12px; border-radius: 50%; background: var(--c); }
-    .tl-agente { --c: #3B82F6; }
-    .tl-auditora { --c: #22C55E; }
-    .tl-cab { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-    .tl-hora { font-size: .8rem; opacity: .7; }
-    .tl-n { font-size: .75rem; opacity: .6; }
-    .tl-linha { font-size: .88rem; margin: .2rem 0 0; }
-    .tl-mud { font-size: .88rem; margin: .3rem 0 0; padding: .35rem .6rem; border-radius: 8px;
-              background: rgba(128, 128, 128, .1); }
-    .tl-antes { text-decoration: line-through; opacity: .7; color: #EF4444; }
-    .tl-depois { font-weight: 600; color: #16A34A; }
-
-    
-    /* Trilha de decisões: cartão branco, como os outros cards da página */
+    /* Trilha de decisões: cartão branco e linha do tempo */
     [data-testid="stExpander"] {
         background: color-mix(in srgb, currentColor 7%, transparent);
         background: rgb(from currentColor 255 255 255 / calc(1 - r / 255));
@@ -79,6 +61,22 @@ CSS_PAGINA = """
     }
     [data-testid="stExpander"] summary { font-weight: 700; padding: .9rem 1.25rem; }
     [data-testid="stExpander"] summary:hover { background: rgba(59, 130, 246, .06) !important; }
+
+    .tl { margin: .6rem 0 0 .5rem; padding-left: 1.5rem;
+          border-left: 2px solid rgba(128, 128, 128, .3); }
+    .tl-item { position: relative; padding-bottom: 1.1rem; --c: #94A3B8; }
+    .tl-item::before { content: ""; position: absolute; left: calc(-1.5rem - 7px); top: .3rem;
+                       width: 12px; height: 12px; border-radius: 50%; background: var(--c); }
+    .tl-agente { --c: #3B82F6; }
+    .tl-auditora { --c: #22C55E; }
+    .tl-cab { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+    .tl-hora { font-size: .8rem; opacity: .7; }
+    .tl-n { font-size: .75rem; opacity: .6; }
+    .tl-linha { font-size: .88rem; margin: .2rem 0 0; }
+    .tl-mud { font-size: .88rem; margin: .3rem 0 0; padding: .35rem .6rem; border-radius: 8px;
+              background: rgba(128, 128, 128, .1); }
+    .tl-antes { text-decoration: line-through; opacity: .7; color: #EF4444; }
+    .tl-depois { font-weight: 600; color: #16A34A; }
 </style>
 """
 
@@ -87,11 +85,7 @@ ROTULO_ACAO = {
     "redirecionar": "Redirecionar para outro setor",
     "rejeitar": "Rejeitar documento",
 }
-PASSADO_ACAO = {
-    "aprovar": "aprovado",
-    "redirecionar": "redirecionado",
-    "rejeitar": "rejeitado",
-}
+PASSADO_ACAO = {"aprovar": "aprovado", "redirecionar": "redirecionado", "rejeitar": "rejeitado"}
 
 
 # ------------------------------------------------------------------
@@ -104,6 +98,10 @@ def _e(valor) -> str:
 
 def _rotulo(valor) -> str:
     return str(valor or "").replace("_", " ").capitalize() or "—"
+
+
+def _dict(valor) -> dict:
+    return valor if isinstance(valor, dict) else {}
 
 
 def limite_confianca() -> float:
@@ -127,9 +125,7 @@ def evidencia(dados: dict, *nomes):
 # ------------------------------------------------------------------
 def mostrar_original(documento_id: str) -> None:
     try:
-        r = requests.get(
-            f"{API}/documentos/{quote(documento_id, safe='')}/original", timeout=30
-        )
+        r = requests.get(f"{API}/documentos/{quote(documento_id, safe='')}/original", timeout=30)
     except requests.RequestException:
         st.error("Não consegui buscar o original agora.")
         return
@@ -164,19 +160,22 @@ def mostrar_original(documento_id: str) -> None:
 # Conferência dos dados
 # ------------------------------------------------------------------
 def campo_html(rotulo, valor, ident, ruins, ev, exibido=None) -> str:
+    """Cor só onde a API sinalizou problema; campo vazio sem sinalização fica discreto."""
     ausente = valor in (None, "")
-    if ident in ruins:
-        selo = pill("inconsistente", "red")
+    sinalizado = ident in ruins
+    if sinalizado and ausente:
+        selo, alerta = pill("ausente", "orange"), True
+    elif sinalizado:
+        selo, alerta = pill("inconsistente", "red"), True
     elif ausente:
-        selo = pill("ausente", "orange")
+        selo, alerta = pill("não informado", "gray"), False
     else:
-        selo = ""
-    classe = "rv-campo rv-alerta" if (ausente or ident in ruins) else "rv-campo"
+        selo, alerta = "", False
+
+    classe = "rv-campo rv-alerta" if alerta else "rv-campo"
     texto_ev = ""
     if isinstance(ev, str) and ev.strip():
-        texto_ev = (
-            f'<span class="rv-ev">Evidência: {html.escape(ev.strip()[:140])}</span>'
-        )
+        texto_ev = f'<span class="rv-ev">Evidência: {html.escape(ev.strip()[:140])}</span>'
     mostrado = valor if exibido is None else exibido
     return (
         f'<div class="{classe}"><span class="rv-rot">{rotulo}</span>'
@@ -184,19 +183,41 @@ def campo_html(rotulo, valor, ident, ruins, ev, exibido=None) -> str:
     )
 
 
+def extracao_vazia(dados: dict) -> bool:
+    """True quando a leitura automática não trouxe nenhum dado útil."""
+    pac = _dict(dados.get("paciente"))
+    med = _dict(dados.get("medico_solicitante"))
+    valores = [
+        pac.get("nome"),
+        pac.get("idade"),
+        pac.get("data_nascimento"),
+        med.get("nome"),
+        med.get("crm"),
+        dados.get("diagnostico_principal"),
+        dados.get("cid_sugerido") or dados.get("cid"),
+    ]
+    meds = [m for m in (dados.get("medicamentos") or []) if isinstance(m, dict) and m.get("nome")]
+    return not meds and all(v in (None, "") for v in valores)
+
+
 def mostrar_conferencia(res: dict) -> None:
-    dados = (
-        res.get("dados_extraidos")
-        if isinstance(res.get("dados_extraidos"), dict)
-        else {}
-    )
-    pac = dados.get("paciente") if isinstance(dados.get("paciente"), dict) else {}
-    med = (
-        dados.get("medico_solicitante")
-        if isinstance(dados.get("medico_solicitante"), dict)
-        else {}
-    )
+    dados = _dict(res.get("dados_extraidos"))
+    pac = _dict(dados.get("paciente"))
+    med = _dict(dados.get("medico_solicitante"))
     ruins = campos_inconsistentes(res.get("problemas"))
+
+    st.markdown(
+        '<p class="card-title" style="font-weight:700;margin:0">CONFERÊNCIA DOS DADOS</p>',
+        unsafe_allow_html=True,
+    )
+
+    if extracao_vazia(dados):
+        st.warning(
+            "A leitura automática não conseguiu extrair dados deste documento. "
+            "Compare com o original ao lado antes de decidir.",
+            icon=":material/find_in_page:",
+        )
+        return
 
     idade = pac.get("idade")
     idade_txt = f"{idade} anos" if isinstance(idade, int) else idade
@@ -204,65 +225,27 @@ def mostrar_conferencia(res: dict) -> None:
 
     paciente = "".join(
         [
-            campo_html(
-                "Nome",
-                pac.get("nome"),
-                "nome",
-                ruins,
-                evidencia(dados, "nome_paciente", "paciente.nome"),
-            ),
-            campo_html(
-                "Idade",
-                idade,
-                "idade",
-                ruins,
-                evidencia(dados, "idade", "paciente.idade"),
-                idade_txt,
-            ),
-            campo_html(
-                "Data de nascimento",
-                pac.get("data_nascimento"),
-                "data_nascimento",
-                ruins,
-                evidencia(dados, "data_nascimento"),
-            ),
+            campo_html("Nome", pac.get("nome"), "nome", ruins, evidencia(dados, "nome_paciente", "paciente.nome")),
+            campo_html("Idade", idade, "idade", ruins, evidencia(dados, "idade", "paciente.idade"), idade_txt),
+            campo_html("Data de nascimento", pac.get("data_nascimento"), "data_nascimento", ruins,
+                       evidencia(dados, "data_nascimento")),
         ]
     )
     medico = "".join(
         [
-            campo_html(
-                "Nome",
-                med.get("nome"),
-                "medico",
-                ruins,
-                evidencia(dados, "medico_solicitante.nome"),
-            ),
-            campo_html(
-                "CRM",
-                med.get("crm"),
-                "crm",
-                ruins,
-                evidencia(dados, "crm", "medico_solicitante.crm"),
-            ),
+            campo_html("Nome", med.get("nome"), "medico", ruins, evidencia(dados, "medico_solicitante.nome")),
+            campo_html("CRM", med.get("crm"), "crm", ruins, evidencia(dados, "crm", "medico_solicitante.crm")),
         ]
     )
     diagnostico = "".join(
         [
-            campo_html(
-                "Diagnóstico principal",
-                dados.get("diagnostico_principal"),
-                "diagnostico",
-                ruins,
-                evidencia(dados, "diagnostico_principal"),
-            ),
-            campo_html(
-                "CID", cid, "cid", ruins, evidencia(dados, "cid", "cid_sugerido")
-            ),
+            campo_html("Diagnóstico principal", dados.get("diagnostico_principal"), "diagnostico", ruins,
+                       evidencia(dados, "diagnostico_principal")),
+            campo_html("CID", cid, "cid", ruins, evidencia(dados, "cid", "cid_sugerido")),
         ]
     )
 
     st.markdown(
-        '<p class="card-title" style="font-weight:700;margin:0">CONFERÊNCIA DOS DADOS</p>'
         '<p class="rv-sec">PACIENTE</p>'
         f'<div class="rv-grade">{paciente}</div>'
         '<p class="rv-sec">MÉDICO SOLICITANTE</p>'
@@ -392,7 +375,7 @@ def formatar_data(valor) -> str:
     if not texto:
         return "Não informado"
     try:
-        dt = datetime.fromisoformat(texto)
+        dt = datetime.fromisoformat(texto.replace("Z", "+00:00"))
     except ValueError:
         return texto[:19].replace("T", " ")
     if FUSO_HORAS is not None and dt.tzinfo is not None:
@@ -458,10 +441,7 @@ def mostrar_trilha(documento_id: str) -> None:
             if tipo == "agente":
                 classe, quem = "tl-agente", "Agente"
             elif tipo == "auditora":
-                classe, quem = (
-                    "tl-auditora",
-                    f"Auditora: {ev.get('autor_nome') or 'Nome não informado'}",
-                )
+                classe, quem = "tl-auditora", f"Auditora: {ev.get('autor_nome') or 'Nome não informado'}"
             else:
                 classe, quem = "tl-legado", "Histórico legado"
 
@@ -476,11 +456,7 @@ def mostrar_trilha(documento_id: str) -> None:
             if ev.get("detalhe"):
                 html_ev += f'<p class="tl-linha">{_e(ev["detalhe"])}</p>'
             if ev.get("campo"):
-                antes = (
-                    "(vazio)"
-                    if ev.get("valor_anterior") is None
-                    else ev["valor_anterior"]
-                )
+                antes = "(vazio)" if ev.get("valor_anterior") is None else ev["valor_anterior"]
                 depois = "(vazio)" if ev.get("valor_novo") is None else ev["valor_novo"]
                 html_ev += (
                     f'<div class="tl-mud">Campo <b>{_e(ev["campo"])}</b>: '
@@ -495,15 +471,13 @@ def mostrar_trilha(documento_id: str) -> None:
 # ------------------------------------------------------------------
 # PÁGINA
 # ------------------------------------------------------------------
-st.set_page_config(
-    page_title="MediFlow — Revisão de Caso", page_icon="🩺", layout="wide"
-)
+st.set_page_config(page_title="MediFlow — Revisão do caso", page_icon="🩺", layout="wide")
 preparar_pagina(estilo_especifico=False)  # esta página cuida do próprio layout
 st.markdown(CSS_PAGINA, unsafe_allow_html=True)
 
 documento_id = str(st.query_params.get("id") or caso_atual() or "").strip()
 if not documento_id:
-    st.title("Revisão de Caso")
+    st.title("Revisão do caso")
     st.info("Abra um caso pela fila de revisão.")
     st.stop()
 
@@ -522,7 +496,7 @@ with c_voltar, st.container(key="btn_voltar_fila"):
     )
 with c_dashboard:
     if st.button(
-        "Ver Caso no Dashboard",
+        "Ver caso no Dashboard",
         key="rv_ver_dashboard",
         type="primary",
         icon=":material/open_in_new:",
@@ -556,17 +530,11 @@ if not isinstance(res, dict):
     st.error("A API retornou uma resposta inválida.")
     st.stop()
 
-cl = res.get("classificacao") if isinstance(res.get("classificacao"), dict) else {}
+cl = _dict(res.get("classificacao"))
+dec = _dict(res.get("decisao_roteamento"))
 score = cl.get("score_confianca_classificacao")
+score_ok = isinstance(score, (int, float)) and not isinstance(score, bool)
 limite = limite_confianca()
-abaixo = (
-    isinstance(score, (int, float)) and not isinstance(score, bool) and score < limite
-)
-score_txt = (
-    f"{score:.2f}"
-    if isinstance(score, (int, float)) and not isinstance(score, bool)
-    else "—"
-)
 status_bruto = res.get("status_documento") or res.get("status")
 
 st.markdown(
@@ -579,20 +547,33 @@ st.markdown(
 # POR QUE ESTÁ EM REVISÃO
 # ------------------------------------------------------------------
 problemas = [p for p in (res.get("problemas") or []) if p]
-with st.container(key="card_rv_motivos"):
-    selo_conf = pill(
-        f"Confiança {score_txt} (limite {limite:.2f})", "orange" if abaixo else "gray"
+justificativa = str(dec.get("justificativa_roteamento") or "").strip()
+
+partes_meta = []
+if cl.get("tipo_documento"):
+    partes_meta.append(f"Tipo: <b>{_e(cl.get('tipo_documento'))}</b>")
+if score_ok:
+    partes_meta.append(
+        pill(f"Confiança {score:.2f} (limite {limite:.2f})", "orange" if score < limite else "gray")
     )
+
+with st.container(key="card_rv_motivos"):
     st.markdown(
-        '<p class="card-title" style="font-weight:700;margin:0 0 .3rem">POR QUE ESTÁ EM REVISÃO</p>'
-        f"<p class='rv-meta'>Tipo: <b>{_e(cl.get('tipo_documento'))}</b> · {selo_conf}</p>",
+        '<p class="card-title" style="font-weight:700;margin:0 0 .3rem">POR QUE ESTÁ EM REVISÃO</p>',
         unsafe_allow_html=True,
     )
+    if partes_meta:
+        st.markdown(f"<p class='rv-meta'>{' · '.join(partes_meta)}</p>", unsafe_allow_html=True)
     if problemas:
         itens = "".join(f"<li>{_e(p)}</li>" for p in problemas)
         st.markdown(f'<ul class="rv-motivos">{itens}</ul>', unsafe_allow_html=True)
+    elif justificativa:
+        st.markdown(
+            f'<p class="rv-just">{_e(justificativa[:400])}</p>',
+            unsafe_allow_html=True,
+        )
     else:
-        st.caption("Nenhum ponto de atenção registrado.")
+        st.caption("Nenhum motivo registrado pela API para este documento.")
 
 st.write("")
 
