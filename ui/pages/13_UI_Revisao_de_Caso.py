@@ -375,7 +375,7 @@ def formatar_data(valor) -> str:
     if not texto:
         return "Não informado"
     try:
-        dt = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(texto)
     except ValueError:
         return texto[:19].replace("T", " ")
     if FUSO_HORAS is not None and dt.tzinfo is not None:
