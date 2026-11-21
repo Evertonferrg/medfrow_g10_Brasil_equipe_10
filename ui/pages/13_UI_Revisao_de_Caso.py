@@ -25,7 +25,9 @@ from services.navegacao import abrir_caso, caso_atual, definir_caso
 API = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 MAX_PAGINAS = 10
 ALTURA_ORIGINAL = 640
-FUSO_HORAS = -3  # horário de Brasília; use None para mostrar o horário como a API devolveu
+FUSO_HORAS = (
+    -3
+)  # horário de Brasília; use None para mostrar o horário como a API devolveu
 
 CSS_PAGINA = """
 <style>
@@ -85,7 +87,11 @@ ROTULO_ACAO = {
     "redirecionar": "Redirecionar para outro setor",
     "rejeitar": "Rejeitar documento",
 }
-PASSADO_ACAO = {"aprovar": "aprovado", "redirecionar": "redirecionado", "rejeitar": "rejeitado"}
+PASSADO_ACAO = {
+    "aprovar": "aprovado",
+    "redirecionar": "redirecionado",
+    "rejeitar": "rejeitado",
+}
 
 
 # ------------------------------------------------------------------
@@ -125,7 +131,9 @@ def evidencia(dados: dict, *nomes):
 # ------------------------------------------------------------------
 def mostrar_original(documento_id: str) -> None:
     try:
-        r = requests.get(f"{API}/documentos/{quote(documento_id, safe='')}/original", timeout=30)
+        r = requests.get(
+            f"{API}/documentos/{quote(documento_id, safe='')}/original", timeout=30
+        )
     except requests.RequestException:
         st.error("Não consegui buscar o original agora.")
         return
@@ -175,7 +183,9 @@ def campo_html(rotulo, valor, ident, ruins, ev, exibido=None) -> str:
     classe = "rv-campo rv-alerta" if alerta else "rv-campo"
     texto_ev = ""
     if isinstance(ev, str) and ev.strip():
-        texto_ev = f'<span class="rv-ev">Evidência: {html.escape(ev.strip()[:140])}</span>'
+        texto_ev = (
+            f'<span class="rv-ev">Evidência: {html.escape(ev.strip()[:140])}</span>'
+        )
     mostrado = valor if exibido is None else exibido
     return (
         f'<div class="{classe}"><span class="rv-rot">{rotulo}</span>'
@@ -196,7 +206,11 @@ def extracao_vazia(dados: dict) -> bool:
         dados.get("diagnostico_principal"),
         dados.get("cid_sugerido") or dados.get("cid"),
     ]
-    meds = [m for m in (dados.get("medicamentos") or []) if isinstance(m, dict) and m.get("nome")]
+    meds = [
+        m
+        for m in (dados.get("medicamentos") or [])
+        if isinstance(m, dict) and m.get("nome")
+    ]
     return not meds and all(v in (None, "") for v in valores)
 
 
@@ -225,23 +239,60 @@ def mostrar_conferencia(res: dict) -> None:
 
     paciente = "".join(
         [
-            campo_html("Nome", pac.get("nome"), "nome", ruins, evidencia(dados, "nome_paciente", "paciente.nome")),
-            campo_html("Idade", idade, "idade", ruins, evidencia(dados, "idade", "paciente.idade"), idade_txt),
-            campo_html("Data de nascimento", pac.get("data_nascimento"), "data_nascimento", ruins,
-                       evidencia(dados, "data_nascimento")),
+            campo_html(
+                "Nome",
+                pac.get("nome"),
+                "nome",
+                ruins,
+                evidencia(dados, "nome_paciente", "paciente.nome"),
+            ),
+            campo_html(
+                "Idade",
+                idade,
+                "idade",
+                ruins,
+                evidencia(dados, "idade", "paciente.idade"),
+                idade_txt,
+            ),
+            campo_html(
+                "Data de nascimento",
+                pac.get("data_nascimento"),
+                "data_nascimento",
+                ruins,
+                evidencia(dados, "data_nascimento"),
+            ),
         ]
     )
     medico = "".join(
         [
-            campo_html("Nome", med.get("nome"), "medico", ruins, evidencia(dados, "medico_solicitante.nome")),
-            campo_html("CRM", med.get("crm"), "crm", ruins, evidencia(dados, "crm", "medico_solicitante.crm")),
+            campo_html(
+                "Nome",
+                med.get("nome"),
+                "medico",
+                ruins,
+                evidencia(dados, "medico_solicitante.nome"),
+            ),
+            campo_html(
+                "CRM",
+                med.get("crm"),
+                "crm",
+                ruins,
+                evidencia(dados, "crm", "medico_solicitante.crm"),
+            ),
         ]
     )
     diagnostico = "".join(
         [
-            campo_html("Diagnóstico principal", dados.get("diagnostico_principal"), "diagnostico", ruins,
-                       evidencia(dados, "diagnostico_principal")),
-            campo_html("CID", cid, "cid", ruins, evidencia(dados, "cid", "cid_sugerido")),
+            campo_html(
+                "Diagnóstico principal",
+                dados.get("diagnostico_principal"),
+                "diagnostico",
+                ruins,
+                evidencia(dados, "diagnostico_principal"),
+            ),
+            campo_html(
+                "CID", cid, "cid", ruins, evidencia(dados, "cid", "cid_sugerido")
+            ),
         ]
     )
 
@@ -441,7 +492,10 @@ def mostrar_trilha(documento_id: str) -> None:
             if tipo == "agente":
                 classe, quem = "tl-agente", "Agente"
             elif tipo == "auditora":
-                classe, quem = "tl-auditora", f"Auditora: {ev.get('autor_nome') or 'Nome não informado'}"
+                classe, quem = (
+                    "tl-auditora",
+                    f"Auditora: {ev.get('autor_nome') or 'Nome não informado'}",
+                )
             else:
                 classe, quem = "tl-legado", "Histórico legado"
 
@@ -456,7 +510,11 @@ def mostrar_trilha(documento_id: str) -> None:
             if ev.get("detalhe"):
                 html_ev += f'<p class="tl-linha">{_e(ev["detalhe"])}</p>'
             if ev.get("campo"):
-                antes = "(vazio)" if ev.get("valor_anterior") is None else ev["valor_anterior"]
+                antes = (
+                    "(vazio)"
+                    if ev.get("valor_anterior") is None
+                    else ev["valor_anterior"]
+                )
                 depois = "(vazio)" if ev.get("valor_novo") is None else ev["valor_novo"]
                 html_ev += (
                     f'<div class="tl-mud">Campo <b>{_e(ev["campo"])}</b>: '
@@ -471,7 +529,9 @@ def mostrar_trilha(documento_id: str) -> None:
 # ------------------------------------------------------------------
 # PÁGINA
 # ------------------------------------------------------------------
-st.set_page_config(page_title="MediFlow — Revisão do caso", page_icon="🩺", layout="wide")
+st.set_page_config(
+    page_title="MediFlow — Revisão do caso", page_icon="🩺", layout="wide"
+)
 preparar_pagina(estilo_especifico=False)  # esta página cuida do próprio layout
 st.markdown(CSS_PAGINA, unsafe_allow_html=True)
 
@@ -554,7 +614,10 @@ if cl.get("tipo_documento"):
     partes_meta.append(f"Tipo: <b>{_e(cl.get('tipo_documento'))}</b>")
 if score_ok:
     partes_meta.append(
-        pill(f"Confiança {score:.2f} (limite {limite:.2f})", "orange" if score < limite else "gray")
+        pill(
+            f"Confiança {score:.2f} (limite {limite:.2f})",
+            "orange" if score < limite else "gray",
+        )
     )
 
 with st.container(key="card_rv_motivos"):
@@ -563,7 +626,9 @@ with st.container(key="card_rv_motivos"):
         unsafe_allow_html=True,
     )
     if partes_meta:
-        st.markdown(f"<p class='rv-meta'>{' · '.join(partes_meta)}</p>", unsafe_allow_html=True)
+        st.markdown(
+            f"<p class='rv-meta'>{' · '.join(partes_meta)}</p>", unsafe_allow_html=True
+        )
     if problemas:
         itens = "".join(f"<li>{_e(p)}</li>" for p in problemas)
         st.markdown(f'<ul class="rv-motivos">{itens}</ul>', unsafe_allow_html=True)

@@ -256,9 +256,7 @@ def test_dashboard_banner_revisar_caso_chama_abrir_revisao(monkeypatch):
     at.session_state["caso_id"] = "DOC-REV"
     at.run()
     assert not at.exception
-    assert any(
-        "Este caso precisa de revisão humana." in m.value for m in at.markdown
-    )
+    assert any("Este caso precisa de revisão humana." in m.value for m in at.markdown)
 
     at.button(key="btn_revisar").click().run()
     assert not at.exception

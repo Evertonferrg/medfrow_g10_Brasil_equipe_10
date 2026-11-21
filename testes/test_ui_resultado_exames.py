@@ -62,7 +62,9 @@ class _ExtratorTabelasHTML(HTMLParser):
                 self._celulas.append(valor)
             self._tag_celula = None
         elif tag == "tr" and self._celulas and self._cabecalhos:
-            self._linhas.append(dict(zip(self._cabecalhos, self._celulas, strict=False)))
+            self._linhas.append(
+                dict(zip(self._cabecalhos, self._celulas, strict=False))
+            )
         elif tag == "table" and self._linhas:
             self.tabelas.append(self._linhas)
 
