@@ -8,9 +8,9 @@ PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
     sys.path.insert(0, PASTA_UI)
 
-from ui.services import envio
-from ui.services.estilo import PAGINA_DASHBOARD, PAGINA_LISTA, preparar_pagina
-from ui.services.navegacao import definir_caso
+from services import envio
+from services.estilo import PAGINA_DASHBOARD, PAGINA_LISTA, preparar_pagina
+from services.navegacao import definir_caso
 
 TAMANHO_MAXIMO_MB, FORMATOS_ACEITOS = envio.carregar_limites()
 TIPOS_ARQUIVO = envio.extensoes_aceitas(FORMATOS_ACEITOS)
