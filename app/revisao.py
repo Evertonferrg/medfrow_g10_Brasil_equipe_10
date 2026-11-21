@@ -119,6 +119,8 @@ class Colaboradores:
     validar_correcoes: Callable[[dict, dict], tuple[dict, list[Alteracao]]]
     # H4.4.4 T3 avisa o plantao quando o destino escolhido é a emergência (H3.3.1)
     alerta_plantao: Callable[[dict], None] | None = None
+    # Atualiza o índice em memória (GET /documentos) após a decisão da auditora
+    atualizar_indice: Callable[[str, dict], None] | None = None
 
 
 # ---------------------------------------------------------------- correções (H4.4.2 T2)
@@ -318,6 +320,7 @@ def decidir_caso(
             roteamento["justificativa_roteamento"] = (
                 f"Rejeitado pela auditora. Motivo: {decisao.motivo}"
             )
+            resultado["motivo_rejeicao"] = decisao.motivo
         elif acao is AcaoAuditora.REDIRECIONAR:  # H4.4.4
             roteamento["justificativa_roteamento"] = (
                 f"Destino definido pela auditora: {destino}."
@@ -365,6 +368,11 @@ def decidir_caso(
             regra_aplicada=REGRA_AUDITORA,
             detalhe=f"{rotulo}" + (f": {decisao.motivo}" if decisao.motivo else ""),
         )
+        if colab.atualizar_indice:
+            try:
+                colab.atualizar_indice(documento_id, resultado)
+            except Exception:
+                logger.exception("Falha ao atualizar o índice após decisão")
         alertado = False
 
         alerta = getattr(colab, "alertar_plantao", None) or getattr(
@@ -458,6 +466,7 @@ def _alertar_plantao_configurado(resultado: dict) -> None:
 
 def colaboradores_padrao() -> Colaboradores:
     from app import storage
+    from app.indice_carga import registrar_resultado
 
     # validar_correcoes: troque pelos normalizadores de H1.3.2 (CRM) e H4.1.2 se divergirem
     return Colaboradores(
@@ -466,4 +475,5 @@ def colaboradores_padrao() -> Colaboradores:
         calcular_destino=calcular_destino_real,
         validar_correcoes=validar_correcoes_basico,
         alerta_plantao=_alertar_plantao_configurado,
+        atualizar_indice=registrar_resultado,
     )

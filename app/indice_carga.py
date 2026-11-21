@@ -77,7 +77,7 @@ def reconstruir_do_bucket() -> int:
 
     for prefixo in PREFIXOS:
         for caminho in storage.listar(prefixo):
-            if not caminho.endswith(".json"):
+            if not caminho.endswith(".json") or caminho.endswith(".estado.json"):
                 continue
 
             try:

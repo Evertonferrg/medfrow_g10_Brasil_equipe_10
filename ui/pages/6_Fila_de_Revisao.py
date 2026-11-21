@@ -105,7 +105,7 @@ def fila():
                     key=f"revisar_{documento_id}",
                     type="primary",
                     icon=":material/open_in_new:",
-                    use_container_width=True,
+                    width="stretch",
                 ):
                     abrir_revisao(documento_id)
 
@@ -115,7 +115,7 @@ def fila():
                         "Abrir caso",
                         key=f"abrir_{documento_id}",
                         icon=":material/open_in_new:",
-                        use_container_width=True,
+                        width="stretch",
                     ):
                         abrir_caso(documento_id)
 

@@ -58,9 +58,10 @@ def caso_de_resultado(documento_id: str, resultado: dict, chegada: str) -> CasoR
 
 
 class IndiceRevisao:
-    def __init__(self, eventos: ServicoEventos, carregar=None):
+    def __init__(self, eventos: ServicoEventos, carregar=None, indice_documentos=None):
         self._eventos = eventos
         self._carregar = carregar  # callable(documento_id) -> dict | None
+        self._indice_documentos = indice_documentos
 
     def _carregar_resultado(self, documento_id: str):
         if self._carregar is None:
@@ -71,9 +72,11 @@ class IndiceRevisao:
 
     def listar_casos_revisao(self) -> list[CasoRevisao]:
         casos = []
+        vistos: set[str] = set()
         for documento_id, chegada in self._eventos.listar_por_status(
             StatusDocumento.EM_AUDITORIA_HUMANA
         ):
+            vistos.add(documento_id)
             try:
                 resultado = self._carregar_resultado(documento_id)
             except Exception:  # resultado fora do formato não derruba a fila
@@ -81,4 +84,27 @@ class IndiceRevisao:
                 continue
             if resultado:
                 casos.append(caso_de_resultado(documento_id, resultado, chegada))
+
+        if self._indice_documentos is not None:
+            alvo = StatusDocumento.EM_AUDITORIA_HUMANA.value
+            for resumo in self._indice_documentos.listar():
+                doc_id = resumo.documento_id
+                if doc_id in vistos or resumo.status != alvo:
+                    continue
+                try:
+                    if self._eventos.listar(doc_id):
+                        continue
+                    resultado = self._carregar_resultado(doc_id)
+                except Exception:
+                    logger.exception("Resultado ilegível na fila de revisão")
+                    continue
+                if resultado:
+                    chegada = (
+                        resumo.data.isoformat()
+                        if hasattr(resumo.data, "isoformat")
+                        else str(resumo.data)
+                    )
+                    casos.append(caso_de_resultado(doc_id, resultado, chegada))
+                    vistos.add(doc_id)
+
         return casos

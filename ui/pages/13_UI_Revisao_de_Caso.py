@@ -350,12 +350,31 @@ def carregar_destinos_auditora() -> list[str]:
         ]
 
 
-def mostrar_painel_decisao(doc_id: str) -> None:
+def mostrar_painel_decisao(
+    doc_id: str,
+    *,
+    ja_decidido: bool = False,
+    dec: dict | None = None,
+) -> None:
     """H4.4.1 a H4.4.4 / H6.3.1 T5: decisão da auditora."""
     st.markdown(
         '<p class="card-title" style="font-weight:700;margin:0 0 .5rem">DECISÃO DA AUDITORA</p>',
         unsafe_allow_html=True,
     )
+    if ja_decidido:
+        dec = _dict(dec)
+        destino_final = dec.get("destino_principal")
+        justificativa = str(dec.get("justificativa_roteamento") or "").strip()
+        detalhes = []
+        if destino_final:
+            detalhes.append(f"Destino final: **{destino_final}**.")
+        if justificativa:
+            detalhes.append(justificativa)
+        texto = "Este documento já foi decidido e não pode receber nova decisão."
+        if detalhes:
+            texto += " " + " ".join(detalhes)
+        st.info(texto)
+        return
     acao = st.radio(
         "Ação",
         options=list(ROTULO_ACAO),
@@ -401,6 +420,7 @@ def mostrar_painel_decisao(doc_id: str) -> None:
             st.error("Falha de comunicação com a API.")
             return
         if r.status_code == 200:
+            st.cache_data.clear()
             st.session_state["rv_resultado"] = (
                 f"Decisão registrada com sucesso! Documento {PASSADO_ACAO[acao]}."
             )
@@ -429,6 +449,10 @@ def formatar_data(valor) -> str:
         dt = datetime.fromisoformat(texto)
     except ValueError:
         return texto[:19].replace("T", " ")
+    if dt.tzinfo is not None and dt.timestamp() <= 0:
+        return "Não informado"
+    if dt.tzinfo is None and dt.year <= 1970 and dt.month == 1 and dt.day == 1:
+        return "Não informado"
     if FUSO_HORAS is not None and dt.tzinfo is not None:
         dt = dt.astimezone(timezone(timedelta(hours=FUSO_HORAS)))
     return dt.strftime("%d/%m/%Y %H:%M:%S")
@@ -552,7 +576,7 @@ with c_voltar, st.container(key="btn_voltar_fila"):
         st.Page(f"{RAIZ_UI}/{PAGINA_FILA}"),
         label="Voltar para a Fila de Revisão",
         icon=":material/arrow_back:",
-        use_container_width=True,
+        width="stretch",
     )
 with c_dashboard:
     if st.button(
@@ -560,7 +584,7 @@ with c_dashboard:
         key="rv_ver_dashboard",
         type="primary",
         icon=":material/open_in_new:",
-        use_container_width=True,
+        width="stretch",
     ):
         abrir_caso(documento_id)
 
@@ -596,15 +620,26 @@ score = cl.get("score_confianca_classificacao")
 score_ok = isinstance(score, (int, float)) and not isinstance(score, bool)
 limite = limite_confianca()
 status_bruto = res.get("status_documento") or res.get("status")
+status_norm = str(status_bruto or "").strip().lower()
+ja_decidido = status_norm in ("processado", "rejeitado") or (
+    "requer_auditoria_humana" in dec and not dec.get("requer_auditoria_humana")
+)
+cor_selo_status = (
+    "green"
+    if status_norm == "processado"
+    else "red"
+    if "rejeit" in status_norm or "erro" in status_norm
+    else "yellow"
+)
 
 st.markdown(
     f"<p class='rv-meta'>Documento <code>{html.escape(documento_id)}</code> · "
-    f"{pill(_e(_rotulo(status_bruto)), 'yellow')}</p>",
+    f"{pill(_e(_rotulo(status_bruto)), cor_selo_status)}</p>",
     unsafe_allow_html=True,
 )
 
 # ------------------------------------------------------------------
-# POR QUE ESTÁ EM REVISÃO
+# POR QUE ESTÁ EM REVISÃO / RESUMO DA DECISÃO
 # ------------------------------------------------------------------
 problemas = [p for p in (res.get("problemas") or []) if p]
 justificativa = str(dec.get("justificativa_roteamento") or "").strip()
@@ -616,20 +651,32 @@ if score_ok:
     partes_meta.append(
         pill(
             f"Confiança {score:.2f} (limite {limite:.2f})",
-            "orange" if score < limite else "gray",
+            "orange" if (score < limite and not ja_decidido) else "gray",
         )
     )
+if ja_decidido and dec.get("destino_principal"):
+    partes_meta.append(f"Destino: <b>{_e(dec.get('destino_principal'))}</b>")
+
+titulo_card_motivos = "RESUMO DA DECISÃO" if ja_decidido else "POR QUE ESTÁ EM REVISÃO"
 
 with st.container(key="card_rv_motivos"):
     st.markdown(
-        '<p class="card-title" style="font-weight:700;margin:0 0 .3rem">POR QUE ESTÁ EM REVISÃO</p>',
+        f'<p class="card-title" style="font-weight:700;margin:0 0 .3rem">{titulo_card_motivos}</p>',
         unsafe_allow_html=True,
     )
     if partes_meta:
         st.markdown(
             f"<p class='rv-meta'>{' · '.join(partes_meta)}</p>", unsafe_allow_html=True
         )
-    if problemas:
+    if ja_decidido:
+        if justificativa:
+            st.markdown(
+                f'<p class="rv-just">{_e(justificativa[:400])}</p>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.caption("Decisão humana já registrada para este documento.")
+    elif problemas:
         itens = "".join(f"<li>{_e(p)}</li>" for p in problemas)
         st.markdown(f'<ul class="rv-motivos">{itens}</ul>', unsafe_allow_html=True)
     elif justificativa:
@@ -660,7 +707,7 @@ with direita:
         mostrar_conferencia(res)
     st.write("")
     with st.container(key="card_rv_decisao"):
-        mostrar_painel_decisao(documento_id)
+        mostrar_painel_decisao(documento_id, ja_decidido=ja_decidido, dec=dec)
 
 st.write("")
 mostrar_trilha(documento_id)

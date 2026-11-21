@@ -70,6 +70,10 @@ def formatar_data(valor) -> str:
         dt = datetime.fromisoformat(texto)
     except ValueError:
         return texto[:16].replace("T", " ")
+    if dt.tzinfo is not None and dt.timestamp() <= 0:
+        return ""
+    if dt.tzinfo is None and dt.year <= 1970 and dt.month == 1 and dt.day == 1:
+        return ""
     if FUSO_HORAS is not None and dt.tzinfo is not None:
         dt = dt.astimezone(timezone(timedelta(hours=FUSO_HORAS)))
     return dt.strftime("%d/%m/%Y %H:%M")
@@ -134,10 +138,10 @@ with col_tit:
     st.caption("Gerencie o repositório de laudos, receitas e guias enviados.")
 with col_btn, st.container(key="btn_novo"):
     st.page_link(
-        PAGINA_NOVO,
+        st.Page(f"{RAIZ_UI}/{PAGINA_NOVO}"),
         label="Novo Documento",
         icon=":material/add:",
-        use_container_width=True,
+        width="stretch",
     )
 
 # ------------------------------------------------------------------
@@ -274,7 +278,7 @@ with st.container(key="card_lista"):
                 key=f"lista_abrir_{d['id']}",
                 type="primary",
                 icon=":material/open_in_new:",
-                use_container_width=True,
+                width="stretch",
                 help="Abrir no Dashboard",
             ):
                 abrir_caso(d["id"])  # porta única: guarda o caso e vai ao Dashboard
@@ -291,7 +295,7 @@ with st.container(key="card_lista"):
                 icon=":material/chevron_left:",
                 disabled=pagina <= 1,
                 key="pg_ant",
-                use_container_width=True,
+                width="stretch",
             ):
                 st.session_state["pagina"] = pagina - 1
                 st.rerun()
@@ -306,7 +310,7 @@ with st.container(key="card_lista"):
                 icon=":material/chevron_right:",
                 disabled=pagina >= total_paginas,
                 key="pg_prox",
-                use_container_width=True,
+                width="stretch",
             ):
                 st.session_state["pagina"] = pagina + 1
                 st.rerun()

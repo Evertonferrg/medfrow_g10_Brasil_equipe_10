@@ -245,8 +245,21 @@ def mostrar_detalhe(res: dict) -> None:
             st.markdown(corpo, unsafe_allow_html=True)
 
     # ---------------- CLASSIFICAÇÃO ----------------
+    status_bruto = (
+        str(res.get("status_documento") or res.get("status") or "").strip().lower()
+    )
+    if dec and "requer_auditoria_humana" in dec:
+        em_revisao = bool(dec.get("requer_auditoria_humana"))
+    elif (
+        status_bruto in ("processado", "rejeitado")
+        and dec.get("regra_aplicada") == "R-AUDITORA"
+    ):
+        em_revisao = False
+    else:
+        em_revisao = True
+
     if cl:
-        if cl.get("tipo_documento") == "Não identificado":
+        if em_revisao and cl.get("tipo_documento") == "Não identificado":
             st.warning(
                 "Documento fora das categorias clínicas (Não identificado): "
                 "separado para revisão humana."
@@ -257,7 +270,7 @@ def mostrar_detalhe(res: dict) -> None:
             )
             if exibir_classificacao:
                 # componente da equipe: score formatado e aviso de confiança abaixo do limite
-                exibir_classificacao(cl)
+                exibir_classificacao(cl, em_revisao=em_revisao)
             else:
                 st.markdown(
                     '<div class="grade">'

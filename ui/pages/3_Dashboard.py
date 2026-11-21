@@ -42,7 +42,7 @@ if not doc_id:
             "Abrir Caso",
             type="primary",
             icon=":material/open_in_new:",
-            use_container_width=True,
+            width="stretch",
         )
     if buscar and texto.strip():
         definir_caso(texto.strip())
@@ -63,7 +63,7 @@ with col_novo:
         "Consultar outro documento",
         key="btn_novo_caso",
         icon=":material/search:",
-        use_container_width=True,
+        width="stretch",
     ):
         limpar_caso()
         st.rerun()
@@ -118,7 +118,7 @@ if dec.get("requer_auditoria_humana"):
             "Revisar Caso",
             type="primary",
             icon=":material/open_in_new:",
-            use_container_width=True,
+            width="stretch",
             key="btn_revisar",
         ):
             abrir_revisao(doc_id)

@@ -284,3 +284,60 @@ def test_dashboard_botao_consultar_outro_documento_volta_a_busca_manual(monkeypa
     assert "id" not in at.query_params
     assert len(at.text_input) == 1
     assert any("Abrir Caso" in b.label for b in at.button)
+
+
+def test_dashboard_pos_decisao_nao_exibe_alerta_retido_para_revisao(monkeypatch):
+    res = _resultado_dashboard("DOC-DECIDIDO", requer_revisao=False)
+    res["status_documento"] = "processado"
+    res["classificacao"]["score_confianca_classificacao"] = 0.0
+    res["decisao_roteamento"]["destino_principal"] = "Farmacia_Hospitalar"
+    res["decisao_roteamento"]["regra_aplicada"] = "R-AUDITORA"
+
+    _mock_api_dashboard(monkeypatch, doc_resp=_RespDashboard(200, res))
+    at = AppTest.from_file(PAGINA_DASHBOARD, default_timeout=30)
+    at.session_state["caso_id"] = "DOC-DECIDIDO"
+    at.run()
+    assert not at.exception
+    assert not any("retido para revisão humana" in w.value for w in at.warning)
+    assert any("revisão humana concluída" in i.value for i in at.info)
+
+
+def test_lista_documentos_ignora_data_epoch_zero(monkeypatch):
+    from pathlib import Path
+
+    import requests
+
+    pagina_lista = str(
+        Path(__file__).resolve().parents[1] / "ui" / "pages" / "2_Lista_Documentos.py"
+    )
+    itens = [
+        {
+            "documento_id": "DOC-EPOCH-ZERO",
+            "tipo_documento": "Laudo de Exame de Imagem",
+            "destino": "Fila_Revisao_Humana",
+            "nivel_prioridade": "Urgente",
+            "status": "em_auditoria_humana",
+            "canal_origem": "Pronto_Socorro",
+            "data": "1970-01-01T00:00:00Z",
+        },
+        {
+            "documento_id": "DOC-DATA-REAL",
+            "tipo_documento": "Receituário Médico",
+            "destino": "Farmacia_Hospitalar",
+            "nivel_prioridade": "Rotina",
+            "status": "processado",
+            "canal_origem": "Ambulatorio",
+            "data": "2026-11-20T15:30:00+00:00",
+        },
+    ]
+
+    monkeypatch.delenv("API_URL", raising=False)
+    monkeypatch.setattr(requests, "get", lambda url, **kw: _RespDashboard(200, itens))
+
+    at = AppTest.from_file(pagina_lista, default_timeout=30)
+    at.run()
+    assert not at.exception
+    markdowns = [m.value for m in at.markdown]
+    assert any("DOC-EPOCH-ZERO" in m for m in markdowns)
+    assert not any("1969" in m or "1970" in m for m in markdowns)
+    assert any("20/11/2026 12:30" in m for m in markdowns)

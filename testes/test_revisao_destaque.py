@@ -350,3 +350,36 @@ def test_ui_revisao_botao_ver_dashboard_chama_abrir_caso(monkeypatch):
     assert not at.exception
     assert destinos == ["pages/3_Dashboard.py"]
     assert at.session_state["caso_id"] == "DOC-REV-1"
+
+
+def test_ui_revisao_caso_ja_decidido_bloqueia_formulario_e_mostra_resumo(monkeypatch):
+    caso_decidido = _caso_revisao("DOC-DECIDIDO")
+    caso_decidido["status_documento"] = "processado"
+    caso_decidido["decisao_roteamento"] = {
+        "destino_principal": "Farmacia_Hospitalar",
+        "requer_auditoria_humana": False,
+        "regra_aplicada": "R-AUDITORA",
+        "justificativa_roteamento": "Destino definido pela auditora: Farmacia_Hospitalar.",
+    }
+
+    def fake_get(url, **kw):
+        if url.endswith("/documentos/DOC-DECIDIDO"):
+            return _RespHttp(200, caso_decidido)
+        if url.endswith("/documentos/DOC-DECIDIDO/original"):
+            return _RespHttp(
+                200,
+                content=b"Receita medica",
+                headers={"content-type": "text/plain; charset=utf-8"},
+            )
+        if url.endswith("/documentos/DOC-DECIDIDO/trilha"):
+            return _RespHttp(200, _trilha_exemplo())
+        raise AssertionError(f"URL inesperada: {url}")
+
+    at = _abrir_revisao(monkeypatch, doc_id="DOC-DECIDIDO", get_fn=fake_get)
+    assert not at.exception
+    markdowns = [m.value for m in at.markdown]
+    assert any("RESUMO DA DECISÃO" in m for m in markdowns)
+    assert not any("POR QUE ESTÁ EM REVISÃO" in m for m in markdowns)
+    assert any("já foi decidido" in i.value for i in at.info)
+    assert not at.radio
+    assert not any(b.key == "rv_confirmar" for b in at.button)

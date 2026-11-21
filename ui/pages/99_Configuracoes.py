@@ -277,7 +277,7 @@ if regras_lista:
                 "Descrição": r.get("descricao") or "—",
             }
         )
-    st.dataframe(linhas, hide_index=True, use_container_width=True)
+    st.dataframe(linhas, hide_index=True, width="stretch")
 
 st.markdown("---")
 with st.expander("Campos Críticos e Parâmetros Ativos"):
@@ -314,7 +314,7 @@ dados_editados = st.data_editor(
     dados_tabela,
     num_rows="dynamic",
     key="editor_achados_criticos",
-    use_container_width=True,
+    width="stretch",
     column_config={
         "Achado": st.column_config.TextColumn(
             "Nome do Achado Crítico",
@@ -430,7 +430,7 @@ def confirmar_restauracao(versao: str):
             "Confirmar restauração",
             type="primary",
             key="confirmar_restauracao_regras",
-            use_container_width=True,
+            width="stretch",
         ):
             try:
                 resposta = requests.post(
@@ -461,7 +461,7 @@ def confirmar_restauracao(versao: str):
         if st.button(
             "Cancelar",
             key="cancelar_restauracao_regras",
-            use_container_width=True,
+            width="stretch",
         ):
             st.rerun()
 
@@ -494,7 +494,7 @@ else:
     st.dataframe(
         linhas_historico,
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
     st.markdown("#### Restaurar uma versão anterior")

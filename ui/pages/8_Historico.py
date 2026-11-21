@@ -139,7 +139,7 @@ if not itens:
             "Limpar filtros",
             icon=":material/filter_alt_off:",
             type="secondary",
-            use_container_width=True,
+            width="stretch",
         ):
             resetar_filtros()
     st.stop()

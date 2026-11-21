@@ -309,7 +309,7 @@ def _barra_revisao() -> None:
                     key="rev_ver_dashboard_equipe",
                     type="primary",
                     icon=":material/open_in_new:",
-                    use_container_width=True,
+                    width="stretch",
                 ):
                     from services.navegacao import abrir_caso  # evita import circular
 

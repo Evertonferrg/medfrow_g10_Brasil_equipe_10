@@ -219,7 +219,7 @@ for coluna, (chave, u) in zip(colunas, URGENCIAS.items()):
             on_click=alternar_filtro,
             args=(chave,),
             help=DICAS[chave],
-            use_container_width=True,
+            width="stretch",
         )
 
 # ------------------------------------------------------------------
@@ -246,7 +246,7 @@ if qtd_fila > 0:
             key="home_ir_fila",
             type="primary",
             icon=":material/arrow_forward:",
-            use_container_width=True,
+            width="stretch",
         ):
             st.switch_page(PAGINA_FILA)
 else:
@@ -328,7 +328,7 @@ with col_lista, st.container(key="card_casos"):
                 "Abrir",
                 key=f"abrir_home_{caso['id']}",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 help="Abrir no Dashboard",
             ):
                 abrir_caso(caso["id"])  # porta única: guarda o caso e vai ao Dashboard
@@ -342,7 +342,7 @@ with col_lista, st.container(key="card_casos"):
             PAGINA_LISTA,
             label="Ver todos em Documentos",
             icon=":material/arrow_forward:",
-            use_container_width=True,
+            width="stretch",
         )
 
 # ------------------------------------------------------------------
