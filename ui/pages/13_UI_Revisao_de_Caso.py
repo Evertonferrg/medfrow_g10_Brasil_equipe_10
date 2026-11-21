@@ -549,7 +549,7 @@ if st.query_params.get("id") != documento_id:
 c_voltar, _, c_dashboard = st.columns([3, 4.5, 2.5], vertical_alignment="center")
 with c_voltar, st.container(key="btn_voltar_fila"):
     st.page_link(
-        PAGINA_FILA,
+        st.Page(f"{RAIZ_UI}/{PAGINA_FILA}"),
         label="Voltar para a Fila de Revisão",
         icon=":material/arrow_back:",
         use_container_width=True,
