@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 import requests
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from app import llm, storage
@@ -29,7 +30,7 @@ from testes.fixtures.nao_clinicos import (
 )
 
 PAGINA_RESULTADO = str(
-    Path(__file__).resolve().parents[1] / "ui" / "pages" / "2_Triagem.py"
+    Path(__file__).resolve().parents[1] / "ui" / "pages" / "3_Dashboard.py"
 )
 
 DESTINOS_DE_SETOR = {
@@ -146,21 +147,31 @@ def test_t2_validacao_e_grafo_registram_motivo_documento_fora_das_categorias():
 
 
 # ==============================================================================
-# T3 — Mostrar o aviso na tela (st.warning em ui/pages/2_Triagem.py)
+# T3 — Mostrar o aviso na tela (st.warning em ui/pages/3_Dashboard.py)
 # ==============================================================================
 class _RespFalsa:
-    def __init__(self, status: int, corpo: dict):
+    def __init__(self, status: int, corpo=None, content: bytes = b"", headers=None):
         self.status_code = status
         self._corpo = corpo
         self.text = ""
+        self.content = content
+        self.headers = headers or {}
 
     def json(self):
+        if self._corpo is None:
+            raise ValueError("sem json")
         return self._corpo
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
 
 
 def test_t3_pagina_resultado_mostra_warning_quando_documento_fora_das_categorias(
     monkeypatch,
 ):
+    st.cache_data.clear()
+    monkeypatch.delenv("API_URL", raising=False)
     corpo_nao_identificado = {
         "status": "processado",
         "documento_id": "DOC-NF-001",
@@ -181,15 +192,19 @@ def test_t3_pagina_resultado_mostra_warning_quando_documento_fora_das_categorias
         },
         "dados_extraidos": {},
     }
-    monkeypatch.setattr(
-        requests,
-        "get",
-        lambda url, **kw: _RespFalsa(200, corpo_nao_identificado),
-    )
 
-    at = AppTest.from_file(PAGINA_RESULTADO, default_timeout=10).run()
-    at.text_input[0].set_value("DOC-NF-001")
-    at.button[0].click().run()
+    def falso_get(url, **kw):
+        if url.endswith("/original"):
+            return _RespFalsa(404)
+        if url.rstrip("/").endswith("/documentos"):
+            return _RespFalsa(200, [])
+        return _RespFalsa(200, corpo_nao_identificado)
+
+    monkeypatch.setattr(requests, "get", falso_get)
+
+    at = AppTest.from_file(PAGINA_RESULTADO, default_timeout=30)
+    at.session_state["caso_id"] = "DOC-NF-001"
+    at.run()
 
     assert not at.exception
     assert at.metric[0].value == "Não identificado"
@@ -197,7 +212,9 @@ def test_t3_pagina_resultado_mostra_warning_quando_documento_fora_das_categorias
     assert any(
         "fora das categorias" in a and "separado para revisão" in a for a in avisos
     )
-    assert any("Destino: Fila_Revisao_Humana" in a for a in avisos)
+    assert any(
+        "DESTINO" in m.value and "Fila_Revisao_Humana" in m.value for m in at.markdown
+    )
 
 
 # ==============================================================================
