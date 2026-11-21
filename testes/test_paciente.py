@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 import requests
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from app.grafo import triar
@@ -19,7 +20,7 @@ RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "ui"))  # igual ao Streamlit em execução (pasta do script)
 from ui.componentes.paciente import resumo_paciente
 
-PAGINA_RESULTADO = str(RAIZ / "ui" / "pages" / "2_Triagem.py")
+PAGINA_RESULTADO = str(RAIZ / "ui" / "pages" / "3_Dashboard.py")
 
 MEDICO = "Solicitante: Dra. Renata Silveira CRM-SP 145892."  # bate com o médico de extracao()
 
@@ -153,15 +154,29 @@ def test_bloco_paciente_exibe_nome_e_data_como_texto_puro():
 
 
 class _Resp:
-    """Resposta falsa do GET /documentos/{id} (mesmo formato das outras telas)."""
+    """Resposta falsa das rotas GET da API usadas pelo Dashboard."""
 
-    def __init__(self, corpo: dict):
-        self.status_code = 200
+    def __init__(
+        self,
+        status: int = 200,
+        corpo=None,
+        content: bytes = b"",
+        headers: dict | None = None,
+    ):
+        self.status_code = status
         self.text = ""
         self._corpo = corpo
+        self.content = content
+        self.headers = headers or {}
 
-    def json(self) -> dict:
+    def json(self):
+        if self._corpo is None:
+            raise ValueError("sem json")
         return self._corpo
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
 
 
 def _resposta_da_api(texto: str, ext, doc_id: str) -> dict:
@@ -169,7 +184,18 @@ def _resposta_da_api(texto: str, ext, doc_id: str) -> dict:
     return triar(texto, extrator_fixo(ext), documento_id=doc_id)["resultado"]
 
 
+def _bloco_markdown(at: AppTest, titulo: str) -> str:
+    """Retorna o HTML do card que contém o título informado (ex.: PACIENTE)."""
+    for m in at.markdown:
+        if titulo in m.value:
+            return m.value
+    return ""
+
+
 def test_segunda_busca_na_mesma_sessao_mostra_o_documento_atual(monkeypatch):
+    st.cache_data.clear()
+    monkeypatch.delenv("API_URL", raising=False)
+
     ext_receita = extracao(
         paciente=Paciente(nome="Maria Souza", idade=40),
         medico_solicitante=Medico(nome="Dr. Paulo Lima", crm="CRM 99887 SP"),
@@ -178,9 +204,16 @@ def test_segunda_busca_na_mesma_sessao_mostra_o_documento_atual(monkeypatch):
         "DOC-A": _resposta_da_api(LAUDO_TEP, extracao(), "DOC-A"),
         "DOC-B": _resposta_da_api(RECEITA, ext_receita, "DOC-B"),
     }
-    monkeypatch.setattr(
-        requests, "get", lambda url, **kw: _Resp(payloads[url.rsplit("/", 1)[-1]])
-    )
+
+    def falso_get(url: str, **kw):
+        if url.endswith("/original"):
+            return _Resp(404)
+        if url.rstrip("/").endswith("/documentos"):
+            return _Resp(200, [])
+        doc_id = url.rsplit("/", 1)[-1]
+        return _Resp(200, payloads[doc_id])
+
+    monkeypatch.setattr(requests, "get", falso_get)
 
     # o mesmo AppTest = a mesma sessão do Streamlit, como no navegador
     at = AppTest.from_file(PAGINA_RESULTADO, default_timeout=30).run()
@@ -189,16 +222,24 @@ def test_segunda_busca_na_mesma_sessao_mostra_o_documento_atual(monkeypatch):
     at.text_input[0].set_value("DOC-A")
     at.button[0].click().run()
     assert not at.exception
-    assert at.text_input(key="paciente_Nome").value == "Carlos Eduardo Mendes"
-    assert at.text_input(key="paciente_Idade").value == "52 anos"
-    assert at.text_input(key="medico_nome").value == "Dra. Renata Silveira"
-    assert at.text_input(key="medico_crm").value == "145892-SP"
+    card_paciente = _bloco_markdown(at, "PACIENTE")
+    card_medico = _bloco_markdown(at, "MÉDICO SOLICITANTE")
+    assert "Carlos Eduardo Mendes" in card_paciente
+    assert "52 anos" in card_paciente
+    assert "Dra. Renata Silveira" in card_medico
+    assert "145892-SP" in card_medico
 
-    # 2ª busca: os campos precisam trocar por completo (era aqui que travava)
+    # 2ª busca na mesma sessão: troca direto pelo formulário do topo e carrega DOC-B
     at.text_input[0].set_value("DOC-B")
-    at.button[0].click().run()
+    at.button(key="FormSubmitter:buscar_outro_caso-Abrir caso").click().run()
     assert not at.exception
-    assert at.text_input(key="paciente_Nome").value == "Maria Souza"
-    assert at.text_input(key="paciente_Idade").value == "40 anos"
-    assert at.text_input(key="medico_nome").value == "Dr. Paulo Lima"
-    assert at.text_input(key="medico_crm").value == "99887-SP"
+    card_paciente = _bloco_markdown(at, "PACIENTE")
+    card_medico = _bloco_markdown(at, "MÉDICO SOLICITANTE")
+    assert "Maria Souza" in card_paciente
+    assert "40 anos" in card_paciente
+    assert "Dr. Paulo Lima" in card_medico
+    assert "99887-SP" in card_medico
+    # garante que nenhum dado da 1ª busca permaneceu preso na tela
+    assert "Carlos Eduardo Mendes" not in card_paciente
+    assert "Dra. Renata Silveira" not in card_medico
+    assert "145892-SP" not in card_medico

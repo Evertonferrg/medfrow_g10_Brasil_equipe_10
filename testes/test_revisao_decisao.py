@@ -433,3 +433,30 @@ def test_rota_rejeitar_sem_motivo_da_422_e_com_motivo_move(amb):
         json={"acao": "redirecionar", "auditora": "H", "destino": "Lugar_Nenhum"},
     )
     assert destino_fora.status_code in (409, 422)
+
+
+def test_decisao_atualiza_indice_em_memoria(amb):
+    atualizados: list[tuple[str, dict]] = []
+    amb.colab.atualizar_indice = lambda doc_id, res: atualizados.append((doc_id, res))
+    amb.entra("IDX1")
+
+    decidir_caso(
+        "IDX1",
+        DecisaoAuditora(
+            acao="redirecionar", auditora="Dra. Renata", destino="Farmacia_Hospitalar"
+        ),
+        amb.colab,
+    )
+
+    assert len(atualizados) == 1
+    doc_id, res = atualizados[0]
+    assert doc_id == "IDX1"
+    assert res["decisao_roteamento"]["destino_principal"] == "Farmacia_Hospitalar"
+    assert res["decisao_roteamento"]["requer_auditoria_humana"] is False
+
+
+def test_colaboradores_padrao_conecta_atualizacao_de_indice():
+    from app.indice_carga import registrar_resultado
+    from app.revisao import colaboradores_padrao
+
+    assert colaboradores_padrao().atualizar_indice is registrar_resultado

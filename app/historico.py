@@ -57,7 +57,7 @@ def coletar(inicio: date, fim: date) -> list[dict]:
     achados: list[tuple[datetime, str, dict]] = []
     for prefixo in PREFIXOS:
         for caminho in storage.listar(prefixo):
-            if not caminho.endswith(".json"):
+            if not caminho.endswith(".json") or caminho.endswith(SUFIXO_ESTADO):
                 continue
             dados = _ler_json(caminho)
             chegada = _chegada(dados.get("documento_id"))

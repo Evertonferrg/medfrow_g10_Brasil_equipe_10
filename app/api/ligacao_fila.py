@@ -17,6 +17,7 @@ from app.api.rotas_decisao import (
     router_trilha,
 )
 from app.eventos import servico_padrao
+from app.indice_documentos import indice as indice_documentos_padrao
 from app.indice_revisao import IndiceRevisao
 from app.revisao import Colaboradores
 
@@ -27,7 +28,9 @@ def ligar_fila_revisao(
 ) -> None:
     """Registra a fila de revisão e a trilha de auditoria."""
 
-    indice = indice or IndiceRevisao(servico_padrao())
+    indice = indice or IndiceRevisao(
+        servico_padrao(), indice_documentos=indice_documentos_padrao
+    )
 
     app.include_router(rotas.router_fila)
 

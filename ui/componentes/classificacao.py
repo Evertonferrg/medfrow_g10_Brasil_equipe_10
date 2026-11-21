@@ -32,16 +32,21 @@ def formatar_confianca(score: float | None, limite: float | None = None) -> str:
     return f"{score:.2f}"
 
 
-def aviso_fora_das_categorias(cl: dict | None) -> None:
+def aviso_fora_das_categorias(cl: dict | None, *, em_revisao: bool = True) -> None:
     """H1.2.3 T3: avisa quando o documento não pertence às categorias clínicas."""
-    if (cl or {}).get("tipo_documento") == "Não identificado":
+    if em_revisao and (cl or {}).get("tipo_documento") == "Não identificado":
         st.warning(
             "Documento fora das categorias clínicas (Não identificado): "
             "o documento foi separado para revisão humana."
         )
 
 
-def exibir_classificacao(cl: dict | None, limite: float | None = None) -> None:
+def exibir_classificacao(
+    cl: dict | None,
+    limite: float | None = None,
+    *,
+    em_revisao: bool = True,
+) -> None:
     if not cl:
         st.warning("Sem classificação: o documento foi para revisão humana.")
         return
@@ -53,9 +58,15 @@ def exibir_classificacao(cl: dict | None, limite: float | None = None) -> None:
     c, d = st.columns(2)
     c.metric("Especialidade provável", cl.get("especialidade") or "—")
     d.metric("Prioridade", cl.get("nivel_prioridade") or "—")
-    aviso_fora_das_categorias(cl)
+    aviso_fora_das_categorias(cl, em_revisao=em_revisao)
     if isinstance(score, (int, float)) and not isinstance(score, bool) and score < lim:
-        st.warning(
-            f"⚠️ Confiança {score:.2f} abaixo do limite ({lim:.2f}): "
-            "documento retido para revisão humana."
-        )
+        if em_revisao:
+            st.warning(
+                f"⚠️ Confiança {score:.2f} abaixo do limite ({lim:.2f}): "
+                "documento retido para revisão humana."
+            )
+        else:
+            st.info(
+                f"Confiança original {score:.2f} abaixo do limite ({lim:.2f}) — "
+                "revisão humana concluída."
+            )

@@ -244,3 +244,170 @@ def test_linhas_da_tabela_usam_rotulos_e_horario_de_brasilia():
     assert linha["Chegada"] == "11/11/2026 12:00"
     assert linha["Tipo"] == "—" and linha["Status"] == "Em auditoria humana"
     assert MENSAGEM_VAZIO.lower().startswith("nenhum documento encontrado")
+
+
+# ---------- página 8_Historico.py (AppTest) ----------
+
+
+def _pagina_historico() -> str:
+    from pathlib import Path
+
+    return str(Path(__file__).resolve().parents[1] / "ui" / "pages" / "8_Historico.py")
+
+
+class _RespHttp:
+    def __init__(self, status: int = 200, corpo=None):
+        self.status_code = status
+        self._corpo = corpo
+
+    def json(self):
+        return self._corpo
+
+    def raise_for_status(self) -> None:
+        import requests
+
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
+
+
+def _preparar_ui_historico(monkeypatch, handler):
+    import requests
+    import streamlit as st
+
+    st.cache_data.clear()
+    monkeypatch.delenv("API_URL", raising=False)
+    monkeypatch.setattr(requests, "get", handler)
+
+
+def _item_historico(
+    doc_id: str = "doc-ui-1",
+    *,
+    tipo: str | None = LAUDO,
+    prioridade: str = "Urgente",
+    destino: str = EMERGENCIA,
+    status: str = "processado",
+) -> dict:
+    return {
+        "documento_id": doc_id,
+        "chegada_em": HOJE.isoformat(),
+        "tipo": tipo,
+        "prioridade": prioridade,
+        "destino": destino,
+        "status": status,
+    }
+
+
+def test_ui_historico_exibe_resultados_e_aplica_filtros(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+
+    chamadas: list[list[tuple[str, str]]] = []
+
+    def fake_get(url, params=None, **kw):
+        assert url.endswith("/historico")
+        chamadas.append(list(params or []))
+        return _RespHttp(200, [_item_historico()])
+
+    _preparar_ui_historico(monkeypatch, fake_get)
+
+    at = AppTest.from_file(_pagina_historico(), default_timeout=30).run()
+    assert not at.exception
+    assert any("1 documento(s) encontrado(s)" in c.value for c in at.caption)
+
+    df = at.dataframe[0].value
+    assert df.iloc[0]["Documento"] == "doc-ui-1"
+    assert df.iloc[0]["Chegada"] == "11/11/2026 12:00"
+    assert df.iloc[0]["Destino"] == "Fila Emergencia Medica"
+    assert df.iloc[0]["Status"] == "Processado"
+
+    at.multiselect(key="hist_prioridades_0").select("Urgente")
+    at.button[0].click().run()
+    assert not at.exception
+    assert ("prioridade", "Urgente") in chamadas[-1]
+
+
+def test_ui_historico_estado_vazio_e_limpar_filtros(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+
+    def fake_get(url, params=None, **kw):
+        lista = list(params or [])
+        tem_prioridade = any(chave == "prioridade" for chave, _ in lista)
+        return _RespHttp(200, [] if tem_prioridade else [_item_historico()])
+
+    _preparar_ui_historico(monkeypatch, fake_get)
+
+    at = AppTest.from_file(_pagina_historico(), default_timeout=30).run()
+    assert not at.exception
+
+    at.multiselect(key="hist_prioridades_0").select("Urgente")
+    at.button[0].click().run()
+    assert not at.exception
+    assert any("Nenhum documento encontrado." in i.value for i in at.info)
+
+    btn_limpar = next(b for b in at.button if b.label == "Limpar filtros")
+    btn_limpar.click().run()
+    assert not at.exception
+    assert at.session_state["filtro_versao"] == 1
+    assert len(at.dataframe) == 1
+    assert at.dataframe[0].value.iloc[0]["Documento"] == "doc-ui-1"
+
+
+def test_ui_historico_exibe_motivo_de_rejeicao(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+
+    itens = [
+        _item_historico("doc-rej-1", status="rejeitado"),
+        _item_historico("doc-rej-2", status="rejeitado"),
+    ]
+
+    def fake_get(url, **kw):
+        if url.endswith("/historico"):
+            return _RespHttp(200, itens)
+        if url.endswith("/documentos/doc-rej-1"):
+            return _RespHttp(200, {"motivo_rejeicao": "Documento ilegível"})
+        if url.endswith("/documentos/doc-rej-2"):
+            return _RespHttp(
+                200,
+                {
+                    "decisao_roteamento": {
+                        "justificativa_roteamento": "Rejeitado. Motivo: CRM inválido"
+                    }
+                },
+            )
+        raise AssertionError(f"URL inesperada: {url}")
+
+    _preparar_ui_historico(monkeypatch, fake_get)
+
+    at = AppTest.from_file(_pagina_historico(), default_timeout=30).run()
+    assert not at.exception
+    status_exibidos = list(at.dataframe[0].value["Status"])
+    assert status_exibidos == [
+        "Rejeitado — Documento ilegível",
+        "Rejeitado — CRM inválido",
+    ]
+
+
+def test_ui_historico_exibe_aviso_em_422(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+
+    detalhe = "A data de início deve ser anterior ou igual à de fim."
+    _preparar_ui_historico(
+        monkeypatch, lambda url, **kw: _RespHttp(422, {"detail": detalhe})
+    )
+
+    at = AppTest.from_file(_pagina_historico(), default_timeout=30).run()
+    assert not at.exception
+    assert any(detalhe in w.value for w in at.warning)
+
+
+def test_ui_historico_exibe_erro_amigavel_em_falha_de_rede(monkeypatch):
+    import requests
+    from streamlit.testing.v1 import AppTest
+
+    def erro_rede(url, **kw):
+        raise requests.ConnectionError("API indisponível")
+
+    _preparar_ui_historico(monkeypatch, erro_rede)
+
+    at = AppTest.from_file(_pagina_historico(), default_timeout=30).run()
+    assert not at.exception
+    assert any("Não foi possível carregar o histórico." in e.value for e in at.error)

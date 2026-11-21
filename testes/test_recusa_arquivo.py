@@ -187,6 +187,13 @@ def test_streamlit_exibe_erro_no_envio_de_arquivo_recusado_pelo_servidor(monkeyp
         type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         size = 512
 
+        def getfile(self) -> tuple[str, bytes, str]:
+            return (
+                self.name,
+                bytes(self.size),
+                self.type,
+            )
+
         def getvalue(self):
             return b"PK\x03\x04conteudo_docx"
 
@@ -205,12 +212,12 @@ def test_streamlit_exibe_erro_no_envio_de_arquivo_recusado_pelo_servidor(monkeyp
     monkeypatch.delenv("API_URL", raising=False)
     monkeypatch.setattr(requests, "post", _falso_post)
 
-    pagina = str(RAIZ / "ui" / "pages" / "1_Documentos.py")
+    pagina = str(RAIZ / "ui" / "pages" / "1_Novo_Documento.py")
     at = AppTest.from_file(pagina, default_timeout=10).run()
-    at.session_state["arquivo_0"] = _ArquivoFalso()
-    at.text_input(key="documento_id").set_value("DOC-UI-415")
-    at.checkbox(key="confirmo_sintetico").check()
-    at.button[0].click().run()
+    at.file_uploader(key="nd_arquivo_0").set_value(_ArquivoFalso().getfile())
+    at.text_input(key="nd_documento_id").set_value("DOC-UI-415")
+    at.checkbox(key="nd_confirmo").check()
+    at.button(key="nd_enviar").click().run()
 
     assert len(chamadas) == 1
     assert chamadas[0][0].endswith("/triagem/arquivo")
@@ -227,6 +234,13 @@ def test_streamlit_bloqueia_arquivo_acima_do_limite_localmente(monkeypatch):
         type = "application/pdf"
         size = (config.tamanho_maximo_mb() * 1024 * 1024) + 1
 
+        def getfile(self) -> tuple[str, bytes, str]:
+            return (
+                self.name,
+                bytes(self.size),
+                self.type,
+            )
+
         def getvalue(self):
             return b"%PDF"
 
@@ -234,12 +248,12 @@ def test_streamlit_bloqueia_arquivo_acima_do_limite_localmente(monkeypatch):
     monkeypatch.delenv("API_URL", raising=False)
     monkeypatch.setattr(requests, "post", lambda url, **kw: chamadas.append(url))
 
-    pagina = str(RAIZ / "ui" / "pages" / "1_Documentos.py")
+    pagina = str(RAIZ / "ui" / "pages" / "1_Novo_Documento.py")
     at = AppTest.from_file(pagina, default_timeout=10).run()
-    at.session_state["arquivo_0"] = _ArquivoGrande()
-    at.text_input(key="documento_id").set_value("DOC-UI-413")
-    at.checkbox(key="confirmo_sintetico").check()
-    at.button[0].click().run()
+    at.file_uploader(key="nd_arquivo_0").set_value(_ArquivoGrande().getfile())
+    at.text_input(key="nd_documento_id").set_value("DOC-UI-413")
+    at.checkbox(key="nd_confirmo").check()
+    at.button(key="nd_enviar").click().run()
 
     assert chamadas == []
     assert (

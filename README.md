@@ -68,7 +68,7 @@ O limite de confiança padrão é **0.80**. Ele pode ser alterado em `config/reg
 
 Para garantir que nenhum dado incerto siga desacompanhado de validação humana, o sistema calcula o **score global** combinando a classificação geral e a confiabilidade de cada campo extraído:
 
-$$\text{score global} = \min(\text{score\_classificacao}, \text{media\_scores\_campos})$$
+$$\text{score global} = \min(\text{score de classificação},\; \text{média dos scores dos campos})$$
 
 - **Campos Críticos** (`config/regras.json`): `paciente.nome`, `medico_solicitante.crm`, `medicamentos.nome`, `medicamentos.dose` e `cid_sugerido`.
 - **Regra de Barreira**:
@@ -153,18 +153,22 @@ Por padrão o envio é assíncrono: a API responde `202` e processa em segundo p
 
 ```text
 .
-├── app/                    # API, agente e regras
-│   ├── api/main.py         # rotas FastAPI
+├── app/                    # API, agente, revisão humana e regras
+│   ├── api/                # rotas FastAPI (triagem, documentos, fila, decisão, histórico, regras)
 │   ├── grafo.py            # grafo LangGraph
 │   ├── llm.py              # chamadas ao Gemini
 │   ├── validacao*.py       # conferência dos dados extraídos
 │   ├── roteamento.py       # regras de decisão
+│   ├── revisao.py          # decisão da auditora (aprovar, corrigir, redirecionar, rejeitar)
+│   ├── eventos.py          # trilha de eventos com cadeia de hashes
+│   ├── historico.py        # consulta filtrada e exportação do histórico
+│   ├── regras.py           # gestão e versionamento de regras e achados críticos
 │   ├── storage.py          # OCI Object Storage + fallback em disco
 │   ├── schemas.py          # contratos de entrada e saída
 │   └── modelos/            # enums de categoria e destino
-├── ui/                     # Streamlit (Home, Enviar, Resultado)
-├── config/                 # regras.json, cid10.csv
-├── testes/                 # pytest + fixtures sintéticas e schema do resultado
+├── ui/                     # Streamlit (Home, Novo Documento, Lista, Dashboard, Fila, Revisão, Histórico, Configurações)
+├── config/                 # regras.json, alta_vigilancia.json, cid10.csv
+├── testes/                 # pytest (back-end e UI via AppTest) + fixtures sintéticas e schema do resultado
 ├── deploy/                 # Quadlets, Caddyfile e script de GitOps
 ├── infra/terraform/compute/# VM Always Free na OCI
 ├── docs/                   # guias de setup da OCI, pipeline e Makefile
@@ -182,9 +186,10 @@ Bucket privado (padrão `mediflow-documentos-clinicos`, configurável com `OCI_B
 
 ```text
 recebidos/              # originais (.txt, .pdf, .jpg, .png), nunca sobrescritos
-processados/rotina/     # resultados JSON de rotina
+processados/rotina/     # resultados JSON de rotina (e decisões aprovadas/redirecionadas)
 processados/urgentes/   # resultados JSON de Fila_Emergencia_Medica
-auditoria_humana/       # resultados JSON de Fila_Revisao_Humana
+auditoria_humana/       # resultados JSON aguardando revisão humana
+rejeitados/             # resultados JSON rejeitados pela auditora
 ```
 
 A OCI só é usada quando `OCI_NAMESPACE` está definido. A autenticação é feita por *instance principal* na VM (`OCI_AUTH=instance_principal`) ou pelo arquivo do OCI CLI (`OCI_CONFIG_FILE`). Para o setup inicial, veja [`docs/01-oci-setup`](docs/01-oci-setup/01-oci-setup.md).
@@ -221,7 +226,14 @@ Documentação interativa em `/docs` (OpenAPI).
 | `POST` | `/triagem/pdf` | Envia PDF (multipart: `documento_id`, `canal_origem`, `arquivo`) |
 | `POST` | `/triagem/arquivo` | Envia PDF, JPG ou PNG (multipart, mesmos campos) |
 | `GET` | `/triagem/{id}` | Consulta o resultado |
-| `GET` | `/documentos/{id}` | Consulta o resultado (mesmo formato, validação de ID mais restrita) |
+| `GET` | `/documentos` | Lista resumos dos documentos (com filtro opcional por `canal_origem`) |
+| `GET` | `/documentos/{id}` | Consulta o resultado (validação de ID mais restrita) |
+| `GET` | `/documentos/{id}/original` | Devolve o documento original gravado em `recebidos/` |
+| `GET` | `/filas/revisao` | Lista casos aguardando revisão humana (ordenados por urgência e chegada) |
+| `POST` | `/documentos/{id}/decisao` | Registra decisão da auditora (`aprovar`, `corrigir`, `redirecionar` ou `rejeitar`) |
+| `GET` | `/documentos/{id}/trilha` | Consulta a trilha de eventos do documento com verificação de integridade |
+| `GET` | `/historico` | Consulta o histórico com filtros (período, tipo, prioridade, destino e status) |
+| `GET` / `PUT` / `POST` | `/regras/*` | Consulta, edita e restaura versões de limite, destinos, regras e achados críticos |
 | `GET` | `/health` | Verificação de saúde |
 
 Os `POST` aceitam `?aguardar=true` para receber o resultado na mesma chamada.
@@ -309,7 +321,6 @@ As amostras sintéticas estão em `testes/fixtures/`. Os testes usam um LLM fals
 
 - ⚠️ **Não há autenticação.** A instância de demonstração é pública: **envie somente documentos fictícios.**
 - ⚠️ **Os documentos são enviados à API do Google Gemini**, ou seja, saem da OCI. Antes de qualquer uso com dados reais, é preciso avaliar a LGPD, o contrato e o plano de dados do provedor.
-- A decisão do auditor humano ainda não é registrada pela interface.
 
 ## 🚀 13. Roadmap
 
@@ -319,12 +330,11 @@ As amostras sintéticas estão em `testes/fixtures/`. Os testes usam um LLM fals
 - [x] Classificação e extração com Gemini, com validação contra o texto
 - [x] Regras de roteamento e envio para revisão humana
 - [x] Armazenamento no OCI Object Storage com fallback em disco
-- [x] Interface Streamlit
-- [x] Testes automatizados dos três cenários
+- [x] Interface Streamlit multipage (Home, Novo Documento, Lista, Dashboard, Fila, Revisão, Histórico e Configurações)
+- [x] Registro da decisão da auditora na interface com trilha de auditoria verificável
+- [x] Fila de revisão humana, histórico com filtros e gestão versionada de regras
+- [x] Testes automatizados (back-end e interface via `AppTest`, cobrindo os três cenários obrigatórios)
 - [x] CI/CD com quality gates e deploy GitOps na OCI
-- [ ] Registro da decisão do auditor na interface
-- [ ] Listagem das filas por destino
-- [ ] Painel de indicadores
 - [ ] Autenticação e autorização (fora do escopo do hackathon)
 
 ## ▶️ 14. Como executar
@@ -339,7 +349,7 @@ make dev                  # API em :8000 e UI em :8501
 | Comando | O que faz |
 |---|---|
 | `make api` / `make ui` | Sobe só a API ou só a UI |
-| `make test` | Testes (não precisa de chave nem de OCI) |
+| `make test` | Testes completos (`uv run pytest -v`; use `uv run pytest -m "not llm"` para rodar 100% offline sem chave Gemini) |
 | `make lint` | ruff |
 | `make build` | Build da imagem |
 | `make scan` | Trivy |
