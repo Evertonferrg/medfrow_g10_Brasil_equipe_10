@@ -15,7 +15,7 @@ from services.detalhe import (
     selo_status,
 )
 from services.estilo import PAGINA_LISTA, preparar_pagina
-from services.navegacao import abrir_revisao, caso_atual, definir_caso, limpar_caso
+from services.navegacao import abrir_revisao, caso_atual, definir_caso
 
 ALTURA_PREVIEW = 720
 
@@ -50,23 +50,33 @@ if not doc_id:
         st.rerun()
     st.stop()
 
-# Caso já carregado: voltar à lista ou resetar para consultar outro ID
-col_voltar, col_novo, _ = st.columns([2.6, 2.4, 5], vertical_alignment="center")
+# Caso aberto: voltar à lista (esquerda) e buscar outro documento pelo ID (direita)
+col_voltar, _, col_busca = st.columns([2.6, 2.2, 5.2], vertical_alignment="center")
 with col_voltar, st.container(key="btn_voltar"):
     st.page_link(
         st.Page(f"{RAIZ_UI}/{PAGINA_LISTA}"),
         label="Voltar para a Lista Documentos",
         icon=":material/arrow_back:",
     )
-with col_novo:
-    if st.button(
-        "Consultar outro documento",
-        key="btn_novo_caso",
+with col_busca, st.form("buscar_outro_caso", border=False, clear_on_submit=True):
+    f1, f2 = st.columns([3.2, 1.4], vertical_alignment="center")
+    outro_id = f1.text_input(
+        "Buscar outro documento pelo ID",
+        placeholder="Buscar outro documento pelo ID",
         icon=":material/search:",
+        label_visibility="collapsed",
+    )
+    buscar_outro = f2.form_submit_button(
+        "Abrir caso",
+        type="primary",
+        icon=":material/open_in_new:",
         width="stretch",
-    ):
-        limpar_caso()
-        st.rerun()
+    )
+
+if buscar_outro and outro_id.strip():
+    definir_caso(outro_id.strip())
+    st.query_params["id"] = outro_id.strip()
+    st.rerun()
 
 if st.query_params.get("id") != doc_id:
     st.query_params["id"] = doc_id  # garante que a URL sempre reflete o caso aberto
