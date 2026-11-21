@@ -229,11 +229,9 @@ def test_segunda_busca_na_mesma_sessao_mostra_o_documento_atual(monkeypatch):
     assert "Dra. Renata Silveira" in card_medico
     assert "145892-SP" in card_medico
 
-    # 2ª busca na mesma sessão: volta à busca manual e carrega DOC-B
-    at.button(key="btn_novo_caso").click().run()
-    assert not at.exception
+    # 2ª busca na mesma sessão: troca direto pelo formulário do topo e carrega DOC-B
     at.text_input[0].set_value("DOC-B")
-    at.button[0].click().run()
+    at.button(key="FormSubmitter:buscar_outro_caso-Abrir caso").click().run()
     assert not at.exception
     card_paciente = _bloco_markdown(at, "PACIENTE")
     card_medico = _bloco_markdown(at, "MÉDICO SOLICITANTE")

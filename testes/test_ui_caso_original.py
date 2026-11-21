@@ -265,7 +265,40 @@ def test_dashboard_banner_revisar_caso_chama_abrir_revisao(monkeypatch):
     assert at.session_state["_id_para_url"] == "DOC-REV"
 
 
-def test_dashboard_botao_consultar_outro_documento_volta_a_busca_manual(monkeypatch):
+def test_dashboard_busca_outro_documento_troca_caso_e_atualiza_url(monkeypatch):
+    st.cache_data.clear()
+    monkeypatch.delenv("API_URL", raising=False)
+    payloads = {
+        "DOC-1": _resultado_dashboard("DOC-1"),
+        "DOC-2": _resultado_dashboard("DOC-2"),
+    }
+
+    def falso_get(url: str, **kw):
+        if url.endswith("/original"):
+            return _RespDashboard(404)
+        if url.rstrip("/").endswith("/documentos"):
+            return _RespDashboard(200, [])
+        doc_id = url.rsplit("/", 1)[-1]
+        return _RespDashboard(200, payloads[doc_id])
+
+    monkeypatch.setattr(requests, "get", falso_get)
+
+    at = AppTest.from_file(PAGINA_DASHBOARD, default_timeout=30)
+    at.session_state["caso_id"] = "DOC-1"
+    at.session_state["ultimo_documento_id"] = "DOC-1"
+    at.run()
+    assert not at.exception
+
+    at.text_input[0].set_value("  DOC-2  ")
+    at.button(key="FormSubmitter:buscar_outro_caso-Abrir caso").click().run()
+    assert not at.exception
+    assert at.session_state["caso_id"] == "DOC-2"
+    assert at.session_state["ultimo_documento_id"] == "DOC-2"
+    assert at.query_params["id"] == "DOC-2"
+    assert any("Documento DOC-2" in c.value for c in at.caption)
+
+
+def test_dashboard_busca_outro_documento_vazio_mantem_caso_atual(monkeypatch):
     _mock_api_dashboard(
         monkeypatch,
         doc_resp=_RespDashboard(200, _resultado_dashboard("DOC-1")),
@@ -277,13 +310,13 @@ def test_dashboard_botao_consultar_outro_documento_volta_a_busca_manual(monkeypa
     at.run()
     assert not at.exception
 
-    at.button(key="btn_novo_caso").click().run()
+    at.text_input[0].set_value("   ")
+    at.button(key="FormSubmitter:buscar_outro_caso-Abrir caso").click().run()
     assert not at.exception
-    assert "caso_id" not in at.session_state
-    assert "ultimo_documento_id" not in at.session_state
-    assert "id" not in at.query_params
-    assert len(at.text_input) == 1
-    assert any("Abrir Caso" in b.label for b in at.button)
+    assert at.session_state["caso_id"] == "DOC-1"
+    assert at.session_state["ultimo_documento_id"] == "DOC-1"
+    assert at.query_params["id"] == "DOC-1"
+    assert any("Documento DOC-1" in c.value for c in at.caption)
 
 
 def test_dashboard_pos_decisao_nao_exibe_alerta_retido_para_revisao(monkeypatch):
