@@ -72,8 +72,17 @@ def fila():
     for caso in casos:
         documento_id = caso["documento_id"]
         cor = cor_prioridade(caso["prioridade"])
-        espera = texto_espera(minutos_de_espera(caso["chegada_em"]))
-        chegada = caso["chegada_em"][:16].replace("T", " ")
+        chegada_bruta = str(caso.get("chegada_em") or "")
+        sem_data = not chegada_bruta or chegada_bruta.startswith("1970-01-01")
+        if sem_data:
+            meta_tempo = "data de chegada não registrada"
+        else:
+            espera = texto_espera(minutos_de_espera(chegada_bruta))
+            chegada = chegada_bruta[:16].replace("T", " ")
+            meta_tempo = (
+                f"chegou em {html.escape(chegada)} · "
+                f"aguardando há {html.escape(str(espera))}"
+            )
 
         with st.container(key=f"card_fila_{cor}_{documento_id}"):
             info, acao = st.columns([4, 1.4], vertical_alignment="top")
@@ -85,8 +94,7 @@ def fila():
                     f"{pill(html.escape(str(caso['prioridade'])), cor)}</div>"
                     '<p style="margin:0 0 .6rem;font-size:.85rem;opacity:.75">'
                     f"Documento <code>{html.escape(str(documento_id))}</code> · "
-                    f"chegou em {html.escape(chegada)} · "
-                    f"aguardando há {html.escape(str(espera))}</p>",
+                    f"{meta_tempo}</p>",
                     unsafe_allow_html=True,
                 )
 

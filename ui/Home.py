@@ -195,7 +195,11 @@ if fila_casos is None:
 else:
     qtd_fila = len(fila_casos)
     mais_antigo = None
-    chegadas = [str(c["chegada_em"]) for c in fila_casos if c.get("chegada_em")]
+    chegadas = [
+        str(c["chegada_em"])
+        for c in fila_casos
+        if c.get("chegada_em") and not str(c["chegada_em"]).startswith("1970-01-01")
+    ]
     if chegadas and minutos_de_espera and texto_espera:
         try:
             mais_antigo = texto_espera(minutos_de_espera(min(chegadas)))
