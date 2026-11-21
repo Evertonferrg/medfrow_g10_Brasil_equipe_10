@@ -96,41 +96,182 @@ def test_pdf_respeita_max_paginas():
     )
 
 
-def test_dashboard_botao_consultar_outro_documento_volta_a_busca_manual(monkeypatch):
+class _RespDashboard:
+    """Resposta falsa das rotas GET da API usadas por 3_Dashboard.py."""
+
+    def __init__(
+        self,
+        status: int,
+        corpo=None,
+        content: bytes = b"",
+        headers: dict | None = None,
+    ):
+        self.status_code = status
+        self._corpo = corpo
+        self.text = ""
+        self.content = content
+        self.headers = headers or {}
+
+    def json(self):
+        if self._corpo is None:
+            raise ValueError("sem json")
+        return self._corpo
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
+
+
+def _resultado_dashboard(
+    doc_id: str = "DOC-1", *, requer_revisao: bool = False
+) -> dict:
+    return {
+        "status": "processado",
+        "documento_id": doc_id,
+        "classificacao": {"tipo_documento": "Receituário Médico"},
+        "decisao_roteamento": {
+            "destino_principal": (
+                "Fila_Revisao_Humana" if requer_revisao else "Farmacia_Hospitalar"
+            ),
+            "requer_auditoria_humana": requer_revisao,
+        },
+        "dados_extraidos": {},
+    }
+
+
+def _mock_api_dashboard(
+    monkeypatch,
+    *,
+    doc_resp=None,
+    lista_docs=None,
+    original_resp=None,
+):
     st.cache_data.clear()
     monkeypatch.delenv("API_URL", raising=False)
 
-    class _Resp:
-        def __init__(self, status, corpo=None):
-            self.status_code = status
-            self._corpo = corpo
-            self.content = b""
-            self.headers = {}
-
-        def json(self):
-            return self._corpo
-
-        def raise_for_status(self):
-            if self.status_code >= 400:
-                raise requests.HTTPError(f"HTTP {self.status_code}")
-
-    def falso_get(url, **kw):
+    def falso_get(url: str, **kw):
         if url.endswith("/original"):
-            return _Resp(404)
+            return original_resp if original_resp is not None else _RespDashboard(404)
         if url.rstrip("/").endswith("/documentos"):
-            return _Resp(200, [])
-        return _Resp(
-            200,
-            {
-                "status": "processado",
-                "documento_id": "DOC-1",
-                "classificacao": {"tipo_documento": "Receituário Médico"},
-                "decisao_roteamento": {"destino_principal": "Farmacia_Hospitalar"},
-                "dados_extraidos": {},
-            },
+            return _RespDashboard(200, lista_docs if lista_docs is not None else [])
+        if isinstance(doc_resp, Exception):
+            raise doc_resp
+        return (
+            doc_resp
+            if doc_resp is not None
+            else _RespDashboard(200, _resultado_dashboard())
         )
 
     monkeypatch.setattr(requests, "get", falso_get)
+
+
+def test_dashboard_tela_vazia_mostra_busca_manual(monkeypatch):
+    _mock_api_dashboard(monkeypatch)
+    at = AppTest.from_file(PAGINA_DASHBOARD, default_timeout=30).run()
+    assert not at.exception
+    assert any("Digite o ID de um documento" in i.value for i in at.info)
+    assert len(at.text_input) == 1
+    assert any("Abrir Caso" in b.label for b in at.button)
+
+
+def test_dashboard_estado_processando_202_exibe_aviso(monkeypatch):
+    _mock_api_dashboard(monkeypatch, doc_resp=_RespDashboard(202))
+    at = AppTest.from_file(PAGINA_DASHBOARD, default_timeout=30)
+    at.session_state["caso_id"] = "DOC-PROC"
+    at.run()
+    assert not at.exception
+    assert any("Analisando o documento **DOC-PROC**" in i.value for i in at.info)
+
+
+@pytest.mark.parametrize(
+    "resposta,canal_msg,trecho_esperado",
+    [
+        (_RespDashboard(404), "warning", "Documento não encontrado"),
+        (_RespDashboard(400), "error", "ID de documento inválido"),
+        (
+            requests.ConnectionError("sem rede"),
+            "error",
+            "Não foi possível consultar a API",
+        ),
+    ],
+)
+def test_dashboard_trata_erros_da_api(
+    monkeypatch, resposta, canal_msg, trecho_esperado
+):
+    _mock_api_dashboard(monkeypatch, doc_resp=resposta)
+    at = AppTest.from_file(PAGINA_DASHBOARD, default_timeout=30)
+    at.session_state["caso_id"] = "DOC-ERRO"
+    at.run()
+    assert not at.exception
+    mensagens = [m.value for m in getattr(at, canal_msg)]
+    assert any(trecho_esperado in m for m in mensagens)
+
+
+def test_dashboard_exibe_original_texto_e_origem_do_caso(monkeypatch):
+    _mock_api_dashboard(
+        monkeypatch,
+        doc_resp=_RespDashboard(200, _resultado_dashboard("DOC-ORIG")),
+        lista_docs=[{"documento_id": "DOC-ORIG", "canal_origem": "Pronto_Socorro"}],
+        original_resp=_RespDashboard(
+            200,
+            content=b"LAUDO ORIGINAL SINTETICO",
+            headers={"content-type": "text/plain; charset=utf-8"},
+        ),
+    )
+    at = AppTest.from_file(PAGINA_DASHBOARD, default_timeout=30)
+    at.session_state["caso_id"] = "DOC-ORIG"
+    at.run()
+    assert not at.exception
+    assert any(
+        "Documento DOC-ORIG" in c.value and "Origem: Pronto_Socorro" in c.value
+        for c in at.caption
+    )
+    assert any("LAUDO ORIGINAL SINTETICO" in t.value for t in at.text)
+
+
+def test_dashboard_original_indisponivel_exibe_aviso(monkeypatch):
+    _mock_api_dashboard(
+        monkeypatch,
+        doc_resp=_RespDashboard(200, _resultado_dashboard("DOC-SEM-ORIG")),
+        original_resp=_RespDashboard(404),
+    )
+    at = AppTest.from_file(PAGINA_DASHBOARD, default_timeout=30)
+    at.session_state["caso_id"] = "DOC-SEM-ORIG"
+    at.run()
+    assert not at.exception
+    assert any("Documento original indisponível." in i.value for i in at.info)
+
+
+def test_dashboard_banner_revisar_caso_chama_abrir_revisao(monkeypatch):
+    _mock_api_dashboard(
+        monkeypatch,
+        doc_resp=_RespDashboard(
+            200, _resultado_dashboard("DOC-REV", requer_revisao=True)
+        ),
+    )
+    destinos_navegados: list[str] = []
+    monkeypatch.setattr(st, "switch_page", lambda page: destinos_navegados.append(page))
+
+    at = AppTest.from_file(PAGINA_DASHBOARD, default_timeout=30)
+    at.session_state["caso_id"] = "DOC-REV"
+    at.run()
+    assert not at.exception
+    assert any(
+        "Este caso precisa de revisão humana." in m.value for m in at.markdown
+    )
+
+    at.button(key="btn_revisar").click().run()
+    assert not at.exception
+    assert destinos_navegados == ["pages/13_UI_Revisao_de_Caso.py"]
+    assert at.session_state["caso_id"] == "DOC-REV"
+    assert at.session_state["_id_para_url"] == "DOC-REV"
+
+
+def test_dashboard_botao_consultar_outro_documento_volta_a_busca_manual(monkeypatch):
+    _mock_api_dashboard(
+        monkeypatch,
+        doc_resp=_RespDashboard(200, _resultado_dashboard("DOC-1")),
+    )
 
     at = AppTest.from_file(PAGINA_DASHBOARD, default_timeout=30)
     at.session_state["caso_id"] = "DOC-1"
