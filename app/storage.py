@@ -3,6 +3,7 @@ import logging
 import os
 import pathlib
 import re
+from datetime import UTC, datetime
 from functools import lru_cache
 
 from . import config
@@ -248,6 +249,68 @@ def listar(prefixo: str) -> list:
             if p.is_file()
         )
     return sorted(n for n in nomes if n.startswith(prefixo))
+
+
+def _normalizar_data(valor) -> datetime | None:
+    if isinstance(valor, str):
+        try:
+            valor = datetime.fromisoformat(valor)
+        except ValueError:
+            return None
+    if not isinstance(valor, datetime):
+        return None
+    return valor if valor.tzinfo else valor.replace(tzinfo=UTC)
+
+
+def listar_com_datas(prefixo: str) -> list[tuple[str, datetime | None]]:
+    """Lista objetos sob o prefixo com a data de criação/modificação em UTC.
+
+    No OCI consulta `fields="timeCreated,timeModified"` (paginando se houver mais
+    de uma página); no disco local usa o mtime do arquivo. Se um objeto existir
+    nos dois, prevalece a data do OCI.
+    """
+    por_nome: dict[str, datetime | None] = {}
+    base = (pathlib.Path(config.pasta_local()) / config.bucket()).resolve()
+    if base.exists():
+        for p in base.rglob("*"):
+            if not p.is_file():
+                continue
+            rel = str(p.relative_to(base)).replace(os.sep, "/")
+            if not rel.startswith(prefixo):
+                continue
+            try:
+                por_nome[rel] = datetime.fromtimestamp(p.stat().st_mtime, tz=UTC)
+            except OSError:
+                por_nome[rel] = None
+
+    ns = os.getenv("OCI_NAMESPACE")
+    if ns:
+        try:
+            cliente = _cliente_oci()
+            inicio = None
+            while True:
+                kwargs = {"prefix": prefixo, "fields": "timeCreated,timeModified"}
+                if inicio:
+                    kwargs["start"] = inicio
+                r = cliente.list_objects(ns, config.bucket(), **kwargs)
+                if r is None:
+                    break
+                for o in r.data.objects:
+                    if not o.name.startswith(prefixo):
+                        continue
+                    data = _normalizar_data(
+                        getattr(o, "time_created", None)
+                        or getattr(o, "time_modified", None)
+                    )
+                    por_nome[o.name] = data
+                inicio = getattr(r.data, "next_start_with", None)
+                if not inicio:
+                    break
+        except Exception:
+            # não achou na nuvem: mantém o que veio do disco
+            logger.exception("Falha ao consultar OCI; usando armazenamento local")
+
+    return sorted(por_nome.items(), key=lambda item: item[0])
 
 
 def apagar(caminho: str) -> None:

@@ -191,6 +191,86 @@ def test_ignora_registro_corrompido_e_arquivo_de_estado(client):
     assert _ids(client.get("/historico")) == {"doc-ok"}
 
 
+def test_documento_no_bucket_oci_sem_evento_local_aparece_no_historico(
+    client, monkeypatch
+):
+    import json
+    from types import SimpleNamespace
+
+    objetos = {
+        "processados/rotina/doc-oci-rot.json": (
+            HOJE,
+            {
+                "status": "processado",
+                "documento_id": "doc-oci-rot",
+                "classificacao": {
+                    "tipo_documento": RECEITA,
+                    "especialidade": None,
+                    "nivel_prioridade": "Rotina",
+                    "score_confianca_classificacao": 0.92,
+                },
+                "problemas": [],
+                "decisao_roteamento": {
+                    "destino_principal": FARMACIA,
+                    "requer_auditoria_humana": False,
+                    "justificativa_roteamento": "ok",
+                    "regra_aplicada": "R-RECEITA",
+                    "notificacao_gerada": None,
+                },
+            },
+        ),
+        "rejeitados/doc-oci-rej.json": (
+            ONTEM,
+            {
+                "status": "rejeitado",
+                "documento_id": "doc-oci-rej",
+                "classificacao": {
+                    "tipo_documento": LAUDO,
+                    "especialidade": None,
+                    "nivel_prioridade": "Rotina",
+                    "score_confianca_classificacao": 0.2,
+                },
+                "problemas": ["ilegível"],
+                "decisao_roteamento": {
+                    "destino_principal": REVISAO,
+                    "requer_auditoria_humana": True,
+                    "justificativa_roteamento": "Motivo: ilegível",
+                    "regra_aplicada": "R-REVISAO",
+                    "notificacao_gerada": None,
+                },
+            },
+        ),
+    }
+
+    class FakeOCI:
+        def list_objects(self, ns, bucket, prefix="", fields=None, start=None):
+            itens = [
+                SimpleNamespace(name=nome, time_created=dt, time_modified=dt)
+                for nome, (dt, _) in objetos.items()
+                if nome.startswith(prefix)
+            ]
+            return SimpleNamespace(
+                data=SimpleNamespace(objects=itens, next_start_with=None)
+            )
+
+        def get_object(self, ns, bucket, caminho):
+            _, payload = objetos[caminho]
+            bruto = json.dumps(payload).encode("utf-8")
+            return SimpleNamespace(data=SimpleNamespace(content=bruto))
+
+    monkeypatch.setenv("OCI_NAMESPACE", "ns-teste")
+    monkeypatch.setattr(storage, "_cliente_oci", lambda: FakeOCI())
+
+    r = client.get("/historico", params={"data_inicio": DIA_ANTERIOR, "data_fim": DIA})
+    assert r.status_code == 200
+    por_id = {item["documento_id"]: item for item in r.json()}
+    assert set(por_id) == {"doc-oci-rot", "doc-oci-rej"}
+    assert por_id["doc-oci-rot"]["chegada_em"] == HOJE.isoformat()
+    assert por_id["doc-oci-rot"]["status"] == "processado"
+    assert por_id["doc-oci-rej"]["chegada_em"] == ONTEM.isoformat()
+    assert por_id["doc-oci-rej"]["status"] == "rejeitado"
+
+
 def test_um_dia_de_documentos_responde_em_menos_de_5s(client):
     for i in range(300):
         _doc(f"doc-vol-{i:04d}", prioridade="Urgente" if i % 3 == 0 else "Rotina")
