@@ -4,9 +4,16 @@ Requer Streamlit >= 1.37 (st.fragment).
 
 import html
 import os
+import sys
+from pathlib import Path
 
 import requests
 import streamlit as st
+
+RAIZ_UI = Path(__file__).resolve().parents[1]
+if str(RAIZ_UI) not in sys.path:
+    sys.path.insert(0, str(RAIZ_UI))
+
 from componentes.fila import (
     minutos_de_espera,
     texto_dose_destacada,
