@@ -15,7 +15,7 @@ from services.detalhe import (
     selo_status,
 )
 from services.estilo import PAGINA_LISTA, preparar_pagina
-from services.navegacao import abrir_revisao, caso_atual, definir_caso
+from services.navegacao import abrir_revisao, caso_atual, definir_caso, limpar_caso
 
 ALTURA_PREVIEW = 720
 
@@ -50,13 +50,23 @@ if not doc_id:
         st.rerun()
     st.stop()
 
-# Caso já carregado: só o link discreto de voltar à lista
-with st.container(key="btn_voltar"):
+# Caso já carregado: voltar à lista ou resetar para consultar outro ID
+col_voltar, col_novo, _ = st.columns([2.6, 2.4, 5], vertical_alignment="center")
+with col_voltar, st.container(key="btn_voltar"):
     st.page_link(
-        PAGINA_LISTA,
+        st.Page(f"{RAIZ_UI}/{PAGINA_LISTA}"),
         label="Voltar para a Lista Documentos",
         icon=":material/arrow_back:",
     )
+with col_novo:
+    if st.button(
+        "Consultar outro documento",
+        key="btn_novo_caso",
+        icon=":material/search:",
+        use_container_width=True,
+    ):
+        limpar_caso()
+        st.rerun()
 
 if st.query_params.get("id") != doc_id:
     st.query_params["id"] = doc_id  # garante que a URL sempre reflete o caso aberto

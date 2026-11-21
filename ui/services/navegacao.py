@@ -11,6 +11,13 @@ def definir_caso(documento_id: str) -> None:
     st.session_state["ultimo_documento_id"] = documento_id
 
 
+def limpar_caso() -> None:
+    """Limpa o caso atual da sessão e da URL para voltar à busca manual."""
+    st.session_state.pop("caso_id", None)
+    st.session_state.pop("ultimo_documento_id", None)
+    st.query_params.pop("id", None)
+
+
 def abrir_caso(documento_id: str) -> None:
     """Guarda o caso, põe o ID na URL e vai para o Dashboard."""
     definir_caso(documento_id)
