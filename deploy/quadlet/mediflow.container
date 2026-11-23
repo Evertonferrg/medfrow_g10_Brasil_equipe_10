@@ -28,6 +28,7 @@ Secret=gemini_api_key,type=env,target=GEMINI_API_KEY
 # Notificações (Slack e Gmail)
 Environment=NOTIFICACAO_AUTOMATICA=true
 Environment=NOTIFICACAO_CANAL=ambos
+Environment=NOTIFICACAO_TIMEOUT_S=15
 Environment=UI_BASE_URL=https://mediflow-oci.duckdns.org
 Environment=SLACK_CHANNEL_ID=C0CGVRHQVT9
 
@@ -73,7 +74,7 @@ Secret=mediflow-plantao-email-destino,type=env,target=PLANTAO_EMAIL_DESTINO
 HealthCmd=python3 -c "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=3)"
 HealthInterval=30s
 HealthRetries=3
-HealthStartPeriod=20s
+HealthStartPeriod=60s
 HealthOnFailure=kill
 
 [Service]

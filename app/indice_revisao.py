@@ -10,6 +10,7 @@ Expõe só o que a fila precisa; texto do documento e dados do paciente não sae
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 from app.eventos import ServicoEventos
@@ -17,6 +18,7 @@ from app.fila import CasoRevisao
 from app.status import StatusDocumento
 
 logger = logging.getLogger(__name__)
+MAX_WORKERS_LEITURA = 8
 
 
 def _frase(texto) -> str:
@@ -65,25 +67,35 @@ class IndiceRevisao:
 
     def _carregar_resultado(self, documento_id: str):
         if self._carregar is None:
-            from app.resposta import carregar_resultado  # padrão do projeto
+            from app.resposta import (  # padrão do projeto
+                PASTA_REVISAO,
+                carregar_resultado,
+            )
 
-            self._carregar = carregar_resultado
+            self._carregar = lambda doc_id: carregar_resultado(
+                doc_id, pasta_preferencial=PASTA_REVISAO
+            )
         return self._carregar(documento_id)
 
+    def _carregar_caso(self, item: tuple[str, str]) -> CasoRevisao | None:
+        documento_id, chegada = item
+        try:
+            resultado = self._carregar_resultado(documento_id)
+        except Exception:  # resultado fora do formato não derruba a fila
+            logger.exception("Resultado ilegível na fila de revisão")
+            return None
+        if not resultado:
+            return None
+        return caso_de_resultado(documento_id, resultado, chegada)
+
     def listar_casos_revisao(self) -> list[CasoRevisao]:
-        casos = []
+        pendentes: list[tuple[str, str]] = []
         vistos: set[str] = set()
         for documento_id, chegada in self._eventos.listar_por_status(
             StatusDocumento.EM_AUDITORIA_HUMANA
         ):
             vistos.add(documento_id)
-            try:
-                resultado = self._carregar_resultado(documento_id)
-            except Exception:  # resultado fora do formato não derruba a fila
-                logger.exception("Resultado ilegível na fila de revisão")
-                continue
-            if resultado:
-                casos.append(caso_de_resultado(documento_id, resultado, chegada))
+            pendentes.append((documento_id, chegada))
 
         if self._indice_documentos is not None:
             alvo = StatusDocumento.EM_AUDITORIA_HUMANA.value
@@ -94,17 +106,33 @@ class IndiceRevisao:
                 try:
                     if self._eventos.listar(doc_id):
                         continue
-                    resultado = self._carregar_resultado(doc_id)
                 except Exception:
                     logger.exception("Resultado ilegível na fila de revisão")
                     continue
-                if resultado:
-                    chegada = (
-                        resumo.data.isoformat()
-                        if hasattr(resumo.data, "isoformat")
-                        else str(resumo.data)
-                    )
-                    casos.append(caso_de_resultado(doc_id, resultado, chegada))
-                    vistos.add(doc_id)
+                chegada = (
+                    resumo.data.isoformat()
+                    if hasattr(resumo.data, "isoformat")
+                    else str(resumo.data)
+                )
+                pendentes.append((doc_id, chegada))
+                vistos.add(doc_id)
 
-        return casos
+        if not pendentes:
+            return []
+
+        if len(pendentes) == 1:
+            caso = self._carregar_caso(pendentes[0])
+            return [caso] if caso else []
+
+        # Garante a inicialização do carregador padrão antes de abrir as threads
+        if self._carregar is None:
+            from app.resposta import PASTA_REVISAO, carregar_resultado
+
+            self._carregar = lambda doc_id: carregar_resultado(
+                doc_id, pasta_preferencial=PASTA_REVISAO
+            )
+
+        workers = min(MAX_WORKERS_LEITURA, len(pendentes))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            carregados = list(executor.map(self._carregar_caso, pendentes))
+        return [c for c in carregados if c is not None]

@@ -6,6 +6,7 @@ import requests
 import streamlit as st
 
 from ui.componentes.fila import ROTULO_STATUS
+from ui.services.http import timeout_api
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
@@ -15,7 +16,7 @@ def render():
     doc_id = st.text_input("ID do documento", key="busca_status_id").strip()
     if st.button("Consultar", key="busca_status_btn") and doc_id:
         try:
-            r = requests.get(f"{API_URL}/documentos/{doc_id}", timeout=5)
+            r = requests.get(f"{API_URL}/documentos/{doc_id}", timeout=timeout_api())
         except requests.RequestException:
             st.error("Não foi possível consultar agora. Tente novamente.")
             return

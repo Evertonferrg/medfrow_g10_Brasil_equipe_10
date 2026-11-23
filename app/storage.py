@@ -198,7 +198,18 @@ def ler(caminho: str):
 
 
 def existe(caminho: str) -> bool:
-    return ler(caminho) is not None
+    caminho = _seguro(caminho)
+    ns = os.getenv("OCI_NAMESPACE")
+    if ns:
+        try:
+            _cliente_oci().head_object(ns, config.bucket(), caminho)
+            return True
+        except Exception as e:
+            if getattr(e, "status", None) != 404:
+                logger.exception(
+                    "Falha ao consultar OCI (head_object); checando armazenamento local"
+                )
+    return _local(caminho).exists()
 
 
 def _mover_local(origem: str, destino: str) -> None:

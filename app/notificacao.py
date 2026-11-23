@@ -50,7 +50,7 @@ class ServicoNotificacao:
     def __init__(
         self,
         canal: str | None = None,
-        timeout: float = TIMEOUT_S,
+        timeout: float | None = None,
         registrar_falha: Callable[[str, str], None] = _registrar_falha_padrao,
         post: Callable | None = None,
         smtp_factory: Callable | None = None,
@@ -61,7 +61,14 @@ class ServicoNotificacao:
         slack_id: str | None = None,
     ) -> None:
         self._canal = canal
-        self._timeout = timeout
+        if timeout is None:
+            try:
+                timeout_env = float(os.getenv("NOTIFICACAO_TIMEOUT_S", str(TIMEOUT_S)))
+                self._timeout = timeout_env if timeout_env > 0 else float(TIMEOUT_S)
+            except (TypeError, ValueError):
+                self._timeout = float(TIMEOUT_S)
+        else:
+            self._timeout = timeout
         self._registrar_falha = registrar_falha
         self._post = post
         self._smtp_factory = smtp_factory

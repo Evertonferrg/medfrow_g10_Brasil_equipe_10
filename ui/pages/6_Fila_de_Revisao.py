@@ -20,6 +20,7 @@ from componentes.fila import (
     texto_espera,
 )
 from services.estilo import pill, preparar_pagina
+from services.http import timeout_api
 from services.navegacao import abrir_caso, abrir_revisao
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
@@ -49,7 +50,7 @@ def fila():
     try:
         resposta = requests.get(
             f"{API_URL}/filas/revisao",
-            timeout=5,
+            timeout=timeout_api(),
         )
         resposta.raise_for_status()
         casos = resposta.json()

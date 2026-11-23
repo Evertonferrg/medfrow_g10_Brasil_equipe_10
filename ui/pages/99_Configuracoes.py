@@ -24,6 +24,8 @@ except ImportError:
         pass
 
 
+from services.http import timeout_api
+
 API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 
 st.set_page_config(page_title="Regras de Triagem", layout="wide")
@@ -53,7 +55,7 @@ with col_auditora:
 
 def carregar_regras() -> dict:
     try:
-        r = requests.get(f"{API_URL}/regras", timeout=5)
+        r = requests.get(f"{API_URL}/regras", timeout=timeout_api())
         if r.status_code == 200:
             return r.json()
     except requests.RequestException:
@@ -124,7 +126,9 @@ if st.button("Salvar novo limite de confiança", type="primary"):
             "limite_confianca": novo_limite,
             "auditora": st.session_state.get("auditora", "Auditora"),
         }
-        resp = requests.put(f"{API_URL}/regras/limite", json=payload, timeout=5)
+        resp = requests.put(
+            f"{API_URL}/regras/limite", json=payload, timeout=timeout_api()
+        )
         if resp.status_code == 200:
             dados = resp.json()
             st.success(
@@ -215,7 +219,7 @@ with st.form("form_regra_roteamento"):
                     resp_dest = requests.post(
                         f"{API_URL}/regras/destinos",
                         json={"nome": destino_final, "auditora": auditora_atual},
-                        timeout=5,
+                        timeout=timeout_api(),
                     )
                     if resp_dest.status_code != 200:
                         st.error(
@@ -241,7 +245,7 @@ with st.form("form_regra_roteamento"):
                     resp_regra = requests.post(
                         f"{API_URL}/regras/roteamento",
                         json=payload_regra,
-                        timeout=5,
+                        timeout=timeout_api(),
                     )
                     if resp_regra.status_code == 200:
                         dados = resp_regra.json()
@@ -356,7 +360,7 @@ if btn_salvar_achados:
                     "achados_criticos": lista_para_salvar,
                     "auditora": auditora_atual,
                 },
-                timeout=5,
+                timeout=timeout_api(),
             )
             if resp_achados.status_code == 200:
                 dados = resp_achados.json()
@@ -393,7 +397,7 @@ def carregar_historico() -> tuple[list | None, str | None]:
     try:
         resposta = requests.get(
             f"{API_URL}/regras/versoes",
-            timeout=5,
+            timeout=timeout_api(),
         )
 
         if resposta.status_code != 200:
@@ -436,7 +440,7 @@ def confirmar_restauracao(versao: str):
                 resposta = requests.post(
                     f"{API_URL}/regras/restaurar/{versao}",
                     json={"auditora": st.session_state.get("auditora", "Auditora")},
-                    timeout=10,
+                    timeout=timeout_api(),
                 )
 
                 if resposta.status_code == 200:

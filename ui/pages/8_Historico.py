@@ -24,6 +24,7 @@ from componentes.historico import (
     montar_params,
 )
 from services.estilo import preparar_pagina
+from services.http import timeout_api
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 DIAS_PADRAO = 30  # período inicial do filtro
@@ -41,7 +42,7 @@ st.title("Histórico de Triagens")
 def buscar_motivo_rejeicao(doc_id: str) -> str:
     """Busca o motivo no detalhe caso o documento esteja rejeitado."""
     try:
-        r = requests.get(f"{API_URL}/documentos/{doc_id}", timeout=5)
+        r = requests.get(f"{API_URL}/documentos/{doc_id}", timeout=timeout_api())
         if r.status_code == 200:
             dados = r.json()
             if dados.get("motivo_rejeicao"):
@@ -107,7 +108,7 @@ try:
     resposta = requests.get(
         f"{API_URL}/historico",
         params=montar_params(*periodo, tipos, prioridades, destinos, status),
-        timeout=10,
+        timeout=timeout_api(),
     )
     if resposta.status_code == 422:
         try:

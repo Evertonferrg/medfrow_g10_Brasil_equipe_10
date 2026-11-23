@@ -13,6 +13,7 @@ import requests
 import streamlit as st
 
 from services.estilo import pill
+from services.http import timeout_api
 
 API = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 
@@ -136,7 +137,9 @@ def selo_status(res: dict) -> str:
 def buscar_resultado(doc_id: str) -> tuple[str, dict | None]:
     """GET /documentos/{id}. Estados: ok, processando, nao_encontrado, invalido, erro."""
     try:
-        r = requests.get(f"{API}/documentos/{quote(doc_id, safe='')}", timeout=30)
+        r = requests.get(
+            f"{API}/documentos/{quote(doc_id, safe='')}", timeout=timeout_api()
+        )
     except requests.RequestException:
         return "erro", None
     if r.status_code == 200:
@@ -157,7 +160,7 @@ def buscar_resultado(doc_id: str) -> tuple[str, dict | None]:
 def canal_de_origem(doc_id: str) -> str | None:
     """A origem não vem no resultado: busca na listagem (como fazia a tela Caso)."""
     try:
-        lista = requests.get(f"{API}/documentos", timeout=10).json()
+        lista = requests.get(f"{API}/documentos", timeout=timeout_api()).json()
     except (requests.RequestException, ValueError):
         return None
     if not isinstance(lista, list):
@@ -177,7 +180,7 @@ def buscar_original(doc_id: str):
     """GET /documentos/{id}/original: (bytes, content-type) ou None."""
     try:
         r = requests.get(
-            f"{API}/documentos/{quote(doc_id, safe='')}/original", timeout=15
+            f"{API}/documentos/{quote(doc_id, safe='')}/original", timeout=timeout_api()
         )
         r.raise_for_status()
     except requests.RequestException:

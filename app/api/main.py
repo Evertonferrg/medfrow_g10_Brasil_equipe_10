@@ -32,7 +32,7 @@ from app.arquivos import (
 )
 from app.eventos import servico_padrao, status_do_documento
 from app.indice_carga import lifespan_indice, registrar_chegada
-from app.resposta import carregar_resultado
+from app.resposta import PASTA_REJEITADOS, PASTA_REVISAO, carregar_resultado
 from app.revisao import colaboradores_padrao
 from app.schemas import DocumentoEntrada, ResultadoTriagem, validar_id
 from app.servico import processar
@@ -81,10 +81,26 @@ def _recebido(documento_id: str) -> bool:
     )
 
 
+def _pasta_preferencial(documento_id: str) -> str | None:
+    """Usa o status local nos eventos para tentar primeiro a pasta certa no OCI."""
+    try:
+        status = servico_padrao().status_atual(documento_id)
+    except (OSError, ValueError):
+        return None
+    if status == StatusDocumento.EM_AUDITORIA_HUMANA:
+        return PASTA_REVISAO
+    if status == StatusDocumento.REJEITADO:
+        return PASTA_REJEITADOS
+    return None
+
+
 def _responder_consulta(documento_id: str):
     """Resultado validado, 202 se ainda processa, 404 se não existe."""
     try:
-        resultado = carregar_resultado(documento_id)
+        resultado = carregar_resultado(
+            documento_id,
+            pasta_preferencial=_pasta_preferencial(documento_id),
+        )
 
     except ValidationError:
         logger.exception(

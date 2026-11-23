@@ -11,6 +11,8 @@ Image=iad.ocir.io/idzac8al3ypr/mediflow:__TAG__
 Network=mediflow.network
 # A UI chama a API pelo servidor (requests), não pelo navegador: o endereço interno basta.
 Environment=API_URL=http://mediflow-app:8000
+Environment=API_TIMEOUT_CONEXAO_S=5
+Environment=API_TIMEOUT_LEITURA_S=30
 # Entrypoint explícito: a imagem sobe a API por padrão; aqui o mesmo /app roda o Streamlit.
 Entrypoint=python3
 Exec=-m streamlit run ui/Home.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false
