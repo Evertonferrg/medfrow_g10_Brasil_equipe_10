@@ -12,11 +12,16 @@ from urllib.parse import urlparse
 
 import requests
 
+try:
+    from services.http import timeout_api
+except ImportError:
+    from ui.services.http import timeout_api
+
 ARQUIVO_REGRAS = Path(__file__).resolve().parents[2] / "config" / "regras.json"
 TIPO_ARQUIVO_TEXTO = "TEXTO"
 MAX_TEXTO = 200_000  # mesmo limite do servidor (app/schemas.py)
 MAPA_EXTENSOES_UPLOADER = {"PDF": ["pdf"], "JPG": ["jpg", "jpeg"], "PNG": ["png"]}
-TIMEOUT = (3.05, 15)  # (conexão, leitura) em segundos
+TIMEOUT = timeout_api()  # (conexão, leitura) em segundos
 HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
 
 

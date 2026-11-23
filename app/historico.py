@@ -1,6 +1,7 @@
 import json
 import logging
 from collections.abc import Collection
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta, timezone
 
 from pydantic import TypeAdapter, ValidationError
@@ -11,6 +12,7 @@ from app.schemas import ResultadoTriagem
 from app.status import StatusDocumento
 
 logger = logging.getLogger(__name__)
+MAX_WORKERS_LEITURA = 8
 
 PREFIXOS = ("processados/", "auditoria_humana/", "rejeitados/")
 SUFIXO_ESTADO = ".estado.json"  # estado auxiliar da revisão (H4.4.1): não é triagem
@@ -106,18 +108,38 @@ def _eventos(documento_id) -> list[dict]:
         return []
 
 
+def _ler_triagem_seguro(
+    item: tuple[str, datetime | None],
+) -> tuple[str, dict, datetime | None] | None:
+    caminho, data_objeto = item
+    try:
+        return caminho, _ler_json(caminho), data_objeto
+    except ExportacaoInvalida:
+        logger.warning("Histórico: %s ignorado (ilegível)", caminho)
+        return None
+
+
 def _triagens_gravadas():
     """(caminho, dados, data_objeto) de cada triagem salva. Registro ilegível é
     pulado e logado: uma consulta não deve cair por causa de um arquivo ruim
     (a exportação, sim)."""
+    itens: list[tuple[str, datetime | None]] = []
     for prefixo in PREFIXOS:
         for caminho, data_objeto in storage.listar_com_datas(prefixo):
             if not caminho.endswith(".json") or caminho.endswith(SUFIXO_ESTADO):
                 continue
-            try:
-                yield caminho, _ler_json(caminho), data_objeto
-            except ExportacaoInvalida:
-                logger.warning("Histórico: %s ignorado (ilegível)", caminho)
+            itens.append((caminho, data_objeto))
+
+    if len(itens) <= 1:
+        resultados = [_ler_triagem_seguro(item) for item in itens]
+    else:
+        workers = min(MAX_WORKERS_LEITURA, len(itens))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            resultados = list(executor.map(_ler_triagem_seguro, itens))
+
+    for resultado in resultados:
+        if resultado is not None:
+            yield resultado
 
 
 def _chegada_e_status(

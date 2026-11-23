@@ -13,6 +13,7 @@ if str(RAIZ_UI) not in sys.path:
     sys.path.insert(0, str(RAIZ_UI))
 
 from services.estilo import PAGINA_FILA, PAGINA_LISTA, pill, preparar_pagina
+from services.http import timeout_api
 from services.navegacao import abrir_caso
 
 try:
@@ -135,7 +136,7 @@ def classificar_urgencia(doc: dict) -> str:
 # ------------------------------------------------------------------
 @st.cache_data(ttl=15, show_spinner=False)
 def buscar_documentos() -> list:
-    r = requests.get(f"{API}/documentos", timeout=15)
+    r = requests.get(f"{API}/documentos", timeout=timeout_api())
     r.raise_for_status()
     dados = r.json()
     if not isinstance(dados, list):
@@ -146,7 +147,7 @@ def buscar_documentos() -> list:
 @st.cache_data(ttl=15, show_spinner=False)
 def buscar_fila() -> list:
     """GET /filas/revisao: a mesma fonte da tela Fila de Revisão."""
-    r = requests.get(f"{API}/filas/revisao", timeout=5)
+    r = requests.get(f"{API}/filas/revisao", timeout=timeout_api())
     r.raise_for_status()
     dados = r.json()
     if not isinstance(dados, list):

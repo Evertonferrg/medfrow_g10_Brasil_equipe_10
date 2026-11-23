@@ -14,6 +14,7 @@ if str(RAIZ_UI) not in sys.path:
     sys.path.insert(0, str(RAIZ_UI))
 
 from services.estilo import PAGINA_NOVO, pill, preparar_pagina
+from services.http import timeout_api
 from services.navegacao import abrir_caso
 
 # ------------------------------------------------------------------
@@ -102,7 +103,7 @@ def buscar_lista(canal: str) -> list | None:
     """GET /documentos. Devolve None se a API não respondeu."""
     params = {} if canal == "Todos" else {"canal_origem": canal}
     try:
-        r = requests.get(f"{API}/documentos", params=params, timeout=30)
+        r = requests.get(f"{API}/documentos", params=params, timeout=timeout_api())
         r.raise_for_status()
         dados = r.json()
     except (requests.RequestException, ValueError):
@@ -114,7 +115,7 @@ def buscar_lista(canal: str) -> list | None:
 def buscar_motivo_rejeicao(doc_id: str) -> str:
     """Busca o motivo no detalhe caso o resumo da API devolva nulo."""
     try:
-        r = requests.get(f"{API}/documentos/{doc_id}", timeout=5)
+        r = requests.get(f"{API}/documentos/{doc_id}", timeout=timeout_api())
         if r.status_code == 200:
             dados = r.json()
             if dados.get("motivo_rejeicao"):

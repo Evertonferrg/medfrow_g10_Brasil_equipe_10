@@ -1,5 +1,6 @@
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
@@ -9,6 +10,7 @@ from app.indice_documentos import ResumoDocumento, indice, resumo_de_resultado
 from app.status import StatusDocumento
 
 logger = logging.getLogger(__name__)
+MAX_WORKERS_LEITURA = 8
 
 _EPOCA = datetime(
     1970, 1, 1, tzinfo=UTC
@@ -69,41 +71,46 @@ def _status(documento_id: str, resultado: dict) -> str | None:
         return None
 
 
+def _carregar_resumo(caminho: str) -> ResumoDocumento | None:
+    try:
+        bruto = storage.ler(caminho)
+        if bruto is None:
+            return None
+        dados = json.loads(bruto)
+        doc_id = dados["documento_id"]
+        return resumo_de_resultado(
+            dados,
+            canal_origem=_canal_origem(doc_id),
+            status=_status(doc_id, dados),
+            data=_chegada(doc_id) or _EPOCA,
+        )
+    except (TypeError, ValueError, KeyError):
+        logger.warning(
+            "Índice: %s ignorado (JSON ausente ou fora do formato)",
+            caminho,
+        )
+        return None
+
+
 def reconstruir_do_bucket() -> int:
     """Reconstrói o índice usando os resultados e eventos já gravados."""
     from app.historico import PREFIXOS
 
-    resumos: list[ResumoDocumento] = []
-
+    caminhos: list[str] = []
     for prefixo in PREFIXOS:
         for caminho in storage.listar(prefixo):
             if not caminho.endswith(".json") or caminho.endswith(".estado.json"):
                 continue
+            caminhos.append(caminho)
 
-            try:
-                bruto = storage.ler(caminho)
+    if len(caminhos) <= 1:
+        carregados = [_carregar_resumo(c) for c in caminhos]
+    else:
+        workers = min(MAX_WORKERS_LEITURA, len(caminhos))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            carregados = list(executor.map(_carregar_resumo, caminhos))
 
-                if bruto is None:
-                    continue
-
-                dados = json.loads(bruto)
-                doc_id = dados["documento_id"]
-
-                resumos.append(
-                    resumo_de_resultado(
-                        dados,
-                        canal_origem=_canal_origem(doc_id),
-                        status=_status(doc_id, dados),
-                        data=_chegada(doc_id) or _EPOCA,
-                    )
-                )
-
-            except (TypeError, ValueError, KeyError):
-                logger.warning(
-                    "Índice: %s ignorado (JSON ausente ou fora do formato)",
-                    caminho,
-                )
-
+    resumos = [r for r in carregados if r is not None]
     indice.reconstruir(resumos)
 
     return len(resumos)

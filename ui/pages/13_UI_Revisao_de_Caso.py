@@ -20,6 +20,7 @@ if str(RAIZ_UI) not in sys.path:
 
 from componentes.revisao import LIMITE_PADRAO, campos_inconsistentes, evidencia_do_campo
 from services.estilo import PAGINA_FILA, pill, preparar_pagina
+from services.http import timeout_api
 from services.navegacao import abrir_caso, caso_atual, definir_caso
 
 API = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
@@ -132,7 +133,8 @@ def evidencia(dados: dict, *nomes):
 def mostrar_original(documento_id: str) -> None:
     try:
         r = requests.get(
-            f"{API}/documentos/{quote(documento_id, safe='')}/original", timeout=30
+            f"{API}/documentos/{quote(documento_id, safe='')}/original",
+            timeout=timeout_api(),
         )
     except requests.RequestException:
         st.error("Não consegui buscar o original agora.")
@@ -331,7 +333,7 @@ def mostrar_conferencia(res: dict) -> None:
 def carregar_destinos_auditora() -> list[str]:
     """H6.3.1 T5: lista de destinos do ServicoRegras para o redirecionamento."""
     try:
-        r = requests.get(f"{API}/regras/destinos", timeout=5)
+        r = requests.get(f"{API}/regras/destinos", timeout=timeout_api())
         if r.status_code == 200:
             destinos = r.json().get("destinos", [])
             return [d for d in destinos if d != "Fila_Revisao_Humana"]
@@ -414,7 +416,7 @@ def mostrar_painel_decisao(
             r = requests.post(
                 f"{API}/documentos/{quote(doc_id, safe='')}/decisao",
                 json=payload,
-                timeout=10,
+                timeout=timeout_api(),
             )
         except requests.RequestException:
             st.error("Falha de comunicação com a API.")
@@ -462,7 +464,8 @@ def buscar_trilha(documento_id: str) -> tuple[str, dict | None]:
     """GET /documentos/{id}/trilha. Estados: ok, vazio, erro, falha, invalida."""
     try:
         r = requests.get(
-            f"{API}/documentos/{quote(documento_id, safe='')}/trilha", timeout=30
+            f"{API}/documentos/{quote(documento_id, safe='')}/trilha",
+            timeout=timeout_api(),
         )
     except requests.RequestException:
         return "erro", None
@@ -595,7 +598,9 @@ if mensagem:
     st.success(mensagem)
 
 try:
-    resp = requests.get(f"{API}/documentos/{quote(documento_id, safe='')}", timeout=30)
+    resp = requests.get(
+        f"{API}/documentos/{quote(documento_id, safe='')}", timeout=timeout_api()
+    )
 except requests.RequestException:
     st.error("Não consegui falar com a API.")
     st.stop()

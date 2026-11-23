@@ -179,13 +179,23 @@ def arquivar(documento_id: str, estado: dict) -> dict:
     return resultado.model_dump(mode="json")
 
 
-def carregar_resultado(documento_id: str) -> dict | None:
+def carregar_resultado(
+    documento_id: str, pasta_preferencial: str | None = None
+) -> dict | None:
     """Lê o resultado salvo, valida no formato combinado e preenche o armazenamento.
 
     Devolve None se não houver resultado. Levanta pydantic.ValidationError se o que está
     salvo estiver fora do formato (a rota responde 500 em vez de entregar dado quebrado).
+    Se `pasta_preferencial` for informada, tenta essa pasta primeiro para evitar
+    requisições desnecessárias ao OCI Object Storage.
     """
-    for pasta in PASTAS_RESULTADO:
+    pastas = PASTAS_RESULTADO
+    if pasta_preferencial in PASTAS_RESULTADO:
+        pastas = (
+            pasta_preferencial,
+            *(p for p in PASTAS_RESULTADO if p != pasta_preferencial),
+        )
+    for pasta in pastas:
         caminho = f"{pasta}/{documento_id}.json"
         bruto = storage.ler(caminho)
         if bruto is None:
