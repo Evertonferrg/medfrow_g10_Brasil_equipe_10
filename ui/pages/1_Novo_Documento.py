@@ -8,9 +8,9 @@ PASTA_UI = str(Path(__file__).resolve().parents[1])
 if PASTA_UI not in sys.path:
     sys.path.insert(0, PASTA_UI)
 
-from ui.services import envio
-from ui.services.estilo import PAGINA_DASHBOARD, PAGINA_LISTA, preparar_pagina
-from ui.services.navegacao import definir_caso
+from services import envio
+from services.estilo import PAGINA_LISTA, preparar_pagina
+from services.navegacao import abrir_caso, definir_caso
 
 TAMANHO_MAXIMO_MB, FORMATOS_ACEITOS = envio.carregar_limites()
 TIPOS_ARQUIVO = envio.extensoes_aceitas(FORMATOS_ACEITOS)
@@ -58,6 +58,7 @@ def _enviar() -> None:
         if res.ilegivel:
             ss["nd_aviso"] = res.motivo_ilegibilidade or ""  # "" = motivo não informado
         definir_caso(doc_id)  # o Dashboard lê este ID
+        ss["nd_doc_enviado"] = doc_id  # guarda para o botão do Dashboard
         ss["nd_texto"] = ""  # não deixa conteúdo clínico parado na sessão
         ss["nd_confirmo"] = False
         ss["nd_documento_id"] = envio.novo_id()
@@ -72,13 +73,30 @@ st.set_page_config(
 )
 preparar_pagina()
 
-c_voltar, _ = st.columns([1, 4])
+# ------------------------------------------------------------------
+# BARRA SUPERIOR (Padrão MediFlow: Voltar à esquerda e Dashboard à direita)
+# ------------------------------------------------------------------
+doc_enviado = st.session_state.get("nd_doc_enviado")
+
+c_voltar, _, c_dash = st.columns([3, 4.5, 2.5], vertical_alignment="center")
 with c_voltar, st.container(key="btn_voltar"):
     st.page_link(
         st.Page(f"{PASTA_UI}/{PAGINA_LISTA}"),
         label="Voltar para Lista Documentos",
         icon=":material/arrow_back:",
     )
+
+if doc_enviado:
+    with c_dash:
+        if st.button(
+            "Ver caso no Dashboard",
+            key="nd_ver_dashboard",
+            type="primary",
+            icon=":material/open_in_new:",
+            use_container_width=True,
+        ):
+            abrir_caso(doc_enviado)
+
 st.title("Novo Documento Clínico")
 
 st.info(
@@ -103,16 +121,10 @@ if not canais:
 if "nd_documento_id" not in st.session_state:
     st.session_state["nd_documento_id"] = envio.novo_id()
 
-# Resultado do último envio
+# Resultado do último envio (agora apenas com a mensagem limpa, sem o link cru)
 resultado = st.session_state.pop("nd_resultado", None)
 if resultado:
     (st.success if resultado[0] else st.error)(resultado[1])
-    if resultado[0]:
-        st.page_link(
-            st.Page(f"{PASTA_UI}/{PAGINA_DASHBOARD}"),
-            label="Ver resultado no Dashboard →",
-            icon="🩺",
-        )
 
 # H1.4.2 T3: aviso de ilegibilidade ("" = motivo não informado, usa a mensagem padrão)
 aviso = st.session_state.get("nd_aviso")
@@ -156,11 +168,9 @@ with st.container(key="card_cadastro"):
     aba_upload, aba_camera, aba_texto = st.tabs(["Upload", "Câmera", "Texto Direto"])
 
     with aba_upload:
-        # Arrastar e soltar: o uploader fica fora de st.form, então a prévia aparece na hora.
         arquivo = st.file_uploader(
             f"Arraste o arquivo clínico aqui ({', '.join(FORMATOS_ACEITOS)})",
-            # type=TIPOS_ARQUIVO,
-            type=None,  # mantido como None pois o back-end faz a validação da extensão de arquivo, e também porque permite que testes unitários assegurem que o comportamento de rejeitar extensões não suportadas está funcionando como deveria.
+            type=None,
             key=f"nd_arquivo_{n}",
             max_upload_size=TAMANHO_MAXIMO_MB,
         )
@@ -171,7 +181,6 @@ with st.container(key="card_cadastro"):
                 st.caption(f"📄 {arquivo.name} ({arquivo.size // 1024} KB)")
 
     with aba_camera:
-        # A câmera só é ligada sob demanda, para o navegador não pedir permissão ao abrir a página.
         if st.toggle("Ativar câmera", key=f"nd_cam_ligada_{n}"):
             foto = st.camera_input(
                 "📷 Tirar foto com a câmera",
@@ -190,8 +199,6 @@ with st.container(key="card_cadastro"):
             "Texto do documento",
             key="nd_texto",
             height=250,
-            # Sem max_chars de propósito: ele cortaria o texto em silêncio (perda de dados clínicos).
-            # O limite é checado em validar_envio, que mostra um erro claro.
             placeholder="Cole aqui o texto do laudo, receita, guia, alta ou atestado.",
         )
         st.caption(
