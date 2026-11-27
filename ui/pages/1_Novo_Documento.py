@@ -93,7 +93,7 @@ if doc_enviado:
             key="nd_ver_dashboard",
             type="primary",
             icon=":material/open_in_new:",
-            use_container_width=True,
+            width="stretch",
         ):
             abrir_caso(doc_enviado)
 
